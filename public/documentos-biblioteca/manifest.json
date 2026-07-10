@@ -1,0 +1,32 @@
+{
+  "version": "1.0.2",
+  "documents": [
+    {
+      "id": "codigo-sanitario-estadual",
+      "titulo": "Código Sanitário Estadual",
+      "path": "/documentos-biblioteca/codigo-sanitario-estadual.pdf",
+      "esfera": "estadual",
+      "categoria": "Código",
+      "descricao": "Compilação das normas e diretrizes sanitárias para o âmbito estadual.",
+      "keywords": "sanitário, estadual, código, lei"
+    },
+    {
+      "id": "exemplo-rdc",
+      "titulo": "RDC de Exemplo",
+      "path": "/documentos-biblioteca/rdc-exemplo.pdf",
+      "esfera": "federal",
+      "categoria": "RDC",
+      "descricao": "Exemplo de uma Resolução da Diretoria Colegiada da ANVISA.",
+      "keywords": "anvisa, rdc, federal, resolução"
+    },
+    {
+      "id": "nova-portaria-123",
+      "titulo": "Nova Portaria Nº 123",
+      "path": "/documentos-biblioteca/nova-portaria-123.pdf",
+      "esfera": "federal",
+      "categoria": "Portaria",
+      "descricao": "Esta é a descrição da nova portaria que você adicionou.",
+      "keywords": "portaria, nova, rdc, anvisa, federal"
+    }
+  ]
+}

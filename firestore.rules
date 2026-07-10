@@ -1,0 +1,95 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // FUNÇÕES AUXILIARES DE SEGURANÇA
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isRoot() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'monicamazur1986@gmail.com' || 
+        getUserData().role == 'root'
+      );
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        getUserData().role == 'admin' || isRoot()
+      );
+    }
+
+    // Verifica se o documento pertence ao mesmo município do usuário
+    function belongsToMyMunicipio(data) {
+      return isAuthenticated() && (
+        isRoot() || data.municipioId == getUserData().municipioId
+      );
+    }
+
+    // REGRAS POR COLEÇÃO
+
+    // Marca do sistema deve ser pública para aparecer no Login
+    match /configuracoes/global {
+      allow read: if true;
+      allow write: if isRoot();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId || isRoot() || (isAdmin() && resource.data.municipioId == getUserData().municipioId)
+      );
+      allow write: if isAuthenticated() && (
+        request.auth.uid == userId || isRoot() || (isAdmin() && (resource == null || resource.data.municipioId == getUserData().municipioId))
+      );
+    }
+    
+    match /adminRequests/{requestId} {
+      allow create: if isAuthenticated();
+      allow read, update: if isRoot();
+    }
+    
+    match /biblioteca/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    match /intimacoes/{id} {
+      allow read: if isAuthenticated() && (
+        isRoot() || 
+        (isAdmin() && resource.data.municipioId == getUserData().municipioId) ||
+        (resource.data.createdBy == request.auth.uid)
+      );
+      allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
+      allow update, delete: if isAuthenticated() && (
+        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()))
+      );
+    }
+
+    match /autoridades/{id} {
+      allow read: if belongsToMyMunicipio(resource.data);
+      allow write: if isAdmin() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
+    }
+
+    match /inspecoes/{id} {
+      allow read: if isAuthenticated() && (
+        isRoot() || 
+        (isAdmin() && resource.data.municipioId == getUserData().municipioId) ||
+        (resource.data.fiscalId == request.auth.uid)
+      );
+      allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
+      allow update, delete: if isAuthenticated() && (
+        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.fiscalId == request.auth.uid || isAdmin()))
+      );
+    }
+
+    match /{document=**} {
+      allow read, write: if isRoot();
+    }
+  }
+}

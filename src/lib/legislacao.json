@@ -1,0 +1,53 @@
+
+{
+  "LEI_MUNICIPAL_2276_2017": {
+    "titulo": "Lei Municipal nº 2.276/2017",
+    "descricao": "Código de Vigilância em Saúde de Prudentópolis",
+    "artigos": [
+      { "id": "mun-18-I", "label": "Art. 18, inciso I", "texto": "Funcionamento de estabelecimento sem Licença Sanitária ou autorização.", "keywords": "alvará licença funcionamento irregular prefeitura" },
+      { "id": "mun-18-IX", "label": "Art. 18, inciso IX", "texto": "Manter estabelecimento sem assistência de responsável técnico habilitado.", "keywords": "RT profissional técnico ausência" },
+      { "id": "mun-18-XXII", "label": "Art. 18, inciso XXII", "texto": "Inobservância das Boas Práticas de fabricação ou manipulação.", "keywords": "higiene manipulação limpeza" },
+      { "id": "mun-18-XXVI", "label": "Art. 18, inciso XXVI", "texto": "Utilizar produtos vencidos, deteriorados ou adulterados.", "keywords": "vencido validade estragado" },
+      { "id": "mun-18-XXXII", "label": "Art. 18, inciso XXXII", "texto": "Deixar de manter condições adequadas de higiene e conservação.", "keywords": "sujeira conservação precária" }
+    ]
+  },
+  "LEI_ESTADUAL_13331_2001": {
+    "titulo": "Lei Estadual nº 13.331/2001",
+    "descricao": "Código de Saúde do Estado do Paraná - Base para todos os municípios",
+    "linkOficial": "https://www.legislacao.pr.gov.br/legislacao/pesquisarAto.do?action=exibir&codAto=4826",
+    "artigos": [
+      { "id": "est-63-I", "label": "Art. 63, inciso I", "texto": "Construir, instalar ou fazer funcionar estabelecimentos de saúde sem licença do órgão competente.", "keywords": "hospital clínica posto saúde licença funcionamento" },
+      { "id": "est-63-III", "label": "Art. 63, inciso III", "texto": "Fazer funcionar, sem assistência de responsável técnico legalmente habilitado.", "keywords": "responsável técnico RT habilitação profissional" },
+      { "id": "est-63-XI", "label": "Art. 63, inciso XI", "texto": "Expor à venda ou entregar ao consumo produto deteriorado, alterado ou com prazo de validade expirado.", "keywords": "vencido validade deteriorado podre falsificado data" },
+      { "id": "est-63-XXXVII", "label": "Art. 63, inciso XXXVII", "texto": "Obstar ou dificultar a ação fiscalizadora das autoridades sanitárias.", "keywords": "impedir fiscalização fiscal dificultar ação" },
+      { "id": "est-63-XL", "label": "Art. 63, inciso XL", "texto": "Deixar de observar as condições higiênico-sanitárias na manipulação de produtos.", "keywords": "higiene manipulação utensílios equipamento funcionário" }
+    ]
+  },
+  "ILPI": {
+    "titulo": "ILPI - Instituições de Idosos",
+    "descricao": "Normativas para Instituições de Longa Permanência para Idosos",
+    "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Servicos-de-Saude",
+    "artigos": [
+      { "id": "rdc-502-21", "label": "RDC ANVISA nº 502/2021", "texto": "Dispõe sobre o funcionamento de Instituição de Longa Permanência para Idosos (ILPI).", "keywords": "idodo asilo ilpi residencial geriatria" },
+      { "id": "sesa-parana-ilpi", "label": "Resolução SESA nº 236/2012", "texto": "Normas para o funcionamento de Instituições de Longa Permanência para Idosos no Paraná.", "keywords": "idoso paraná estadual ilpi asilo" }
+    ]
+  },
+  "ALIMENTOS": {
+    "titulo": "Alimentos e Boas Práticas",
+    "descricao": "Manipulação, Fabricação e Comercialização de Produtos Alimentícios",
+    "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Alimentos",
+    "artigos": [
+      { "id": "rdc-216-04", "label": "RDC ANVISA nº 216/2004", "texto": "Regulamento Técnico de Boas Práticas para Serviços de Alimentação.", "keywords": "restaurante lanchonete cozinha boas práticas manipulação" },
+      { "id": "rdc-275-02", "label": "RDC ANVISA nº 275/2002", "texto": "Procedimentos Operacionais Padronizados (POP) para estabelecimentos produtores de alimentos.", "keywords": "pop alimentos indústria manual" }
+    ]
+  },
+  "ODONTOLOGIA": {
+    "titulo": "Serviços de Odontologia",
+    "descricao": "Clínicas, Consultórios e Processamento de Materiais",
+    "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Servicos-de-Saude",
+    "artigos": [
+      { "id": "sesa-442-12", "label": "Resolução SESA nº 442/2012", "texto": "Normatiza as condições de funcionamento dos Serviços de Odontologia no Estado do Paraná.", "keywords": "dente dente dentista consultório autoclave esterilização" },
+      { "id": "rdc-63-11", "label": "RDC ANVISA nº 63/2011", "texto": "Boas Práticas de Funcionamento de Serviços de Saúde.", "keywords": "saúde clínica consultório hospital" }
+    ]
+  }
+}
