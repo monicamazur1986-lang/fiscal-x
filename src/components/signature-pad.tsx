@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useRef, useState, useEffect } from 'react';
+import SignaturePadLib from 'signature_pad';
 import { Button } from './ui/button';
 import { Eraser, Check, PenTool, Maximize2, Minimize2, X } from 'lucide-react';
 import {
@@ -22,10 +23,10 @@ interface SignaturePadProps {
   trigger?: React.ReactNode;
 }
 
-export function SignaturePad({ 
-  onSave, 
-  isOpen: controlledOpen, 
-  onOpenChange: controlledOnOpenChange, 
+export function SignaturePad({
+  onSave,
+  isOpen: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
   title = "Assinar Documento",
   trigger
 }: SignaturePadProps) {
@@ -35,100 +36,55 @@ export function SignaturePad({
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const isDrawingRef = useRef(false);
+  const padRef = useRef<SignaturePadLib | null>(null);
   const [hasContent, setHasContent] = useState(false);
   const [isZoomedOut, setIsZoomedOut] = useState(false);
 
-  const initCanvas = () => {
+  const initPad = () => {
     if (!canvasRef.current || !containerRef.current) return;
-    
+
     const canvas = canvasRef.current;
     const container = containerRef.current;
-    const ctx = canvas.getContext('2d');
-    
-    if (ctx) {
-      const dpr = window.devicePixelRatio || 1;
-      const rect = container.getBoundingClientRect();
-      
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      
-      canvas.style.width = `${rect.width}px`;
-      canvas.style.height = `${rect.height}px`;
-      
-      ctx.scale(dpr, dpr);
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3;
-      
-      ctx.clearRect(0, 0, rect.width, rect.height);
-      setHasContent(false);
-    }
+    const dpr = window.devicePixelRatio || 1;
+    const rect = container.getBoundingClientRect();
+
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+    canvas.getContext('2d')?.scale(dpr, dpr);
+
+    padRef.current?.off();
+
+    const pad = new SignaturePadLib(canvas, {
+      minWidth: 0.75,
+      maxWidth: 3,
+      penColor: '#000000',
+    });
+    pad.addEventListener('beginStroke', () => setHasContent(true));
+    padRef.current = pad;
+    setHasContent(false);
   };
 
   useEffect(() => {
     if (isOpen) {
-      const timer = setTimeout(initCanvas, 150); 
+      const timer = setTimeout(initPad, 150);
       return () => clearTimeout(timer);
     }
   }, [isOpen, isZoomedOut]);
 
-  const getCoordinates = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!canvasRef.current) return { x: 0, y: 0 };
-    const rect = canvasRef.current.getBoundingClientRect();
-    
-    let clientX, clientY;
-    if ('touches' in e) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = (e as React.MouseEvent).clientX;
-      clientY = (e as React.MouseEvent).clientY;
-    }
-
-    return {
-      x: clientX - rect.left,
-      y: clientY - rect.top
-    };
-  };
-
-  const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
-    if (e.cancelable) e.preventDefault();
-    
-    isDrawingRef.current = true;
-    setHasContent(true);
-    const { x, y } = getCoordinates(e);
-    const ctx = canvasRef.current?.getContext('2d');
-    if (ctx) {
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-    }
-  };
-
-  const draw = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawingRef.current || !canvasRef.current) return;
-    if (e.cancelable) e.preventDefault();
-
-    const { x, y } = getCoordinates(e);
-    const ctx = canvasRef.current.getContext('2d');
-    if (ctx) {
-      ctx.lineTo(x, y);
-      ctx.stroke();
-    }
-  };
-
-  const stopDrawing = () => {
-    isDrawingRef.current = false;
-  };
+  useEffect(() => {
+    return () => { padRef.current?.off(); };
+  }, []);
 
   const clear = () => {
-    initCanvas();
+    padRef.current?.clear();
+    setHasContent(false);
   };
 
   const save = () => {
-    if (!canvasRef.current || !hasContent) return;
-    const dataUrl = canvasRef.current.toDataURL('image/png');
+    if (!padRef.current || padRef.current.isEmpty()) return;
+    const dataUrl = padRef.current.toDataURL('image/png');
     onSave(dataUrl);
     onOpenChange(false);
   };
@@ -156,10 +112,10 @@ export function SignaturePad({
               </div>
             </div>
             <div className="flex gap-2">
-                <Button 
+                <Button
                 type="button"
-                variant="ghost" 
-                size="sm" 
+                variant="ghost"
+                size="sm"
                 onClick={() => setIsZoomedOut(!isZoomedOut)}
                 className="hidden sm:flex h-9 px-4 text-[9px] font-black uppercase tracking-widest bg-white/5 hover:bg-white/10 text-white rounded-xl gap-2"
                 >
@@ -174,20 +130,13 @@ export function SignaturePad({
         </DialogHeader>
 
         <div className="p-4 sm:p-8 space-y-4 flex-grow flex flex-col bg-zinc-50">
-          <div 
+          <div
             ref={containerRef}
             className="border-2 border-dashed border-zinc-200 rounded-3xl bg-white relative overflow-hidden cursor-crosshair shadow-inner flex-grow min-h-[350px] sm:min-h-[400px]"
           >
             <canvas
               ref={canvasRef}
               className="absolute inset-0 w-full h-full touch-none"
-              onMouseDown={startDrawing}
-              onMouseMove={draw}
-              onMouseUp={stopDrawing}
-              onMouseLeave={stopDrawing}
-              onTouchStart={startDrawing}
-              onTouchMove={draw}
-              onTouchEnd={stopDrawing}
             />
             {!hasContent && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">

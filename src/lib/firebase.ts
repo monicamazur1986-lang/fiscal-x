@@ -1,23 +1,14 @@
-// firebase.ts
-import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-// Importe outros serviços do Firebase que você usa (ex: Auth, Storage, etc.)
+// src/lib/firebase.ts
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+import { firebaseConfig } from "@/firebase/config";
 
-// Substitua com as suas próprias credenciais do Firebase
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
+// Reutiliza a mesma configuração (baseada em env vars) do sistema em src/firebase,
+// garantindo que todos os módulos do app apontem para o mesmo projeto Firebase.
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// Inicializa o Firebase apenas uma vez
-const app = initializeApp(firebaseConfig);
-
-// Obtém a instância do Firestore
 export const db = getFirestore(app);
+export const auth = getAuth(app);
 
-// Exporte também o app se precisar em outros lugares
 export default app;

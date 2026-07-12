@@ -6,12 +6,11 @@ import { useAuth } from "@/hooks/use-auth"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useStorage } from "@/firebase"
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
-import { 
-  Sparkles, 
-  Upload, 
-  Loader2, 
-  Trash2, 
-  ArrowLeft,
+import {
+  Sparkles,
+  Upload,
+  Loader2,
+  Trash2,
   Layout,
   CheckCircle2,
   Image as ImageIcon,
@@ -23,7 +22,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
+import { BackButton } from "@/components/back-button"
 
 export default function ConfigSistemaGlobalPage() {
   const { profile, loading: authLoading } = useAuth()
@@ -113,9 +112,7 @@ export default function ConfigSistemaGlobalPage() {
           </div>
           <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.2em] ml-1">Configurações Master (ROOT)</p>
         </div>
-        <Button asChild variant="ghost" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 text-zinc-400">
-            <Link href="/dashboard"><ArrowLeft className="h-4 w-4" /> Voltar</Link>
-        </Button>
+        <BackButton href="/dashboard" className="bg-transparent border-none shadow-none text-zinc-400" />
       </header>
 
       <div className="grid grid-cols-1 gap-8">

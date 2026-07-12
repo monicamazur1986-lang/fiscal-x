@@ -6,9 +6,21 @@
  * O texto é gerado em BLOCO ÚNICO, vinculando cada irregularidade a Artigos e Incisos exatos.
  */
 
-import { ai, z, isAIReady } from '@/ai/genkit';
-import { retry } from '@genkit-ai/middleware';
-import legislacaoData from '@/lib/legislacao.json';
+import { ai, z } from '@/ai/genkit';
+import { z as z4 } from 'zod/v4';
+import { claude, isClaudeReady, CLAUDE_MODEL } from '@/ai/claude';
+import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+import { searchLegislacao } from '@/lib/legal-search';
+import { checkAndConsumeAiQuota, MONTHLY_AI_LIMIT } from '@/ai/usage-limit';
+
+// zodOutputFormat exige um schema construído com 'zod/v4' — a instância `z`
+// re-exportada pelo Genkit é do zod v3 e não é estruturalmente compatível.
+const ClaudeDraftOutputSchema = z4.object({
+  draftIntimacao: z4.string(),
+  fundamentacaoSugerida: z4.string().optional(),
+  artigosUtilizados: z4.array(z4.string()).optional(),
+  error: z4.string().optional(),
+});
 
 const ReportTypeSchema = z.enum(['intimação', 'infração', 'apreensão', 'interdição']);
 const LawPreferenceSchema = z.enum(['todas', 'municipal', 'estadual']).default('todas');
@@ -18,6 +30,7 @@ const GenerateIntimacaoDraftInputSchema = z.object({
   reportType: ReportTypeSchema.default('intimação'),
   lawPreference: LawPreferenceSchema.optional(),
   useCloudAI: z.boolean().default(false),
+  uid: z.string().optional().default(''),
   nonce: z.string().optional()
 });
 export type GenerateIntimacaoDraftInput = z.infer<typeof GenerateIntimacaoDraftInputSchema>;
@@ -47,21 +60,10 @@ function generateLocalHeuristicDraft(input: GenerateIntimacaoDraftInput): Genera
     };
   }
 
-  // 2. BUSCA GRANULAR DE LEGISLAÇÃO
-  let matchedArticles: any[] = [];
+  // 2. BUSCA GRANULAR DE LEGISLAÇÃO (MiniSearch: ranking por relevância, prefixo e tolerância a erros de digitação)
   const pref = input.lawPreference || 'todas';
   const descLower = rawDesc.toLowerCase();
-
-  Object.entries(legislacaoData).forEach(([lawKey, law]: [string, any]) => {
-    if (pref === 'municipal' && !lawKey.includes('MUNICIPAL')) return;
-    if (pref === 'estadual' && !lawKey.includes('ESTADUAL')) return;
-    
-    law.artigos.forEach((art: any) => {
-      const keywords = art.keywords?.split(' ') || [];
-      const hasMatch = keywords.some((k: string) => k.length > 3 && descLower.includes(k.toLowerCase()));
-      if (hasMatch) matchedArticles.push({ ...art, lawTitle: law.titulo });
-    });
-  });
+  const matchedArticles = searchLegislacao(rawDesc, { pref });
 
   // Se não encontrar nada no banco, interrompe para evitar nulidade
   if (matchedArticles.length === 0) {
@@ -121,39 +123,23 @@ function generateLocalHeuristicDraft(input: GenerateIntimacaoDraftInput): Genera
   };
 }
 
-const draftPrompt = ai.definePrompt({
-  name: 'generateIntimacaoDraftPrompt',
-  input: { 
-    schema: z.object({
-      caseDescription: z.string(),
-      reportType: z.string(),
-      filteredContext: z.string()
-    })
-  },
-  output: { schema: GenerateIntimacaoDraftOutputSchema },
-  config: { temperature: 0.1 },
-  prompt: `Você é um Auditor Jurídico Sênior da Vigilância Sanitária.
+const CLAUDE_SYSTEM_PROMPT = `Você é um Auditor Jurídico Sênior da Vigilância Sanitária.
 Sua missão é transformar notas de campo em um documento técnico de alto rigor, na NORMA CULTA e em BLOCO ÚNICO.
 
 REGRAS CRÍTICAS DE FUNDAMENTAÇÃO:
-1. BLOCO ÚNICO: Proibido usar quebras de linha ou parágrafos.
-2. RIGOR LEGAL ABSOLUTO: Você deve apontar com exatidão a lei, o artigo e o inciso. Use EXCLUSIVAMENTE a legislação fornecida abaixo.
+1. BLOCO ÚNICO: Proibido usar quebras de linha ou parágrafos no campo draftIntimacao.
+2. RIGOR LEGAL ABSOLUTO: Você deve apontar com exatidão a lei, o artigo e o inciso. Use EXCLUSIVAMENTE a legislação fornecida no contexto abaixo — nunca invente ou presuma artigos fora dele.
 3. PROIBIDO GENERALIZAR: Nunca use "Normas Gerais" ou "Legislação Vigente". Escreva: NOME DA LEI (ARTIGO X, INCISO Y).
 4. VÍNCULO FATO-NORMA: No texto, explique por que o fato viola o artigo (ex: "...o que contraria o Art. X da Lei Y, uma vez que proíbe o comércio de produtos sem registro").
-5. VALIDAÇÃO: Se o relato for vago demais para ser enquadrado nas leis abaixo, retorne um erro no campo 'error' solicitando mais detalhes.
+5. VALIDAÇÃO: Se o relato for vago demais para ser enquadrado na legislação fornecida, retorne draftIntimacao como string vazia e preencha o campo error solicitando mais detalhes.
 
-ESTRUTURA OBRIGATÓRIA:
+ESTRUTURA OBRIGATÓRIA DO draftIntimacao:
 - Abertura: "Durante inspeção realizada no estabelecimento identificado, esta Autoridade Sanitária constatou [FATO REESCRITO COM RIGOR TÉCNICO]..."
 - Risco: "A situação configura risco sanitário aos consumidores e está em desacordo com as normas de saúde pública e biossegurança."
 - Enquadramento: "Tal conduta caracteriza irregularidade sanitária e a inobservância das exigências legais, em violação à [CITAÇÃO ESPECÍFICA: LEI (ARTIGO, INCISO)]."
 - Fechamento: Conforme o tipo (Apreensão: processo administrativo; Interdição: interdição cautelar; Outros: notificação).
 
-CONTEXTO LEGAL DISPONÍVEL:
-{{{filteredContext}}}
-
-NOTAS DO FISCAL: "{{{caseDescription}}}"
-TIPO: {{{reportType}}}`
-});
+Preencha fundamentacaoSugerida com a citação formatada (ex: "LEI ESTADUAL Nº 13.331/2001 (ART. 63, INCISO XI)") e artigosUtilizados com os IDs exatos dos artigos do contexto que você efetivamente citou.`;
 
 export const generateIntimacaoDraftFlow = ai.defineFlow(
   {
@@ -167,47 +153,47 @@ export const generateIntimacaoDraftFlow = ai.defineFlow(
       return { draftIntimacao: "", error: "RELATO MUITO CURTO: Por favor, descreva com mais detalhes o que aconteceu para que o sistema possa localizar a lei correspondente." };
     }
 
-    if (!input.useCloudAI || !isAIReady) {
+    if (!input.useCloudAI || !isClaudeReady) {
       return generateLocalHeuristicDraft(input);
     }
 
+    const quota = await checkAndConsumeAiQuota(input.uid);
+    if (!quota.ok) {
+      return {
+        draftIntimacao: "",
+        error: `LIMITE MENSAL DE IA ATINGIDO (${MONTHLY_AI_LIMIT}/mês). Continue no modo local ou aguarde a virada do mês.`,
+      };
+    }
+
     try {
-      const descLower = input.caseDescription.toLowerCase();
-      let selectedArticles: any[] = [];
       const pref = input.lawPreference || 'todas';
-      
-      Object.entries(legislacaoData).forEach(([lawKey, law]: [string, any]) => {
-        if (pref === 'municipal' && !lawKey.includes('MUNICIPAL')) return;
-        if (pref === 'estadual' && !lawKey.includes('ESTADUAL')) return;
-        law.artigos.forEach((art: any) => {
-          const keywords = art.keywords?.split(' ') || [];
-          if (keywords.some((k: string) => k.length > 3 && descLower.includes(k.toLowerCase()))) {
-            selectedArticles.push({ ...art, lawTitle: law.titulo });
-          }
-        });
-      });
+      const selectedArticles = searchLegislacao(input.caseDescription, { pref, limit: 10 });
 
       if (selectedArticles.length === 0) {
         return generateLocalHeuristicDraft(input);
       }
 
-      const filteredList = selectedArticles.slice(0, 10); 
-      let finalContext = filteredList.map(a => `LEI: ${a.lawTitle} | ARTIGO/INCISO: ${a.label} | TEXTO LEGAL: ${a.texto}`).join('\n');
+      const finalContext = selectedArticles.map(a => `ID: ${a.id} | LEI: ${a.lawTitle} | ARTIGO/INCISO: ${a.label} | TEXTO LEGAL: ${a.texto}${a.pena ? ` | PENA APLICÁVEL: ${a.pena}` : ''}`).join('\n');
 
-      const response = await draftPrompt(
-        {
-          caseDescription: input.caseDescription,
-          reportType: input.reportType,
-          filteredContext: finalContext
-        },
-        { use: [retry({ maxRetries: 0 })] }
-      );
+      const response = await claude.messages.parse({
+        model: CLAUDE_MODEL,
+        max_tokens: 2048,
+        system: CLAUDE_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: 'user',
+            content: `CONTEXTO LEGAL DISPONÍVEL:\n${finalContext}\n\nNOTAS DO FISCAL: "${input.caseDescription}"\nTIPO: ${input.reportType}`,
+          },
+        ],
+        output_config: { format: zodOutputFormat(ClaudeDraftOutputSchema) },
+      });
 
-      if (!response || !response.output) throw new Error("IA_OFFLINE");
-      if (response.output.error) return response.output;
-      
-      const cleanDraft = response.output.draftIntimacao.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-      return { ...response.output, draftIntimacao: cleanDraft, engine: 'cloud' };
+      const output = response.parsed_output;
+      if (!output) throw new Error("CLAUDE_PARSE_FAILED");
+      if (output.error) return output;
+
+      const cleanDraft = output.draftIntimacao.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+      return { ...output, draftIntimacao: cleanDraft, engine: 'cloud' as const };
 
     } catch (e: any) {
       return generateLocalHeuristicDraft(input);

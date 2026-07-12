@@ -6,9 +6,11 @@
 
 import { ai, z, isAIReady } from '@/ai/genkit';
 import { retry } from '@genkit-ai/middleware';
+import { checkAndConsumeAiQuota, MONTHLY_AI_LIMIT } from '@/ai/usage-limit';
 
 const PolishObservationInputSchema = z.object({
   text: z.string().describe('O texto original do fiscal.'),
+  uid: z.string().optional().default(''),
 });
 export type PolishObservationInput = z.infer<typeof PolishObservationInputSchema>;
 
@@ -49,6 +51,14 @@ const polishFlow = ai.defineFlow(
       return {
         polishedText: input.text, // Return original text as-is
         error: 'IA não configurada. O texto original foi mantido.'
+      };
+    }
+
+    const quota = await checkAndConsumeAiQuota(input.uid);
+    if (!quota.ok) {
+      return {
+        polishedText: input.text,
+        error: `LIMITE MENSAL DE IA ATINGIDO (${MONTHLY_AI_LIMIT}/mês). O texto original foi mantido.`,
       };
     }
 

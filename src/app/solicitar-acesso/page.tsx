@@ -2,9 +2,8 @@
 
 import { useState, useMemo, Suspense } from "react"
 import { useAuth } from "@/hooks/use-auth"
-import { 
-  Loader2, 
-  ArrowLeft,
+import {
+  Loader2,
   User,
   ShieldCheck,
   Check,
@@ -23,7 +22,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import Link from "next/link"
+import { BackButton } from "@/components/back-button"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   Command,
@@ -148,9 +147,7 @@ function SolicitarAcessoForm() {
 
   return (
     <div className="w-full max-w-2xl space-y-6 relative z-10 py-10">
-      <Button asChild variant="ghost" className="text-white hover:text-blue-200 mb-4 hover:bg-white/10">
-        <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4" /> Voltar ao Login</Link>
-      </Button>
+      <BackButton href="/login" label="Voltar ao Login" variant="dark" className="mb-4" />
 
       <Card className="bg-white border-none rounded-[2.5rem] shadow-2xl overflow-hidden">
         <CardHeader className="bg-slate-50 border-b border-slate-100 p-8 text-center">

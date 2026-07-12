@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card"
 import { extractDataFromIntimacao } from "@/ai/flows/extract-data-from-intimacao"
 import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/hooks/use-auth"
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
 
 export function DataExtractor() {
@@ -26,6 +27,7 @@ export function DataExtractor() {
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
   const { toast } = useToast()
+  const { profile } = useAuth()
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -60,7 +62,7 @@ export function DataExtractor() {
     reader.onload = async () => {
       const base64Data = reader.result as string
       try {
-        const result = await extractDataFromIntimacao({ intimacaoFormDataUri: base64Data })
+        const result = await extractDataFromIntimacao({ intimacaoFormDataUri: base64Data, uid: profile?.uid || '' })
         setExtractedData(result.extractedData)
         // Notificação de sucesso removida para reduzir ruído visual
       } catch (err) {

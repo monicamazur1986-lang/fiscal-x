@@ -4,50 +4,92 @@ import React, { useEffect, useState, useRef, Suspense } from "react"
 import { useForm, useFieldArray, FormProvider } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { 
-  Loader2, 
-  ArrowLeft, 
-  Download, 
-  Search, 
-  Maximize2, 
-  Minimize2, 
-  X, 
-  Pencil, 
-  Check, 
-  Trash2, 
-  Smartphone, 
-  Save, 
-  FileCheck2, 
-  FileText, 
-  Sparkles,
-  RotateCcw
+import {
+  Loader2,
+  Search,
+  X,
+  Trash2,
+  Smartphone,
+  Save,
+  FileCheck2,
+  FileText,
+  Maximize2,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import { format } from "date-fns"
 
 import { Button } from "@/components/ui/button"
-import { FormField } from "@/components/ui/form"
+import { BackButton } from "./back-button"
 import { useToast } from "@/hooks/use-toast"
 import { useIntimacoes } from "@/hooks/use-intimacoes"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useAuth } from "@/hooks/use-auth"
-import { intimacaoSchema, DEFAULT_PRAZO_TEXT } from "@/lib/schema"
+import { intimacaoSchema, DEFAULT_PRAZO_TEXT, INTERDICAO_PRAZO_TEXT, APREENSAO_PRAZO_TEXT } from "@/lib/schema"
 import { Intimacao, Autoridade } from "@/lib/types"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { SelecionarAutoridadeParaFormulario } from "./selecionar-autoridade-dialog"
-import { RichTextEditor } from "./rich-text-editor"
 import { SignaturePad } from "./signature-pad"
-import { AssistenteIAFormDialog } from "./assistente-ia-form-dialog"
-import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "./ui/dialog"
-import { Textarea } from "./ui/textarea"
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from "./ui/alert-dialog"
+import { DocumentoOficialBody, type IntimacaoFormValues, type SignatureTargetType } from "./documento-oficial-body"
+import { renderDocumentIntoPdf } from "@/lib/generate-intimacao-pdf"
 
-const termoOptions = ["TERMO DE INTIMAÇÃO", "AUTO DE INFRAÇÃO", "TERMO DE APREENSÃO", "TERMO DE INTERDIÇÃO", "TERMO DE INUTILIZAÇÃO"];
-const DEFAULT_SYMBOL = "https://firebasestorage.googleapis.com/v0/b/firebasestudio-1937074168.appspot.com/o/user-uploads%2F67b6653d9e6e872d80ef618e%2Flogo_horizontal_preto_transparente.jpg?alt=media";
+const TIPOS_QUE_GERAM_AUTO_INFRACAO = ["TERMO DE APREENSÃO", "TERMO DE INTERDIÇÃO"];
+
+type SignatureTarget = { doc: 'main' | 'anexo', type: SignatureTargetType, index?: number };
+type EditingFiscal = { doc: 'main' | 'anexo', index: number, data: Autoridade };
+
+// Recalcula, para um documento específico, onde cairiam as quebras de página A4
+// (297mm), reservando o espaço do cabeçalho repetido a partir da 2ª página.
+function useDocPageBreaks(containerRef: React.RefObject<HTMLDivElement>, headerRef: React.RefObject<HTMLElement>, fitToScreen: boolean, extraDeps: any[] = []) {
+  const [pageBreaks, setPageBreaks] = useState<number[]>([]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const A4_WIDTH_MM = 210;
+    const A4_HEIGHT_MM = 297;
+
+    const recalculate = () => {
+      const pxPerMm = el.offsetWidth / A4_WIDTH_MM;
+      const pageHeightPx = A4_HEIGHT_MM * pxPerMm;
+      const headerHeightPx = headerRef.current?.offsetHeight || 0;
+
+      const breaks: number[] = [];
+      let cursor = pageHeightPx;
+      while (cursor < el.scrollHeight) {
+        breaks.push(cursor);
+        cursor += Math.max(pageHeightPx - headerHeightPx, 1);
+      }
+      setPageBreaks(breaks);
+    };
+
+    recalculate();
+    const observer = new ResizeObserver(recalculate);
+    observer.observe(el);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitToScreen, ...extraDeps]);
+
+  return pageBreaks;
+}
+
+function PageBreakMarkers({ pageBreaks }: { pageBreaks: number[] }) {
+  return (
+    <>
+      {pageBreaks.map((offset, i) => (
+        <div key={i} className="no-print absolute left-0 right-0 pointer-events-none z-20" style={{ top: offset }}>
+          <div className="border-t-2 border-dashed border-primary/40" />
+          <span className="absolute -top-2.5 right-2 bg-primary text-white text-[7pt] font-black uppercase tracking-widest px-2 py-0.5 rounded-full shadow-sm">
+            Página {i + 2}
+          </span>
+        </div>
+      ))}
+    </>
+  );
+}
 
 function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<Intimacao>, intimacaoId?: string }) {
     const { generateNewNumeroProcesso, saveIntimacao, loading: loadingIntimacoes } = useIntimacoes();
@@ -55,19 +97,48 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
     const { profile } = useAuth();
     const router = useRouter();
     const { toast } = useToast();
-    
-    const documentRef = useRef<HTMLDivElement>(null);
+
+    const mainDocumentRef = useRef<HTMLDivElement>(null);
+    const mainHeaderRef = useRef<HTMLElement>(null);
+    const mainFormRef = useRef<HTMLFormElement>(null);
+    const anexoDocumentRef = useRef<HTMLDivElement>(null);
+    const anexoHeaderRef = useRef<HTMLElement>(null);
+    const anexoFormRef = useRef<HTMLFormElement>(null);
+    const anexoIdRef = useRef<string | undefined>(undefined);
+    const isPersistingRef = useRef(false);
+    // Guarda o id real do documento principal assim que o 1º salvamento (manual
+    // ou automático) cria o registro na nuvem — sem isso, cada novo salvamento
+    // em "Nova Autuação" criava um documento duplicado, já que a prop
+    // `intimacaoId` nunca muda dentro da mesma sessão de edição.
+    const mainIdRef = useRef<string | undefined>(intimacaoId);
+    // Evita repetir a gravação de vínculo (documentoOrigemId) a cada autosave
+    // depois que o Auto de Infração já foi ligado ao documento principal uma vez.
+    // Se já estamos editando um documento existente, o id verdadeiro já é
+    // conhecido desde o 1º salvamento do anexo — não precisa de um 2º patch.
+    const anexoOrigemLinkedRef = useRef(!!intimacaoId);
+    // Marca true assim que o fiscal editar o campo de prazo manualmente, para
+    // parar de sobrescrevê-lo ao trocar o tipoTermo. Comparar o HTML atual contra
+    // os textos-padrão é frágil (o contentEditable pode reformatar a marcação sem
+    // o usuário ter mudado nada), então usamos um sinal explícito em vez disso.
+    const prazoEditadoManualmenteRef = useRef(false);
+    const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isDirtyRef = useRef(false);
+    const cloudWarningShownRef = useRef(false);
 
     const [isSaving, setIsSaving] = useState(false);
     const [isSavingDraft, setIsSavingDraft] = useState(false);
+    const [lastAutoSavedAt, setLastAutoSavedAt] = useState<Date | null>(null);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-    const [signatureTarget, setSignatureTarget] = useState<{ type: 'fiscal' | 'responsavel' | 'testemunha1' | 'testemunha2', index?: number } | null>(null);
-    const [editingFiscal, setEditingFiscal] = useState<{ index: number, data: Autoridade } | null>(null);
+    const [signatureTarget, setSignatureTarget] = useState<SignatureTarget | null>(null);
+    const [editingFiscal, setEditingFiscal] = useState<EditingFiscal | null>(null);
     const [isSearchingCnpj, setIsSearchingCnpj] = useState(false);
     const [fitToScreen, setFitToScreen] = useState(false);
+    const [manualFitOverride, setManualFitOverride] = useState<boolean | null>(null);
     const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
+    const [hasAnexo, setHasAnexo] = useState(false);
+    const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
 
-    const methods = useForm<z.infer<typeof intimacaoSchema>>({
+    const methods = useForm<IntimacaoFormValues>({
         resolver: zodResolver(intimacaoSchema),
         defaultValues: {
             ...defaultValues,
@@ -83,115 +154,303 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             dataRecebimento: defaultValues?.dataRecebimento ? new Date(defaultValues.dataRecebimento) : undefined,
             dataDocumento: defaultValues?.dataDocumento || format(new Date(), "dd/MM/yyyy"),
             horaDocumento: defaultValues?.horaDocumento || format(new Date(), "HH:mm"),
+            reuCargo: defaultValues?.reuCargo || "",
             responsavelTecnico: defaultValues?.responsavelTecnico || "",
             responsavelTecnicoConselho: defaultValues?.responsavelTecnicoConselho || "",
+            responsavelTecnicoIdentidade: defaultValues?.responsavelTecnicoIdentidade || "",
+            dataRecebimentoTecnico: defaultValues?.dataRecebimentoTecnico ? new Date(defaultValues.dataRecebimentoTecnico) : undefined,
             testemunha1Nome: defaultValues?.testemunha1Nome || "",
             testemunha2Nome: defaultValues?.testemunha2Nome || "",
         },
     });
-    
+
+    const anexoMethods = useForm<IntimacaoFormValues>({
+        resolver: zodResolver(intimacaoSchema),
+        defaultValues: intimacaoSchema.parse({}),
+    });
+
     const { control, handleSubmit, watch, setValue, getValues } = methods;
     const { fields, append, remove, update } = useFieldArray({ control, name: "autoridades" });
+    const { fields: anexoFields, append: anexoAppend, remove: anexoRemove, update: anexoUpdate, replace: anexoReplaceAutoridades } = useFieldArray({ control: anexoMethods.control, name: "autoridades" });
+
     const isFinalized = watch("status") === 'finalizado';
+    const anexoIsFinalized = anexoMethods.watch("status") === 'finalizado';
+    const tipoTermoAtual = watch("tipoTermo");
     const recusouAssinar = watch("recusouAssinar");
     const signatureResponsavel = watch("signatureResponsavel");
     const dataRecebimento = watch("dataRecebimento");
 
     useEffect(() => {
         const handleResize = () => setWindowWidth(window.innerWidth);
+        handleResize();
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
+    // Ajusta a tela automaticamente quando o documento A4 (794px) não cabe na
+    // largura disponível, a menos que o usuário já tenha escolhido manualmente.
+    useEffect(() => {
+        if (manualFitOverride !== null) {
+            setFitToScreen(manualFitOverride);
+            return;
+        }
+        setFitToScreen(windowWidth - 32 < 794);
+    }, [windowWidth, manualFitOverride]);
+
+    const pageBreaksMain = useDocPageBreaks(mainDocumentRef, mainHeaderRef, fitToScreen);
+    const pageBreaksAnexo = useDocPageBreaks(anexoDocumentRef, anexoHeaderRef, fitToScreen, [hasAnexo]);
+
     useEffect(() => {
         if (profile && !getValues('numeroProcesso') && !loadingIntimacoes) {
-            generateNewNumeroProcesso(profile.fiscalCode).then(num => {
+            generateNewNumeroProcesso().then(num => {
                 setValue('numeroProcesso', num);
             });
         }
     }, [profile, loadingIntimacoes, getValues, setValue, generateNewNumeroProcesso]);
 
+    // Interdição não abre prazo de defesa (é uma determinação); Apreensão remete
+    // o prazo de defesa ao Auto de Infração anexo. Só troca o texto se o fiscal
+    // ainda não tiver editado esse campo manualmente.
+    const handleTipoTermoChange = (value: string) => {
+        if (prazoEditadoManualmenteRef.current) return;
+        if (value === 'TERMO DE INTERDIÇÃO') setValue('prazo', INTERDICAO_PRAZO_TEXT);
+        else if (value === 'TERMO DE APREENSÃO') setValue('prazo', APREENSAO_PRAZO_TEXT);
+        else setValue('prazo', DEFAULT_PRAZO_TEXT);
+    };
+
+    const handleGerarAutoInfracao = async () => {
+        const novoNumero = await generateNewNumeroProcesso();
+        const main = getValues();
+        const base = intimacaoSchema.parse({});
+        anexoMethods.reset({
+            ...base,
+            tipoTermo: "AUTO DE INFRAÇÃO",
+            numeroProcesso: novoNumero,
+            prazo: DEFAULT_PRAZO_TEXT,
+            comarca: main.comarca,
+            autor: main.autor,
+            cnpj: main.cnpj,
+            endereco: main.endereco,
+            bairro: main.bairro,
+            reu: main.reu,
+            reuCargo: main.reuCargo,
+            responsavelLegalIdentidade: main.responsavelLegalIdentidade,
+            responsavelTecnico: main.responsavelTecnico,
+            responsavelTecnicoConselho: main.responsavelTecnicoConselho,
+            responsavelTecnicoIdentidade: main.responsavelTecnicoIdentidade,
+            telefone: main.telefone,
+            cnae: main.cnae,
+            municipioId: main.municipioId,
+            dataDocumento: main.dataDocumento,
+            horaDocumento: main.horaDocumento,
+            teor: main.teor,
+            legislacaoBase: main.legislacaoBase,
+        });
+        // Usa o replace() do próprio useFieldArray (em vez de incluir "autoridades"
+        // no reset()) para o RHF gerar corretamente os ids internos de cada linha —
+        // passar o array direto pelo reset() deixa esses ids fora de sincronia e
+        // quebra o "key" de cada item na lista.
+        anexoReplaceAutoridades(main.autoridades.map(a => ({ ...a, signature: '' })));
+        anexoIdRef.current = undefined;
+        setHasAnexo(true);
+    };
+
+    const handleRemoverAnexo = () => {
+        setHasAnexo(false);
+        anexoIdRef.current = undefined;
+    };
+
     const handleSignatureSave = (base64: string) => {
         if (!signatureTarget) return;
+        const m = signatureTarget.doc === 'main' ? methods : anexoMethods;
         if (signatureTarget.type === 'fiscal' && signatureTarget.index !== undefined) {
-            const current = getValues('autoridades');
+            const current = m.getValues('autoridades');
             current[signatureTarget.index].signature = base64;
-            setValue('autoridades', [...current]);
+            m.setValue('autoridades', [...current]);
         } else if (signatureTarget.type === 'responsavel') {
-            setValue('signatureResponsavel', base64);
-            setValue('dataRecebimento', new Date()); 
+            m.setValue('signatureResponsavel', base64);
+            m.setValue('dataRecebimento', new Date());
+        } else if (signatureTarget.type === 'responsavelTecnico') {
+            m.setValue('signatureResponsavelTecnico', base64);
+            m.setValue('dataRecebimentoTecnico', new Date());
         } else if (signatureTarget.type === 'testemunha1') {
-            setValue('signatureTestemunha1', base64);
+            m.setValue('signatureTestemunha1', base64);
         } else if (signatureTarget.type === 'testemunha2') {
-            setValue('signatureTestemunha2', base64);
+            m.setValue('signatureTestemunha2', base64);
         }
         setSignatureTarget(null);
     };
 
+    // Persiste o documento principal e, se houver, o Auto de Infração vinculado,
+    // cruzando os ids dos dois (documentoOrigemId / autoInfracaoVinculadaId).
+    // Usa mainIdRef (não a prop intimacaoId, fixa durante toda a sessão) para
+    // que o 2º, 3º... salvamento sempre atualize o MESMO documento em vez de
+    // criar duplicatas — essencial tanto para os cliques manuais quanto para
+    // o autosave silencioso.
+    const persistWithAnexo = async (status: 'rascunho' | 'finalizado') => {
+        let anexoId = anexoIdRef.current;
+
+        if (hasAnexo) {
+            const anexoData = anexoMethods.getValues();
+            const savedAnexo = await saveIntimacao({ ...anexoData, status, documentoOrigemId: mainIdRef.current || '' }, anexoId);
+            anexoId = savedAnexo.id;
+            anexoIdRef.current = anexoId;
+        }
+
+        const mainData = getValues();
+        const savedMain = await saveIntimacao({ ...mainData, status, autoInfracaoVinculadaId: hasAnexo ? (anexoId || '') : '' }, mainIdRef.current);
+        mainIdRef.current = savedMain.id;
+
+        if (hasAnexo && anexoId && !anexoOrigemLinkedRef.current) {
+            await saveIntimacao({ ...anexoMethods.getValues(), status, documentoOrigemId: savedMain.id }, anexoId);
+            anexoOrigemLinkedRef.current = true;
+        }
+
+        return { mainId: savedMain.id, anexoId, mainCloudSaved: savedMain.cloudSaved as boolean };
+    };
+
+    // Autosave: alguns segundos depois que o fiscal para de digitar, salva
+    // sozinho e em silêncio (sem toast de sucesso a cada letra) — para não
+    // perder o relato em caso de imprevisto (queda de energia, aba fechada
+    // sem querer, etc.) e para o rascunho já existir na nuvem antes mesmo de
+    // um clique manual em "Salvar", garantindo o resgate por login.
+    useEffect(() => {
+        if (isFinalized) return;
+
+        const subscription = methods.watch(() => {
+            isDirtyRef.current = true;
+            if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+            autosaveTimerRef.current = setTimeout(async () => {
+                if (isPersistingRef.current) return;
+                const hasContent = !!(getValues('autor')?.trim() || getValues('teor')?.trim() || getValues('reu')?.trim());
+                if (!hasContent) return;
+
+                isPersistingRef.current = true;
+                try {
+                    const result = await persistWithAnexo('rascunho');
+                    isDirtyRef.current = false;
+                    setLastAutoSavedAt(new Date());
+                    if (!result.mainCloudSaved && !cloudWarningShownRef.current) {
+                        cloudWarningShownRef.current = true;
+                        toast({ variant: "destructive", title: "Sem conexão com a nuvem", description: "O rascunho está sendo salvo só neste aparelho. Conecte à internet assim que possível para não correr o risco de perder o que já foi digitado." });
+                    }
+                } catch (e) {
+                    // Silencioso de propósito: um erro de autosave não deve interromper a digitação.
+                } finally {
+                    isPersistingRef.current = false;
+                }
+            }, 4000);
+        });
+
+        return () => {
+            subscription.unsubscribe();
+            if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isFinalized]);
+
+    // Avisa o navegador para confirmar antes de fechar/recarregar a aba se
+    // houver alteração ainda não salva (rede da autosave nem sempre alcança
+    // os últimos segundos de digitação antes de um fechamento repentino).
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (isDirtyRef.current && !isFinalized) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [isFinalized]);
+
     const handleSaveDraft = async () => {
+        if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+        if (isPersistingRef.current) return;
+        isPersistingRef.current = true;
         setIsSavingDraft(true);
         try {
-            const data = getValues();
-            await saveIntimacao({ ...data, status: 'rascunho' }, intimacaoId);
-            toast({ title: "Rascunho Salvo" });
+            const result = await persistWithAnexo('rascunho');
+            isDirtyRef.current = false;
+            setLastAutoSavedAt(new Date());
+            if (result.mainCloudSaved) {
+                toast({ title: "Rascunho Salvo" });
+            } else {
+                toast({ variant: "destructive", title: "Salvo só neste aparelho", description: "Sem conexão com a nuvem no momento — vai sincronizar assim que a internet voltar. Não feche este aparelho sem confirmar a sincronização." });
+            }
         } catch (e) {
             toast({ variant: "destructive", title: "Erro ao Salvar" });
         } finally {
             setIsSavingDraft(false);
+            isPersistingRef.current = false;
         }
     };
 
-    const handleFinalize = async (data: z.infer<typeof intimacaoSchema>) => {
+    const handleFinalize = async () => {
+        if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+        if (isPersistingRef.current) return;
+        isPersistingRef.current = true;
         setIsSaving(true);
         try {
-            await saveIntimacao({ ...data, status: 'finalizado' }, intimacaoId);
-            toast({ title: "Documento Finalizado" });
+            const result = await persistWithAnexo('finalizado');
+            isDirtyRef.current = false;
+            setValue('status', 'finalizado');
+            if (hasAnexo) anexoMethods.setValue('status', 'finalizado');
+            if (result.mainCloudSaved) {
+                toast({ title: "Documento Finalizado" });
+            } else {
+                toast({ variant: "destructive", title: "Finalizado só neste aparelho", description: "Sem conexão com a nuvem — assim que a internet voltar, abra este documento de novo para confirmar a sincronização." });
+            }
             setTimeout(() => generateAndDownloadPdf(), 1000);
         } catch (e) {
             toast({ variant: "destructive", title: "Falha na Finalização" });
-        } finally { 
-            setIsSaving(false); 
+        } finally {
+            setIsSaving(false);
+            isPersistingRef.current = false;
         }
     };
 
+    // Gera o PDF página a página, repetindo o cabeçalho em cada uma (em vez de
+    // cortar um único screenshot longo em pedaços de altura fixa). Quando há um
+    // Auto de Infração vinculado, suas páginas são anexadas ao MESMO PDF, sem
+    // chamar pdf.save() entre os dois documentos.
     const generateAndDownloadPdf = async () => {
-      if (!documentRef.current) return;
+      if (!mainDocumentRef.current) return;
       setIsGeneratingPdf(true);
+      // Dá tempo do React remover os controles de edição (botões, linhas de quebra)
+      // antes de clonarmos o DOM para captura.
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      let stagingEl: HTMLDivElement | null = null;
+
       try {
-        const html2canvas = (await import("html2canvas")).default;
         const { jsPDF } = await import("jspdf");
-        
-        const canvas = await html2canvas(documentRef.current, { 
-          scale: 3.0, 
-          useCORS: true, 
-          backgroundColor: "#ffffff", 
-          windowWidth: 794, 
-          logging: false 
-        });
 
-        const imgData = canvas.toDataURL('image/jpeg', 1.0);
+        stagingEl = document.createElement('div');
+        stagingEl.style.position = 'fixed';
+        stagingEl.style.left = '-99999px';
+        stagingEl.style.top = '0';
+        document.body.appendChild(stagingEl);
+
         const pdf = new jsPDF('p', 'mm', 'a4');
-        const imgWidth = 210;
-        const pageHeight = 297;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
-        
-        let heightLeft = imgHeight;
-        let position = 0;
+        const pdfState = { isFirstPage: true };
 
-        pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-
-        while (heightLeft >= 0) {
-          position = heightLeft - imgHeight;
-          pdf.addPage();
-          pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-          heightLeft -= pageHeight;
+        await renderDocumentIntoPdf(pdf, mainDocumentRef.current, stagingEl, pdfState);
+        if (hasAnexo && anexoDocumentRef.current) {
+          await renderDocumentIntoPdf(pdf, anexoDocumentRef.current, stagingEl, pdfState);
         }
 
-        pdf.save(`${getValues('tipoTermo')} - ${getValues('numeroProcesso')}.pdf`);
+        const tipo = getValues('tipoTermo');
+        const numero = getValues('numeroProcesso');
+        const filename = hasAnexo
+          ? `${tipo} + AUTO DE INFRAÇÃO - ${numero}.pdf`
+          : `${tipo} - ${numero}.pdf`;
+        pdf.save(filename);
       } catch (e) {
           toast({ variant: "destructive", title: "Erro na geração do PDF." });
-      } finally { setIsGeneratingPdf(false); }
+      } finally {
+          if (stagingEl) document.body.removeChild(stagingEl);
+          setIsGeneratingPdf(false);
+      }
     };
 
     const handleCnpjLookup = async () => {
@@ -213,226 +472,152 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
     };
 
     const scaleFactor = fitToScreen ? Math.min((windowWidth - 32) / 794, 1) : 1;
-    const logoSource = config.logoUrl || DEFAULT_SYMBOL;
-    const isDataUrl = logoSource.startsWith('data:');
-    const displayLogoUrl = isDataUrl ? logoSource : `/api/proxy-image?url=${encodeURIComponent(logoSource)}`;
+    const paperStyle = fitToScreen ? { transform: `scale(${scaleFactor})`, margin: '0 auto', transformOrigin: 'top center' } : {};
+    const mostraCardAutoInfracao = !isGeneratingPdf && (hasAnexo || TIPOS_QUE_GERAM_AUTO_INFRACAO.includes(tipoTermoAtual));
 
     return (
         <FormProvider {...methods}>
             <div className="document-container font-serif pb-60">
                 <div className="no-print w-full max-w-[210mm] flex flex-wrap justify-between items-center mb-8 px-4 gap-4">
                     <div className="flex gap-3 flex-wrap">
-                        <Button asChild variant="outline" className="bg-white border-zinc-200 rounded-xl font-black text-[9px] uppercase tracking-widest h-11 px-6 shadow-sm">
-                            <Link href="/dashboard"><ArrowLeft className="mr-2 h-4 w-4" /> Voltar</Link>
-                        </Button>
-                        <Button 
-                            onClick={() => setFitToScreen(!fitToScreen)} 
+                        <BackButton href="/dashboard" />
+                        <Button
+                            onClick={() => setManualFitOverride(!fitToScreen)}
                             className={cn(
                                 "rounded-xl font-black text-[10px] uppercase tracking-widest gap-2 transition-all shadow-xl h-11 px-8 border-2",
                                 fitToScreen ? "bg-primary text-white border-primary" : "bg-white border-primary text-primary"
                             )}
                         >
-                            {fitToScreen ? <Maximize2 className="h-4 w-4" /> : <Smartphone className="h-4 w-4" />} 
+                            {fitToScreen ? <Maximize2 className="h-4 w-4" /> : <Smartphone className="h-4 w-4" />}
                             {fitToScreen ? "Ver em A4 Real" : "Ajustar à Tela"}
                         </Button>
                     </div>
                 </div>
 
                 <div className="document-paper-wrapper custom-scrollbar">
-                    <div 
-                      ref={documentRef}
-                      className="document-paper h-auto bg-white transition-transform duration-300" 
-                      style={fitToScreen ? { transform: `scale(${scaleFactor})`, margin: '0 auto', transformOrigin: 'top center' } : {}}
+                    <div
+                      ref={mainDocumentRef}
+                      className="document-paper h-auto bg-white transition-transform duration-300"
+                      style={paperStyle}
                     >
-                        <form onSubmit={handleSubmit(handleFinalize)}>
-                            <header className="flex flex-row items-center justify-between gap-6 md:gap-10 mb-4 pb-4">
-                                <div className="w-[140px] h-[100px] md:w-[180px] md:h-[100px] flex items-center justify-start overflow-hidden">
-                                    <img src={displayLogoUrl} className="max-w-full max-h-full object-contain block" alt="Brasão" crossOrigin={isDataUrl ? undefined : "anonymous"} />
-                                </div>
-                                <div className="flex-1 text-center">
-                                    {config.headerRichText ? (
-                                        <div style={{ fontFamily: "'Times New Roman', Times, serif" }} dangerouslySetInnerHTML={{ __html: config.headerRichText }} />
-                                    ) : (
-                                        <>
-                                            <p className="text-[9pt] md:text-[10pt] font-black uppercase text-black">PREFEITURA MUNICIPAL DE {config.municipioNome || "PRUDENTÓPOLIS"}</p>
-                                            <h2 className="text-[10pt] md:text-[12pt] font-black uppercase text-black leading-tight mt-1">{config.secretaria || "SECRETARIA MUNICIPAL DE SAÚDE"}</h2>
-                                            <h3 className="text-[8.5pt] md:text-[9.5pt] font-bold text-black uppercase mt-0.5">{config.departamento || "VIGILÂNCIA SANITÁRIA"}</h3>
-                                        </>
-                                    )}
-                                </div>
-                            </header>
-
-                            <div className="section-box flex flex-row overflow-visible min-h-[30pt] mb-4" style={{ border: '1pt solid #171717' }}>
-                                <div className="flex-1 border-r border-[#171717] p-2 flex items-center justify-center text-center">
-                                    <FormField control={control} name="tipoTermo" render={({ field }) => (
-                                        isGeneratingPdf ? <h1 className="font-black text-[12pt] md:text-[14pt] uppercase text-black">{field.value}</h1> : (
-                                            <Select onValueChange={field.onChange} value={field.value} disabled={isFinalized}>
-                                                <SelectTrigger className="border-none font-black text-[12pt] md:text-[14pt] uppercase bg-transparent shadow-none ring-0 h-auto w-full justify-center text-black">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>{termoOptions.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
-                                            </Select>
-                                        )
-                                    )} />
-                                </div>
-                                <div className="flex-1 p-2 flex items-center justify-center">
-                                    <FormField control={control} name="numeroProcesso" render={({ field }) => (
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[12pt] md:text-[14pt] font-black uppercase text-black">Nº</span>
-                                            <input value={field.value || ""} onChange={(e) => field.onChange(e.target.value.toUpperCase())} disabled={isFinalized} className="bg-transparent border-none text-[12pt] md:text-[14pt] font-black uppercase outline-none w-full text-black" />
-                                        </div>
-                                    )} />
-                                </div>
-                            </div>
-
-                            <div className="section-box">
-                                <div className="sub-header-row">1. IDENTIFICAÇÃO DO ESTABELECIMENTO</div>
-                                <div className="data-row">
-                                    <div className="data-cell">
-                                        <span className="data-label">RAZÃO SOCIAL / NOME FANTASIA:</span>
-                                        <FormField control={control} name="autor" render={({ field }) => (
-                                            <RichTextEditor value={field.value || ""} onChange={field.onChange} disabled={isFinalized} fontSize="10.5pt" minHeight="1.1em" />
-                                        )} />
-                                    </div>
-                                </div>
-                                <div className="data-row">
-                                    <div className="data-cell">
-                                        <span className="data-label">CNPJ / CPF:</span>
-                                        <div className="flex items-center justify-start gap-4">
-                                            <FormField control={control} name="cnpj" render={({ field }) => (<input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input !w-[150pt]" />)} />
-                                            {!isFinalized && !isGeneratingPdf && (
-                                                <Button onClick={handleCnpjLookup} type="button" disabled={isSearchingCnpj} size="sm" variant="ghost" className="h-7 gap-1.5 px-3 rounded-lg font-black text-[8px] uppercase tracking-widest text-primary border border-primary/20 bg-white no-print">{isSearchingCnpj ? <Loader2 className="animate-spin h-3 w-3" /> : <Search className="h-3 w-3" />} Consultar</Button>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="data-row">
-                                    <div className="data-cell">
-                                        <span className="data-label">ENDEREÇO COMPLETO:</span>
-                                        <FormField control={control} name="endereco" render={({ field }) => (<Textarea value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input min-h-[1.5em] resize-none border-none p-0 bg-transparent shadow-none" />)} />
-                                    </div>
-                                </div>
-                                <div className="data-row">
-                                    <div className="data-cell" style={{ flex: '0 0 60%' }}>
-                                        <span className="data-label">BAIRRO:</span>
-                                        <FormField control={control} name="bairro" render={({ field }) => (<input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />)} />
-                                    </div>
-                                    <div className="data-cell">
-                                        <span className="data-label">TELEFONE:</span>
-                                        <FormField control={control} name="telefone" render={({ field }) => (<input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />)} />
-                                    </div>
-                                </div>
-                                <div className="data-row">
-                                    <div className="data-cell" style={{ flex: '0 0 60%' }}>
-                                        <span className="data-label">RESPONSÁVEL NO LOCAL:</span>
-                                        <FormField control={control} name="reu" render={({ field }) => (<Textarea value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input min-h-[1.5em] resize-none border-none p-0 bg-transparent shadow-none" />)} />
-                                    </div>
-                                    <div className="data-cell">
-                                        <span className="data-label">RG / CPF Nº:</span>
-                                        <FormField control={control} name="responsavelLegalIdentidade" render={({ field }) => (<input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />)} />
-                                    </div>
-                                </div>
-                                <div className="data-row border-none">
-                                    <div className="data-cell">
-                                        <span className="data-label">ATIVIDADES (CNAE):</span>
-                                        <FormField control={control} name="cnae" render={({ field }) => (<Textarea value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input min-h-[1.5em] resize-none border-none p-0 bg-transparent shadow-none uppercase" />)} />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="section-box" style={{ borderTop: 'none' }}>
-                                <div className="sub-header-row flex items-center justify-between no-print">
-                                    <span>2. AUTORIDADES SANITÁRIAS</span>
-                                    {!isFinalized && !isGeneratingPdf && <SelecionarAutoridadeParaFormulario onSelect={(a) => append(a)} />}
-                                </div>
-                                <div className="flex flex-col">
-                                    {fields.length > 0 ? fields.map((f, i) => (
-                                        <div key={f.id} className="flex flex-row border-b border-black/10 last:border-b-0 group">
-                                            <div style={{ flex: '0 0 34%' }} className="p-2 border-r border-black/10 text-center flex items-center justify-center"><span className="text-[9.5pt] text-black uppercase font-black">{(f as any).nome}</span></div>
-                                            <div style={{ flex: '0 0 33%' }} className="p-2 border-r border-black/10 text-center flex items-center justify-center"><span className="text-[9pt] text-black uppercase font-bold">{(f as any).cargo}</span></div>
-                                            <div style={{ flex: '0 0 33%' }} className="p-2 text-center flex items-center justify-center relative"><span className="text-[9pt] text-black uppercase font-bold">{(f as any).rg}</span>
-                                                {!isFinalized && !isGeneratingPdf && (
-                                                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-1 no-print opacity-0 group-hover:opacity-100 transition-opacity bg-white/80 p-0.5 rounded shadow-sm">
-                                                        <Button type="button" variant="ghost" size="icon" onClick={() => setEditingFiscal({ index: i, data: f as any })} className="h-5 w-5"><Pencil className="h-2.5 w-2.5" /></Button>
-                                                        <Button type="button" variant="ghost" size="icon" onClick={() => remove(i)} className="h-5 w-5 text-rose-500"><Trash2 className="h-2.5 w-2.5" /></Button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )) : <div className="text-center opacity-30 py-6 font-black uppercase text-[8pt] italic">Selecione as autoridades sanitárias</div>}
-                                </div>
-                            </div>
-
-                            <div className="section-box" style={{ borderTop: 'none' }}>
-                                <div className="sub-header-row flex items-center justify-between">
-                                    <span>3. FUNDAMENTAÇÃO E RELATO TÉCNICO</span>
-                                    {!isFinalized && !isGeneratingPdf && <AssistenteIAFormDialog onApply={(t, f) => { const ct = getValues('teor') || ""; setValue('teor', (ct && ct !== '<br>' ? ct + '<br>' : "") + t); if (f) { const cb = getValues('legislacaoBase') || ""; setValue('legislacaoBase', (cb && cb !== '<br>' ? cb + '; ' : "") + f); } }} />}
-                                </div>
-                                <div className="flex flex-col">
-                                    <div className="p-3 border-b border-black/10"><span className="data-label">BASE LEGAL PARA AUTUAÇÃO:</span><RichTextEditor value={watch('legislacaoBase') || ""} onChange={(v) => setValue('legislacaoBase', v)} disabled={isFinalized} fontSize="10pt" minHeight="2em" /></div>
-                                    <div className="p-3"><span className="data-label">RELATO DOS FATOS CONSTATADOS:</span><RichTextEditor value={watch('teor') || ""} onChange={(v) => setValue('teor', v)} disabled={isFinalized} fontSize="10.5pt" minHeight="12em" /></div>
-                                </div>
-                            </div>
-
-                            <div className="section-box" style={{ borderTop: 'none' }}>
-                                <div className="sub-header-row">4. NOTIFICAÇÃO E PRAZO PARA DEFESA</div>
-                                <div className="p-4 bg-zinc-50/20"><RichTextEditor value={watch('prazo')} onChange={(v) => setValue('prazo', v)} disabled={isFinalized} fontSize="9.5pt" minHeight="4em" /></div>
-                            </div>
-
-                            <div className="section-box" style={{ borderTop: 'none' }}>
-                                <div className="sub-header-row">5. CIÊNCIA DIGITAL</div>
-                                <div className="p-6">
-                                    <div className="grid grid-cols-2 gap-12">
-                                        <div className="space-y-12">
-                                            {fields.map((f, i) => (
-                                                <div className="flex flex-col items-center">
-                                                    <div className="min-h-[50pt] flex flex-col items-center justify-end">
-                                                        {(f as any).signature && <img src={(f as any).signature} className="h-10 object-contain mb-0" alt="S" />}
-                                                        {!isFinalized && !isGeneratingPdf && <button type="button" onClick={() => setSignatureTarget({ type: 'fiscal', index: i })} className="no-print text-primary text-[6pt] font-black tracking-widest uppercase underline">[Assinar Fiscal]</button>}
-                                                    </div>
-                                                    <div className="signature-block w-full"><p className="signature-name">{(f as any).nome}</p><p className="signature-title">{(f as any).cargo} — RG/CPF: {(f as any).rg || "---"}</p></div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                        <div className="space-y-12">
-                                            {!recusouAssinar ? (
-                                                <div className="flex flex-col items-center">
-                                                    <div className="min-h-[50pt] flex flex-col items-center justify-end">
-                                                        {signatureResponsavel && <img src={signatureResponsavel} className="h-10 object-contain mb-0" alt="S" />}
-                                                        {!isFinalized && !isGeneratingPdf && <button type="button" onClick={() => setSignatureTarget({ type: 'responsavel' })} className="no-print text-primary text-[6pt] font-black tracking-widest uppercase underline">[Assinar Autuado]</button>}
-                                                    </div>
-                                                    <div className="signature-block w-full"><p className="signature-name">{watch("reu") || "RESPONSÁVEL NO LOCAL"}</p><p className="signature-title">CIÊNCIA DO AUTUADO</p><p className="text-[7pt] italic mt-1 opacity-70">Ciente em {(signatureResponsavel && dataRecebimento) ? format(new Date(dataRecebimento), "dd/MM/yyyy") : "____/____/____"} às {(signatureResponsavel && dataRecebimento) ? format(new Date(dataRecebimento), "HH:mm") : "____:____"}h</p></div>
-                                                </div>
-                                            ) : (
-                                                <div className="text-center p-6 border-2 border-dashed border-rose-600 rounded-2xl bg-rose-50 flex flex-col items-center justify-center"><p className="font-black text-[10pt] uppercase text-rose-700 italic">RECUSA DE ASSINATURA REGISTRADA</p></div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </form>
+                        <DocumentoOficialBody
+                            control={control}
+                            watch={watch}
+                            setValue={setValue}
+                            getValues={getValues}
+                            fields={fields}
+                            onAppendAutoridade={(a) => append({ ...a, municipioId: a.municipioId || '', signature: a.signature || '' })}
+                            onRemoveAutoridade={(i) => remove(i)}
+                            onEditAutoridade={(i, data) => setEditingFiscal({ doc: 'main', index: i, data })}
+                            isFinalized={isFinalized}
+                            isGeneratingPdf={isGeneratingPdf}
+                            config={config}
+                            formRef={mainFormRef}
+                            headerRef={mainHeaderRef}
+                            onRequestSignature={(target) => setSignatureTarget({ doc: 'main', ...target })}
+                            onTipoTermoChange={handleTipoTermoChange}
+                            onPrazoChange={() => { prazoEditadoManualmenteRef.current = true; }}
+                            onCnpjLookup={handleCnpjLookup}
+                            isSearchingCnpj={isSearchingCnpj}
+                        />
+                        {!isGeneratingPdf && <PageBreakMarkers pageBreaks={pageBreaksMain} />}
                     </div>
+
+                    {mostraCardAutoInfracao && (
+                        <div className="no-print max-w-[210mm] mx-auto my-8 p-6 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                            {!hasAnexo ? (
+                                <>
+                                    <div>
+                                        <p className="font-black uppercase text-sm text-primary">Auto de Infração Vinculado</p>
+                                        <p className="text-xs text-zinc-500 mt-1">Gera um Auto de Infração com os mesmos dados do estabelecimento, autoridades e fundamentação, para assinatura própria e exportação em um único PDF.</p>
+                                    </div>
+                                    <Button type="button" onClick={handleGerarAutoInfracao} disabled={isFinalized} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-12 px-6 bg-primary text-white shrink-0">
+                                        <FileText className="h-4 w-4" /> Gerar Auto de Infração Vinculado
+                                    </Button>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="font-black uppercase text-sm text-primary">Auto de Infração Vinculado Nº {anexoMethods.watch('numeroProcesso')}</p>
+                                    {!anexoIsFinalized && !isFinalized && (
+                                        <Button type="button" variant="outline" onClick={handleRemoverAnexo} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-10 px-4 text-rose-600 border-rose-300 shrink-0">
+                                            <Trash2 className="h-4 w-4" /> Remover
+                                        </Button>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {hasAnexo && (
+                        <FormProvider {...anexoMethods}>
+                            <div
+                              ref={anexoDocumentRef}
+                              className="document-paper h-auto bg-white transition-transform duration-300"
+                              style={paperStyle}
+                            >
+                                <DocumentoOficialBody
+                                    control={anexoMethods.control}
+                                    watch={anexoMethods.watch}
+                                    setValue={anexoMethods.setValue}
+                                    getValues={anexoMethods.getValues}
+                                    fields={anexoFields}
+                                    onAppendAutoridade={(a) => anexoAppend({ ...a, municipioId: a.municipioId || '', signature: a.signature || '' })}
+                                    onRemoveAutoridade={(i) => anexoRemove(i)}
+                                    onEditAutoridade={(i, data) => setEditingFiscal({ doc: 'anexo', index: i, data })}
+                                    isFinalized={anexoIsFinalized}
+                                    isGeneratingPdf={isGeneratingPdf}
+                                    config={config}
+                                    formRef={anexoFormRef}
+                                    headerRef={anexoHeaderRef}
+                                    onRequestSignature={(target) => setSignatureTarget({ doc: 'anexo', ...target })}
+                                    showCnpjLookup={false}
+                                />
+                                {!isGeneratingPdf && <PageBreakMarkers pageBreaks={pageBreaksAnexo} />}
+                            </div>
+                        </FormProvider>
+                    )}
                 </div>
 
                 {!isFinalized && (
-                    <div className="fixed bottom-0 left-0 right-0 z-[100] no-print px-4 pb-8 pt-4 bg-white/90 backdrop-blur-xl border-t border-zinc-200 shadow-[0_-25px_50px_rgba(0,0,0,0.15)]">
-                        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center gap-4">
-                            <Button type="button" onClick={() => handleSaveDraft()} disabled={isSavingDraft || isSaving} variant="outline" className="w-full sm:w-auto h-16 px-10 rounded-2xl border-zinc-300 text-zinc-600 font-black uppercase text-[11px] tracking-widest gap-3 shadow-md">
-                                {isSavingDraft ? <Loader2 className="animate-spin h-5 w-5" /> : <Save className="h-5 w-5" />} Salvar Rascunho
+                    <div className="fixed bottom-3 right-3 z-[100] no-print flex items-center gap-2">
+                        {lastAutoSavedAt && (
+                            <span className="hidden sm:inline text-[9px] font-bold uppercase tracking-widest text-zinc-400 bg-white/90 px-3 py-1.5 rounded-full border border-zinc-200 shadow-sm">
+                                Salvo automaticamente às {format(lastAutoSavedAt, "HH:mm")}
+                            </span>
+                        )}
+                        <div className="flex items-center gap-2 bg-white/95 backdrop-blur-xl border border-zinc-200 rounded-2xl shadow-lg p-2">
+                            <Button type="button" onClick={() => handleSaveDraft()} disabled={isSavingDraft || isSaving} variant="outline" size="sm" className="h-10 px-4 rounded-xl border-zinc-300 text-zinc-600 font-black uppercase text-[10px] tracking-widest gap-2">
+                                {isSavingDraft ? <Loader2 className="animate-spin h-4 w-4" /> : <Save className="h-4 w-4" />} Salvar Rascunho
                             </Button>
-                            <Button type="button" onClick={handleSubmit(handleFinalize)} disabled={isSaving || isSavingDraft} className="flex-1 w-full h-16 bg-emerald-600 hover:bg-emerald-700 text-white gap-4 rounded-2xl shadow-2xl shadow-emerald-600/30">
-                                {isSaving ? <Loader2 className="animate-spin h-6 w-6" /> : <FileCheck2 className="h-6 w-6" />}
-                                <div className="flex flex-col items-start leading-none text-left"><span className="text-lg font-black uppercase tracking-tighter italic">FINALIZAR DOCUMENTO</span><span className="text-[8px] font-bold opacity-70 uppercase tracking-widest mt-0.5">Sincronizar e baixar PDF oficial</span></div>
+                            <Button type="button" onClick={() => setShowFinalizeConfirm(true)} disabled={isSaving || isSavingDraft} size="sm" className="h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white gap-2 rounded-xl font-black uppercase text-[10px] tracking-widest">
+                                {isSaving ? <Loader2 className="animate-spin h-4 w-4" /> : <FileCheck2 className="h-4 w-4" />} Finalizar
                             </Button>
                         </div>
                     </div>
                 )}
             </div>
 
+            <AlertDialog open={showFinalizeConfirm} onOpenChange={setShowFinalizeConfirm}>
+                <AlertDialogContent className="rounded-[2rem]">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="font-black uppercase tracking-tighter text-xl italic">Finalizar Documento?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {hasAnexo
+                                ? "Isso trava a edição do Termo e do Auto de Infração vinculado, sincroniza os dois na nuvem e baixa o PDF único. Não será possível editar depois."
+                                : "Isso trava a edição do documento, sincroniza na nuvem e baixa o PDF oficial. Não será possível editar depois."}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => { setShowFinalizeConfirm(false); handleSubmit(handleFinalize)(); }} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-emerald-600 hover:bg-emerald-700">Finalizar</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
             <SignaturePad isOpen={!!signatureTarget} onOpenChange={(o) => !o && setSignatureTarget(null)} onSave={handleSignatureSave} title="Assinatura Digital Oficial" />
-            
+
             <Dialog open={!!editingFiscal} onOpenChange={(o) => !o && setEditingFiscal(null)}>
-                <DialogContent className="rounded-[2.5rem] sm:max-w-md"><DialogHeader><DialogTitle className="font-black uppercase tracking-tighter text-xl italic">Editar Autoridade</DialogTitle></DialogHeader>{editingFiscal && (<div className="space-y-5 py-4"><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 ml-1">Nome Completo</Label><Input value={editingFiscal.data.nome} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, nome: e.target.value.toUpperCase()}})} className="h-12 rounded-xl bg-zinc-50 border-none font-bold text-xs uppercase" /></div><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 ml-1">Cargo</Label><Input value={editingFiscal.data.cargo} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, cargo: e.target.value.toUpperCase()}})} className="h-12 rounded-xl bg-zinc-50 border-none font-bold text-xs uppercase" /></div><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 ml-1">Identidade</Label><Input value={editingFiscal.data.rg} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, rg: e.target.value.toUpperCase()}})} className="h-12 rounded-xl bg-zinc-50 border-none font-bold text-xs" /></div></div>)}<DialogFooter><Button onClick={() => { if (editingFiscal) { update(editingFiscal.index, editingFiscal.data); setEditingFiscal(null); toast({ title: "Dados Atualizados" }); } }} className="w-full h-12 rounded-xl bg-primary text-white font-black uppercase text-[10px] tracking-widest shadow-lg">Salvar Alterações</Button></DialogFooter></DialogContent>
+                <DialogContent className="rounded-[2.5rem] sm:max-w-md"><DialogHeader><DialogTitle className="font-black uppercase tracking-tighter text-xl italic">Editar Autoridade</DialogTitle></DialogHeader>{editingFiscal && (<div className="space-y-5 py-4"><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 ml-1">Nome Completo</Label><Input value={editingFiscal.data.nome} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, nome: e.target.value.toUpperCase()}})} className="h-12 rounded-xl bg-zinc-50 border-none font-bold text-xs uppercase" /></div><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 ml-1">Cargo</Label><Input value={editingFiscal.data.cargo} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, cargo: e.target.value.toUpperCase()}})} className="h-12 rounded-xl bg-zinc-50 border-none font-bold text-xs uppercase" /></div><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 ml-1">Identidade</Label><Input value={editingFiscal.data.rg} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, rg: e.target.value.toUpperCase()}})} className="h-12 rounded-xl bg-zinc-50 border-none font-bold text-xs" /></div></div>)}<DialogFooter><Button onClick={() => { if (editingFiscal) { const upd = editingFiscal.doc === 'main' ? update : anexoUpdate; upd(editingFiscal.index, { ...editingFiscal.data, municipioId: editingFiscal.data.municipioId || '', signature: editingFiscal.data.signature || '' }); setEditingFiscal(null); toast({ title: "Dados Atualizados" }); } }} className="w-full h-12 rounded-xl bg-primary text-white font-black uppercase text-[10px] tracking-widest shadow-lg">Salvar Alterações</Button></DialogFooter></DialogContent>
             </Dialog>
         </FormProvider>
     );

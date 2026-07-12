@@ -1,6 +1,6 @@
 "use client"
 
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth, getLastUsedEmail } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -18,17 +18,27 @@ import { SentinelaMascot } from "@/components/brand-logo";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { isConfigReady } from "@/firebase/config";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Mail } from "lucide-react";
 
 export default function LoginPage() {
-  const { user, loginWithEmailPassword, isAuthorized, loading: authLoading, getSavedPassword } = useAuth();
+  const { user, loginWithEmailPassword, resetPassword, isAuthorized, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
-  
+
   const [localLoading, setLocalLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberPassword, setRememberPassword] = useState(true);
+  const [keepConnected, setKeepConnected] = useState(true);
+
+  const [isResetOpen, setIsResetOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [isSendingReset, setIsSendingReset] = useState(false);
+
+  useEffect(() => {
+    setEmail(getLastUsedEmail());
+  }, []);
 
   useEffect(() => {
     if (user && isAuthorized) {
@@ -36,30 +46,50 @@ export default function LoginPage() {
     }
   }, [user, isAuthorized, router]);
 
-  useEffect(() => {
-    if (!email) return;
-    const savedPassword = getSavedPassword(email);
-    if (savedPassword) {
-      setPassword(savedPassword);
-    }
-  }, [email, getSavedPassword]);
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password || localLoading) return;
-    
+
     setLocalLoading(true);
     try {
-      await loginWithEmailPassword(email, password, { rememberPassword });
+      await loginWithEmailPassword(email, password, { keepConnected });
       toast({ title: "Acesso Autorizado", description: "Bem-vindo ao vigilanT." });
     } catch (error: any) {
-      toast({ 
-        variant: "destructive", 
-        title: "Falha no Acesso", 
-        description: "E-mail ou senha incorretos." 
+      toast({
+        variant: "destructive",
+        title: "Falha no Acesso",
+        description: error.message || "E-mail ou senha incorretos."
       });
     } finally {
       setLocalLoading(false);
+    }
+  };
+
+  const handleOpenReset = () => {
+    setResetEmail(email);
+    setIsResetOpen(true);
+  };
+
+  const handleSendReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetEmail || isSendingReset) return;
+
+    setIsSendingReset(true);
+    try {
+      await resetPassword(resetEmail);
+      toast({
+        title: "Verifique seu E-mail",
+        description: "Se este e-mail estiver cadastrado, você vai receber um link para redefinir a senha em instantes."
+      });
+      setIsResetOpen(false);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Não foi Possível Enviar",
+        description: error.message || "Tente novamente mais tarde."
+      });
+    } finally {
+      setIsSendingReset(false);
     }
   };
 
@@ -116,7 +146,7 @@ export default function LoginPage() {
                   <input
                     type={showPassword ? "text" : "password"}
                     value={password}
-                    onChange={setPassword.target ? (e) => setPassword(e.target.value) : (e: any) => setPassword(e.target.value)}
+                    onChange={e => setPassword(e.target.value)}
                     placeholder="••••••••"
                     className="w-full h-14 pl-12 pr-12 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all text-sm font-semibold shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]"
                     required
@@ -129,6 +159,15 @@ export default function LoginPage() {
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
+                <div className="text-right">
+                  <button
+                    type="button"
+                    onClick={handleOpenReset}
+                    className="text-[10px] font-black uppercase text-slate-400 hover:text-emerald-600 transition-colors tracking-[0.2em]"
+                  >
+                    Esqueci minha senha
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -136,11 +175,11 @@ export default function LoginPage() {
               <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.25em] text-slate-600">
                 <input
                   type="checkbox"
-                  checked={rememberPassword}
-                  onChange={(e) => setRememberPassword(e.target.checked)}
+                  checked={keepConnected}
+                  onChange={(e) => setKeepConnected(e.target.checked)}
                   className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                 />
-                Salvar senha neste dispositivo
+                Manter conectado neste dispositivo
               </label>
 
               <Button
@@ -165,6 +204,43 @@ export default function LoginPage() {
           <p className="text-[8px] font-black uppercase tracking-[0.4em] text-white/70">Sentinela Cloud Security V6</p>
         </div>
       </div>
+
+      <Dialog open={isResetOpen} onOpenChange={setIsResetOpen}>
+        <DialogContent className="rounded-[2rem] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-black uppercase tracking-tighter text-xl italic">Redefinir Senha</DialogTitle>
+            <DialogDescription>Informe o e-mail cadastrado. Vamos enviar um link para você criar uma nova senha.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSendReset} className="space-y-5 py-2">
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-[0.25em]">E-mail</Label>
+              <div className="relative group">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-emerald-600 transition-colors">
+                  <Mail className="w-full h-full" />
+                </div>
+                <input
+                  type="email"
+                  value={resetEmail}
+                  onChange={e => setResetEmail(e.target.value)}
+                  placeholder="exemplo@municipio.pr.gov.br"
+                  className="w-full h-14 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all text-sm font-semibold"
+                  required
+                  autoFocus
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="submit"
+                disabled={isSendingReset}
+                className="w-full h-12 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-2xl text-[11px] uppercase tracking-[0.25em]"
+              >
+                {isSendingReset ? <Loader2 className="w-4 h-4 animate-spin" /> : "Enviar Link de Redefinição"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

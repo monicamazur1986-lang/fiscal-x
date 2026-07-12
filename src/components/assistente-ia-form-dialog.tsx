@@ -83,7 +83,7 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
     setDraft("")
     setFundamentacao("")
     try {
-      const result = await generateIntimacaoDraft({ caseDescription, reportType, lawPreference })
+      const result = await generateIntimacaoDraft({ caseDescription, reportType, lawPreference, useCloudAI: false, uid: '' })
       if (result.error) {
         setError(result.error)
       } else {

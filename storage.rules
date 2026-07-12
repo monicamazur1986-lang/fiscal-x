@@ -1,0 +1,44 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Logomarca global do sistema (aparece na tela de login) - pública para leitura
+    match /system/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // Fotos de perfil enviadas via /api/upload (Admin SDK) - leitura pública, escrita só pelo servidor
+    match /user-uploads/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Identidade visual, mural, fotos de inspeção e decretos: qualquer usuário autenticado
+    // (o isolamento fino por município/role fica a cargo do Firestore; aqui garantimos
+    // pelo menos que anônimos não conseguem ler ou escrever nada)
+    match /municipios/{allPaths=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /recados/{allPaths=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /inspecoes/{allPaths=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /decretos/{allPaths=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

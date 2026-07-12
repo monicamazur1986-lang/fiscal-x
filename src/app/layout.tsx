@@ -8,21 +8,28 @@ import { AppHeader } from '@/components/app-header';
 import { AuthProvider } from '@/hooks/use-auth';
 import { AuthGuard } from '@/components/auth-guard';
 import { ThemeProvider } from '@/components/theme-provider';
+import { AgendamentoAlarmListener } from '@/components/agendamento-alarm-listener';
+import { PwaInstallListener } from '@/components/pwa-install-listener';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
 export const metadata: Metadata = {
   title: 'vigilanT | Inspect. Protect. Empower.',
   description: 'Sistema inteligente para gestão de fiscalização sanitária.',
-  manifest: '/manifest',
+  manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
     title: 'vigilanT',
   },
   icons: {
-    icon: '/favicon.ico',
-    shortcut: '/favicon-16x16.png',
+    icon: [
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    shortcut: '/favicon-32x32.png',
+    apple: '/apple-touch-icon.png',
   },
 };
 
@@ -65,6 +72,8 @@ export default function RootLayout({
                 </main>
               </div>
               <Toaster />
+              <AgendamentoAlarmListener />
+              <PwaInstallListener />
             </AuthGuard>
           </AuthProvider>
         </ThemeProvider>

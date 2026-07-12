@@ -1,14 +1,38 @@
-
 {
   "LEI_MUNICIPAL_2276_2017": {
     "titulo": "Lei Municipal nº 2.276/2017",
     "descricao": "Código de Vigilância em Saúde de Prudentópolis",
     "artigos": [
-      { "id": "mun-18-I", "label": "Art. 18, inciso I", "texto": "Funcionamento de estabelecimento sem Licença Sanitária ou autorização.", "keywords": "alvará licença funcionamento irregular prefeitura" },
-      { "id": "mun-18-IX", "label": "Art. 18, inciso IX", "texto": "Manter estabelecimento sem assistência de responsável técnico habilitado.", "keywords": "RT profissional técnico ausência" },
-      { "id": "mun-18-XXII", "label": "Art. 18, inciso XXII", "texto": "Inobservância das Boas Práticas de fabricação ou manipulação.", "keywords": "higiene manipulação limpeza" },
-      { "id": "mun-18-XXVI", "label": "Art. 18, inciso XXVI", "texto": "Utilizar produtos vencidos, deteriorados ou adulterados.", "keywords": "vencido validade estragado" },
-      { "id": "mun-18-XXXII", "label": "Art. 18, inciso XXXII", "texto": "Deixar de manter condições adequadas de higiene e conservação.", "keywords": "sujeira conservação precária" }
+      {
+        "id": "mun-18-I",
+        "label": "Art. 18, inciso I",
+        "texto": "Funcionamento de estabelecimento sem Licença Sanitária ou autorização.",
+        "keywords": "alvará licença funcionamento irregular prefeitura"
+      },
+      {
+        "id": "mun-18-IX",
+        "label": "Art. 18, inciso IX",
+        "texto": "Manter estabelecimento sem assistência de responsável técnico habilitado.",
+        "keywords": "RT profissional técnico ausência"
+      },
+      {
+        "id": "mun-18-XXII",
+        "label": "Art. 18, inciso XXII",
+        "texto": "Inobservância das Boas Práticas de fabricação ou manipulação.",
+        "keywords": "higiene manipulação limpeza"
+      },
+      {
+        "id": "mun-18-XXVI",
+        "label": "Art. 18, inciso XXVI",
+        "texto": "Utilizar produtos vencidos, deteriorados ou adulterados.",
+        "keywords": "vencido validade estragado"
+      },
+      {
+        "id": "mun-18-XXXII",
+        "label": "Art. 18, inciso XXXII",
+        "texto": "Deixar de manter condições adequadas de higiene e conservação.",
+        "keywords": "sujeira conservação precária"
+      }
     ]
   },
   "LEI_ESTADUAL_13331_2001": {
@@ -16,11 +40,384 @@
     "descricao": "Código de Saúde do Estado do Paraná - Base para todos os municípios",
     "linkOficial": "https://www.legislacao.pr.gov.br/legislacao/pesquisarAto.do?action=exibir&codAto=4826",
     "artigos": [
-      { "id": "est-63-I", "label": "Art. 63, inciso I", "texto": "Construir, instalar ou fazer funcionar estabelecimentos de saúde sem licença do órgão competente.", "keywords": "hospital clínica posto saúde licença funcionamento" },
-      { "id": "est-63-III", "label": "Art. 63, inciso III", "texto": "Fazer funcionar, sem assistência de responsável técnico legalmente habilitado.", "keywords": "responsável técnico RT habilitação profissional" },
-      { "id": "est-63-XI", "label": "Art. 63, inciso XI", "texto": "Expor à venda ou entregar ao consumo produto deteriorado, alterado ou com prazo de validade expirado.", "keywords": "vencido validade deteriorado podre falsificado data" },
-      { "id": "est-63-XXXVII", "label": "Art. 63, inciso XXXVII", "texto": "Obstar ou dificultar a ação fiscalizadora das autoridades sanitárias.", "keywords": "impedir fiscalização fiscal dificultar ação" },
-      { "id": "est-63-XL", "label": "Art. 63, inciso XL", "texto": "Deixar de observar as condições higiênico-sanitárias na manipulação de produtos.", "keywords": "higiene manipulação utensílios equipamento funcionário" }
+      {
+        "id": "est-63-I",
+        "label": "Art. 63, inciso I",
+        "texto": "Construir, instalar ou fazer funcionar hospital, posto ou casa de saúde, clínica em geral, casa de repouso, serviço ou unidade de saúde, estabelecimento ou organização afim, que se dedique à promoção, proteção e recuperação da saúde, sem licença de órgão sanitário competente, ou contrariando normas legais e regulamentares pertinentes.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "hospital clinica posto saude sem licenca alvara funcionamento irregular"
+      },
+      {
+        "id": "est-63-II",
+        "label": "Art. 63, inciso II",
+        "texto": "Construir, instalar, empreender ou fazer funcionar atividade ou estabelecimento sujeito a fiscalização sanitária como laboratórios de produção de medicamento, droga ou insumo, cosméticos, produtos de higiene, dietéticos, correlatos ou quaisquer outros estabelecimentos que fabriquem alimentos, aditivos, bebidas, embalagens, saneantes e demais produtos que interessem à saúde pública, sem registro, licença ou autorização do órgão sanitário competente ou contrariando as normas legais pertinentes.",
+        "pena": "advertência, suspensão, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "fabrica industria laboratorio sem registro sem licenca produtos"
+      },
+      {
+        "id": "est-63-III",
+        "label": "Art. 63, inciso III",
+        "texto": "Fazer funcionar, sem assistência de responsável técnico legalmente habilitado, os estabelecimentos onde são produzidos, transformados, comercializados, armazenados, manipulados, analisados, preparados, extraídos, purificados, fracionados, embalados, reembalados, importados, exportados ou expedidos produtos de interesse à saúde.",
+        "pena": "advertência, suspensão da venda ou fabricação do produto, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "sem RT responsavel tecnico ausencia profissional habilitado"
+      },
+      {
+        "id": "est-63-IV",
+        "label": "Art. 63, inciso IV",
+        "texto": "Extrair, produzir, fabricar, transformar, preparar, manipular, purificar, fracionar, embalar ou reembalar, importar, exportar, armazenar, expedir, transportar, comprar, vender, ceder ou utilizar alimentos, produtos dietéticos, de higiene, cosméticos, medicamentos, correlatos, embalagens, saneantes, utensílios e aparelhos que interessem à saúde pública ou individual, sem registro, licença ou autorização do órgão sanitário ou contrariando o disposto em legislação sanitária.",
+        "pena": "advertência, apreensão ou inutilização do produto, cancelamento do registro do produto, suspensão da venda ou fabricação do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "venda produto sem registro alimento medicamento cosmetico irregular"
+      },
+      {
+        "id": "est-63-V",
+        "label": "Art. 63, inciso V",
+        "texto": "Cobrar, ou autorizar que terceiros cobrem, dos beneficiários do SUS, relativamente aos recursos e serviços utilizados em seu atendimento.",
+        "pena": "advertência e/ou multa",
+        "keywords": "cobranca indevida SUS gratuidade paciente atendimento cobrar"
+      },
+      {
+        "id": "est-63-VI",
+        "label": "Art. 63, inciso VI",
+        "texto": "Recusar a internação do beneficiário do SUS em situação de urgência/emergência, ainda que, no momento, não haja disponibilidade de leito vago em enfermaria.",
+        "pena": "advertência e/ou multa",
+        "keywords": "recusa internacao urgencia emergencia leito hospital negou atendimento"
+      },
+      {
+        "id": "est-63-VII",
+        "label": "Art. 63, inciso VII",
+        "texto": "Fraudar, falsificar ou adulterar produto sujeito ao controle sanitário.",
+        "pena": "advertência, suspensão da venda ou fabricação do produto, apreensão ou inutilização do produto, interdição, cancelamento do registro do produto, cassação da licença sanitária e/ou multa",
+        "keywords": "fraude falsificacao adulteracao produto falsificado"
+      },
+      {
+        "id": "est-63-VIII",
+        "label": "Art. 63, inciso VIII",
+        "texto": "Instalar ou fazer funcionar, sem licença sanitária emitida pelo órgão sanitário competente, estabelecimento industrial, comercial ou de prestação de serviços.",
+        "pena": "advertência, interdição e/ou multa",
+        "keywords": "sem alvara licenca sanitaria funcionamento estabelecimento comercial industrial"
+      },
+      {
+        "id": "est-63-IX",
+        "label": "Art. 63, inciso IX",
+        "texto": "Rotular produtos sujeitos ao controle sanitário em desacordo com as normas legais.",
+        "pena": "advertência, suspensão da venda ou fabricação do produto, apreensão ou inutilização do produto, interdição, cancelamento do registro e/ou multa",
+        "keywords": "rotulo rotulagem etiqueta errada incompleta produto"
+      },
+      {
+        "id": "est-63-X",
+        "label": "Art. 63, inciso X",
+        "texto": "Deixar de observar as normas de biossegurança e controle de infecções hospitalares e ambulatoriais estipuladas na legislação sanitária vigente.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "biosseguranca infeccao hospitalar CCIH controle esterilizacao"
+      },
+      {
+        "id": "est-63-XI",
+        "label": "Art. 63, inciso XI",
+        "texto": "Importar ou exportar, expor à venda ou entregar ao consumo produto sujeito ao controle sanitário que esteja deteriorado, alterado, adulterado, fraudado, avariado, falsificado, com o prazo de validade expirado, ou apor-lhe nova data de validade.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "produto vencido validade expirada deteriorado estragado data trocada"
+      },
+      {
+        "id": "est-63-XII",
+        "label": "Art. 63, inciso XII",
+        "texto": "Comercializar ou armazenar com finalidade de venda, produtos sujeitos ao controle sanitário destinados exclusivamente à distribuição gratuita.",
+        "pena": "advertência, apreensão do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "venda de amostra gratuita distribuicao gratuita revenda irregular"
+      },
+      {
+        "id": "est-63-XIII",
+        "label": "Art. 63, inciso XIII",
+        "texto": "Expor à venda, manter em depósito ou transportar produto sujeito ao controle sanitário, que exija cuidados especiais de conservação, sem a observância das cautelas e das condições necessárias a sua preservação.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, cancelamento do registro, cassação da licença sanitária e/ou multa",
+        "keywords": "conservacao inadequada refrigeracao temperatura armazenamento transporte"
+      },
+      {
+        "id": "est-63-XIV",
+        "label": "Art. 63, inciso XIV",
+        "texto": "Fazer propaganda de serviço ou produto sujeito ao controle sanitário em desacordo com a legislação sanitária.",
+        "pena": "advertência, proibição e/ou suspensão de propaganda e publicidade, contrapropaganda, suspensão de venda ou fabricação do produto, imposição de mensagem retificadora e/ou multa",
+        "keywords": "propaganda enganosa publicidade irregular anuncio"
+      },
+      {
+        "id": "est-63-XV",
+        "label": "Art. 63, inciso XV",
+        "texto": "Aviar receita médica, odontológica ou veterinária em desacordo com prescrição ou determinação expressa em lei ou normas regulamentares.",
+        "pena": "advertência, pena educativa, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "receita medica errada aviar farmacia dispensacao irregular"
+      },
+      {
+        "id": "est-63-XVI",
+        "label": "Art. 63, inciso XVI",
+        "texto": "Deixar de fornecer à autoridade sanitária dados de interesse à saúde, sobre serviços, matérias primas, substâncias utilizadas, processos produtivos e produtos e subprodutos utilizados.",
+        "pena": "advertência, apreensão ou inutilização do produto, suspensão de venda ou fabricação do produto, interdição, cancelamento do registro do produto, cassação da licença sanitária, proibição de propaganda e/ou multa",
+        "keywords": "negou informacoes recusa dados fiscalizacao sonegou"
+      },
+      {
+        "id": "est-63-XVII",
+        "label": "Art. 63, inciso XVII",
+        "texto": "Contrariar normas legais com relação ao controle da poluição e contaminação no ar, do solo e da água, bem como da poluição sonora com evidências de prejuízo à saúde pública.",
+        "pena": "advertência, pena educativa, interdição e/ou multa",
+        "keywords": "poluicao contaminacao ar solo agua barulho poluicao sonora"
+      },
+      {
+        "id": "est-63-XVIII",
+        "label": "Art. 63, inciso XVIII",
+        "texto": "Reaproveitar vasilhame de quaisquer produtos nocivos à saúde para embalagem e venda de alimentos, bebidas, medicamentos, drogas, substâncias, produtos de higiene, produtos dietéticos, cosméticos ou perfumes.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, cancelamento do registro, cassação da licença sanitária e/ou multa",
+        "keywords": "reaproveitamento vasilhame embalagem reutilizada garrafa reciclo"
+      },
+      {
+        "id": "est-63-XIX",
+        "label": "Art. 63, inciso XIX",
+        "texto": "Manter, em estabelecimento sujeito a controle e fiscalização sanitária, animal doméstico que coloque em risco a sanidade de alimentos e outros produtos de interesse à saúde, ou que comprometa a higiene do local.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, cancelamento do registro, cassação da licença sanitária e/ou multa",
+        "keywords": "animal domestico cachorro gato dentro estabelecimento higiene comprometida"
+      },
+      {
+        "id": "est-63-XX",
+        "label": "Art. 63, inciso XX",
+        "texto": "Coletar, processar, utilizar e/ou comercializar o sangue e hemoderivados em desacordo com as normas legais.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "sangue hemoderivados banco de sangue hemocentro irregular"
+      },
+      {
+        "id": "est-63-XXI",
+        "label": "Art. 63, inciso XXI",
+        "texto": "Comercializar ou utilizar placentas, órgãos, glândulas ou hormônios humanos, contrariando as normas legais.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "orgaos placenta hormonio humano comercio ilegal"
+      },
+      {
+        "id": "est-63-XXII",
+        "label": "Art. 63, inciso XXII",
+        "texto": "Utilizar, na preparação de hormônio, órgão de animal doente ou que apresente sinais de decomposição.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, suspensão de venda ou fabricação do produto, cassação da licença sanitária e/ou multa",
+        "keywords": "hormonio animal doente decomposicao podre"
+      },
+      {
+        "id": "est-63-XXIII",
+        "label": "Art. 63, inciso XXIII",
+        "texto": "Deixar de notificar doença ou outro agravo à saúde, quando tiver o dever legal de fazê-lo.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "nao notificou doenca agravo obrigatoria omissao"
+      },
+      {
+        "id": "est-63-XXIV",
+        "label": "Art. 63, inciso XXIV",
+        "texto": "Deixar de notificar epidemia de qualquer doença ou outro agravo à saúde mesmo que não sejam de notificação obrigatória.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "nao notificou epidemia surto doenca"
+      },
+      {
+        "id": "est-63-XXV",
+        "label": "Art. 63, inciso XXV",
+        "texto": "Deixar de preencher, clara e corretamente, a declaração de óbito segundo as normas da Classificação Internacional de Doenças e/ou recusar esclarecer ou completar a declaração de óbito, quando a isso solicitado pela autoridade sanitária.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "declaracao de obito incompleta errada preenchimento"
+      },
+      {
+        "id": "est-63-XXVI",
+        "label": "Art. 63, inciso XXVI",
+        "texto": "Deixar de preencher, clara e corretamente, e/ou reter a declaração de nascido vivo, não enviando-a ao serviço de saúde competente.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "declaracao de nascido vivo DNV incompleta retida nao enviada"
+      },
+      {
+        "id": "est-63-XXVII",
+        "label": "Art. 63, inciso XXVII",
+        "texto": "Reter atestado de vacinação obrigatória e/ou dificultar, deixar de executar ou opor-se à execução de medidas sanitárias destinadas à prevenção de doenças transmissíveis.",
+        "pena": "advertência, pena educativa, interdição e/ou multa",
+        "keywords": "vacinacao atestado retido dificultar prevencao doenca transmissivel"
+      },
+      {
+        "id": "est-63-XXVIII",
+        "label": "Art. 63, inciso XXVIII",
+        "texto": "Opor-se à exigência de provas diagnósticas ou a sua execução pela autoridade sanitária.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "recusa exame diagnostico oposicao autoridade sanitaria"
+      },
+      {
+        "id": "est-63-XXIX",
+        "label": "Art. 63, inciso XXIX",
+        "texto": "Aplicar raticidas, agrotóxicos, preservantes de madeira, produtos de uso veterinário, solventes, produtos químicos ou outras substâncias sem observar os procedimentos necessários à proteção da saúde das pessoas e dos animais.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, cancelamento da licença sanitária e/ou multa",
+        "keywords": "raticida agrotoxico veneno praga dedetizacao aplicacao irregular"
+      },
+      {
+        "id": "est-63-XXX",
+        "label": "Art. 63, inciso XXX",
+        "texto": "Reciclar resíduos infectantes gerados por estabelecimento prestador de serviços de saúde.",
+        "pena": "advertência, interdição e/ou multa",
+        "keywords": "reciclagem residuo infectante lixo hospitalar contaminado"
+      },
+      {
+        "id": "est-63-XXXI",
+        "label": "Art. 63, inciso XXXI",
+        "texto": "Proceder à cremação de cadáver ou utilizá-lo, contrariando as normas sanitárias pertinentes.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "cremacao cadaver irregular funeraria"
+      },
+      {
+        "id": "est-63-XXXII",
+        "label": "Art. 63, inciso XXXII",
+        "texto": "Impedir o sacrifício de animal considerado perigoso para a saúde pública.",
+        "pena": "advertência e/ou multa",
+        "keywords": "impedir sacrificio eutanasia animal perigoso"
+      },
+      {
+        "id": "est-63-XXXIII",
+        "label": "Art. 63, inciso XXXIII",
+        "texto": "Manter condição de trabalho que cause dano à saúde do trabalhador.",
+        "pena": "advertência, interdição e/ou multa",
+        "keywords": "condicao de trabalho insalubre risco saude do trabalhador"
+      },
+      {
+        "id": "est-63-XXXIV",
+        "label": "Art. 63, inciso XXXIV",
+        "texto": "Construir obras sem os padrões de segurança e higiene indispensáveis à saúde do trabalhador.",
+        "pena": "advertência, interdição e/ou multa",
+        "keywords": "obra construcao sem seguranca higiene trabalhador"
+      },
+      {
+        "id": "est-63-XXXV",
+        "label": "Art. 63, inciso XXXV",
+        "texto": "Adotar, na área de saneamento básico ou ambiental, procedimento que cause dano à saúde pública.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "saneamento basico ambiental dano saude publica"
+      },
+      {
+        "id": "est-63-XXXVI",
+        "label": "Art. 63, inciso XXXVI",
+        "texto": "Distribuir água que não atenda a padrões de potabilidade vigentes, ou sem controle de qualidade, ou sem divulgação adequada de informações sobre a mesma ao consumidor.",
+        "pena": "advertência, interdição, contrapropaganda e/ou multa",
+        "keywords": "agua nao potavel contaminada sem controle de qualidade distribuicao"
+      },
+      {
+        "id": "est-63-XXXVII",
+        "label": "Art. 63, inciso XXXVII",
+        "texto": "Obstar ou dificultar a ação fiscalizadora das autoridades sanitárias competentes, no exercício de suas funções.",
+        "pena": "advertência e/ou multa",
+        "keywords": "impedir fiscalizacao fiscal dificultar acao embaraco"
+      },
+      {
+        "id": "est-63-XXXVIII",
+        "label": "Art. 63, inciso XXXVIII",
+        "texto": "Fornecer ou comercializar medicamento, droga ou correlato sujeito à prescrição médica, sem observância dessa exigência, ou contrariando as normas vigentes.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "venda medicamento sem receita controlado tarja preta"
+      },
+      {
+        "id": "est-63-XXXIX",
+        "label": "Art. 63, inciso XXXIX",
+        "texto": "Executar toda e qualquer etapa do processo produtivo, inclusive transporte e utilização de produto ou resíduo perigoso, tóxico ou explosivo, inflamável, corrosivo, emissor de radiação ionizante, entre outros, contrariando a legislação sanitária vigente.",
+        "pena": "advertência, pena educativa, apreensão ou inutilização do produto, interdição, suspensão de venda, cassação da licença sanitária e/ou multa",
+        "keywords": "produto perigoso toxico explosivo inflamavel radiacao ionizante irregular"
+      },
+      {
+        "id": "est-63-XL",
+        "label": "Art. 63, inciso XL",
+        "texto": "Deixar de observar as condições higiênico-sanitárias na manipulação de produtos de interesse a saúde, quanto ao estabelecimento, aos equipamentos, utensílios e funcionários.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "higiene sujeira manipulacao equipamentos utensilios funcionarios sujo"
+      },
+      {
+        "id": "est-63-XLI",
+        "label": "Art. 63, inciso XLI",
+        "texto": "Fabricar ou fazer operar máquina, equipamento ou dispositivo que ofereça risco à saúde do trabalhador.",
+        "pena": "advertência, pena educativa, apreensão ou inutilização do equipamento, suspensão da venda ou fabricação do produto, interdição, cassação da licença sanitária, proibição de propaganda e/ou multa",
+        "keywords": "maquina equipamento risco trabalhador acidente"
+      },
+      {
+        "id": "est-63-XLII",
+        "label": "Art. 63, inciso XLII",
+        "texto": "Descumprimento de normas legais e regulamentares, medidas, formalidades e outras exigências sanitárias pelas empresas de transportes seus agentes e consignatários, comandantes ou responsáveis diretos por embarcações, aeronaves, ferrovias, veículos terrestres, nacionais ou estrangeiros.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "transporte embarcacao aeronave ferrovia veiculo descumprimento"
+      },
+      {
+        "id": "est-63-XLIII",
+        "label": "Art. 63, inciso XLIII",
+        "texto": "Inobservância, por parte do proprietário ou de quem detenha sua posse, de exigência sanitária relativa a imóvel ou equipamento.",
+        "pena": "advertência, pena educativa, apreensão ou inutilização do equipamento, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "imovel equipamento exigencia sanitaria proprietario"
+      },
+      {
+        "id": "est-63-XLIV",
+        "label": "Art. 63, inciso XLIV",
+        "texto": "Transgredir qualquer norma legal ou regulamentar destinada à promoção, proteção e recuperação da saúde.",
+        "pena": "advertência, pena educativa, interdição, suspensão da venda ou fabricação do produto, cancelamento do registro do produto, proibição de propaganda, cassação da licença sanitária, imposição de contrapropaganda e/ou multa",
+        "keywords": "transgressao norma geral saude infracao generica"
+      },
+      {
+        "id": "est-63-XLV",
+        "label": "Art. 63, inciso XLV",
+        "texto": "Dispensar medicamentos, através de via postal, sem autorização da autoridade sanitária competente.",
+        "pena": "advertência, apreensão do produto, cassação da licença sanitária, interdição e/ou multa",
+        "keywords": "venda medicamento correio postal sem autorizacao"
+      },
+      {
+        "id": "est-63-XLVI",
+        "label": "Art. 63, inciso XLVI",
+        "texto": "Exercer e/ou permitir o exercício de encargos relacionados com a promoção e recuperação da saúde por pessoas sem a necessária habilitação legal.",
+        "pena": "advertência, interdição e/ou multa",
+        "keywords": "exercicio ilegal profissao sem habilitacao curandeirismo"
+      },
+      {
+        "id": "est-63-XLVII",
+        "label": "Art. 63, inciso XLVII",
+        "texto": "Não adotar medidas preventivas de controle ou favorecer as condições para proliferação de vetores de interesse à saúde pública.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "vetores mosquito rato barata proliferacao criadouro"
+      },
+      {
+        "id": "est-63-XLVIII",
+        "label": "Art. 63, inciso XLVIII",
+        "texto": "Descumprimento de normas legais e regulamentares, medidas, formalidades, outras exigências sanitárias, por pessoas física ou jurídica, que operem a prestação de serviços de interesse da saúde pública em embarcações, aeronaves, veículos terrestres, terminais alfandegados, terminais aeroportuários ou portuários, estações e passagens de fronteira e pontos de apoio de veículos terrestres.",
+        "pena": "advertência, interdição, cancelamento da autorização de funcionamento e/ou multa",
+        "keywords": "terminal alfandegado aeroportuario portuario fronteira descumprimento"
+      },
+      {
+        "id": "est-63-XLIX",
+        "label": "Art. 63, inciso XLIX",
+        "texto": "Descumprimento de normas legais e regulamentares, medidas, formalidades, outras exigências sanitárias, por empresas administradoras de terminais alfandegados, terminais aeroportuários ou portuários, estações e passagens de fronteira e pontos de apoio de veículos terrestres.",
+        "pena": "advertência, interdição, cancelamento da autorização de funcionamento e/ou multa",
+        "keywords": "empresa administradora terminal descumprimento normas"
+      },
+      {
+        "id": "est-63-L",
+        "label": "Art. 63, inciso L",
+        "texto": "Descumprimento de normas legais e regulamentares, medidas, formalidades, outras exigências sanitárias relacionadas à importação ou exportação, por pessoas física ou jurídica, de matérias-primas ou produtos sob vigilância sanitária.",
+        "pena": "advertência, apreensão, inutilização, interdição, cancelamento da autorização de funcionamento, cancelamento do registro do produto e/ou multa",
+        "keywords": "importacao exportacao materia prima produto vigilancia sanitaria irregular"
+      },
+      {
+        "id": "est-63-LI",
+        "label": "Art. 63, inciso LI",
+        "texto": "Descumprimento de normas legais e regulamentares, medidas, formalidades, outras exigências sanitárias relacionadas a estabelecimentos e às boas práticas de fabricação de matérias-primas e de produtos sob vigilância sanitária.",
+        "pena": "advertência, apreensão, inutilização, interdição, cancelamento da autorização de funcionamento, cancelamento do registro do produto e/ou multa",
+        "keywords": "boas praticas de fabricacao BPF estabelecimento descumprimento"
+      },
+      {
+        "id": "est-63-LII",
+        "label": "Art. 63, inciso LII",
+        "texto": "Proceder a mudança de estabelecimento de armazenagem de produto importado sob interdição, sem autorização do órgão sanitário competente.",
+        "pena": "advertência, apreensão, inutilização, interdição, cancelamento da autorização de funcionamento, cancelamento do registro do produto e/ou multa",
+        "keywords": "mudanca armazenagem produto importado interditado sem autorizacao"
+      },
+      {
+        "id": "est-63-LIII",
+        "label": "Art. 63, inciso LIII",
+        "texto": "Proceder a comercialização de produto importado sob interdição.",
+        "pena": "advertência, apreensão, inutilização, interdição, cancelamento da autorização de funcionamento, cancelamento do registro do produto e/ou multa",
+        "keywords": "venda comercializacao produto importado interditado"
+      },
+      {
+        "id": "est-63-LIV",
+        "label": "Art. 63, inciso LIV",
+        "texto": "Deixar de garantir, em estabelecimentos destinados à armazenagem e/ou distribuição de produtos sob vigilância sanitária, a manutenção dos padrões de identidade e qualidade de produtos importados sob interdição ou aguardando inspeção física.",
+        "pena": "advertência, apreensão, inutilização, interdição, cancelamento da autorização de funcionamento, cancelamento do registro do produto e/ou multa",
+        "keywords": "armazenagem distribuicao padrao identidade qualidade produto importado"
+      }
     ]
   },
   "ILPI": {
@@ -28,8 +425,18 @@
     "descricao": "Normativas para Instituições de Longa Permanência para Idosos",
     "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Servicos-de-Saude",
     "artigos": [
-      { "id": "rdc-502-21", "label": "RDC ANVISA nº 502/2021", "texto": "Dispõe sobre o funcionamento de Instituição de Longa Permanência para Idosos (ILPI).", "keywords": "idodo asilo ilpi residencial geriatria" },
-      { "id": "sesa-parana-ilpi", "label": "Resolução SESA nº 236/2012", "texto": "Normas para o funcionamento de Instituições de Longa Permanência para Idosos no Paraná.", "keywords": "idoso paraná estadual ilpi asilo" }
+      {
+        "id": "rdc-502-21",
+        "label": "RDC ANVISA nº 502/2021",
+        "texto": "Dispõe sobre o funcionamento de Instituição de Longa Permanência para Idosos (ILPI).",
+        "keywords": "idodo asilo ilpi residencial geriatria"
+      },
+      {
+        "id": "sesa-parana-ilpi",
+        "label": "Resolução SESA nº 236/2012",
+        "texto": "Normas para o funcionamento de Instituições de Longa Permanência para Idosos no Paraná.",
+        "keywords": "idoso paraná estadual ilpi asilo"
+      }
     ]
   },
   "ALIMENTOS": {
@@ -37,8 +444,18 @@
     "descricao": "Manipulação, Fabricação e Comercialização de Produtos Alimentícios",
     "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Alimentos",
     "artigos": [
-      { "id": "rdc-216-04", "label": "RDC ANVISA nº 216/2004", "texto": "Regulamento Técnico de Boas Práticas para Serviços de Alimentação.", "keywords": "restaurante lanchonete cozinha boas práticas manipulação" },
-      { "id": "rdc-275-02", "label": "RDC ANVISA nº 275/2002", "texto": "Procedimentos Operacionais Padronizados (POP) para estabelecimentos produtores de alimentos.", "keywords": "pop alimentos indústria manual" }
+      {
+        "id": "rdc-216-04",
+        "label": "RDC ANVISA nº 216/2004",
+        "texto": "Regulamento Técnico de Boas Práticas para Serviços de Alimentação.",
+        "keywords": "restaurante lanchonete cozinha boas práticas manipulação"
+      },
+      {
+        "id": "rdc-275-02",
+        "label": "RDC ANVISA nº 275/2002",
+        "texto": "Procedimentos Operacionais Padronizados (POP) para estabelecimentos produtores de alimentos.",
+        "keywords": "pop alimentos indústria manual"
+      }
     ]
   },
   "ODONTOLOGIA": {
@@ -46,8 +463,18 @@
     "descricao": "Clínicas, Consultórios e Processamento de Materiais",
     "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Servicos-de-Saude",
     "artigos": [
-      { "id": "sesa-442-12", "label": "Resolução SESA nº 442/2012", "texto": "Normatiza as condições de funcionamento dos Serviços de Odontologia no Estado do Paraná.", "keywords": "dente dente dentista consultório autoclave esterilização" },
-      { "id": "rdc-63-11", "label": "RDC ANVISA nº 63/2011", "texto": "Boas Práticas de Funcionamento de Serviços de Saúde.", "keywords": "saúde clínica consultório hospital" }
+      {
+        "id": "sesa-442-12",
+        "label": "Resolução SESA nº 442/2012",
+        "texto": "Normatiza as condições de funcionamento dos Serviços de Odontologia no Estado do Paraná.",
+        "keywords": "dente dente dentista consultório autoclave esterilização"
+      },
+      {
+        "id": "rdc-63-11",
+        "label": "RDC ANVISA nº 63/2011",
+        "texto": "Boas Práticas de Funcionamento de Serviços de Saúde.",
+        "keywords": "saúde clínica consultório hospital"
+      }
     ]
   }
 }

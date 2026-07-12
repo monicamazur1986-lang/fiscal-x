@@ -79,7 +79,7 @@ export function BuscarLegislacaoDialog({ onSelect }: Props) {
 
   const filteredLaws = useMemo(() => {
     const term = normalizeText(searchTerm);
-    if (!term) return laws;
+    if (!term) return laws.map(law => ({ ...law, articles: undefined as any[] | undefined, hasMatch: true }));
 
     return laws.map(law => {
       const articles = (legislacaoData as any)[law.key].artigos.filter((art: any) => 

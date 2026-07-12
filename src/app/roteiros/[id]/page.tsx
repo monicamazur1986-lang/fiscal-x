@@ -132,9 +132,8 @@ const pharmacyChecklist: ChecklistData = {
 }
 
 export default function DynamicChecklistPage({ params }: { params: Promise<{ id: string }> }) {
-  const { idData } = use(params)
-  const checklist = id === '3' ? pharmacyChec
-  klist : odontoChecklist;
+  const { id } = use(params); // Resolve a Promise para obter o id
+  const checklist = id === '3' ? pharmacyChecklist : odontoChecklist; // Usa o id resolvido
   const { toast } = useToast()
   const storage = useStorage()
   const { profile } = useAuth()
@@ -248,7 +247,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     if (!currentText?.trim()) return;
     setPolishingItem(itemId);
     try {
-      const result = await polishObservation({ text: currentText });
+      const result = await polishObservation({ text: currentText, uid: profile?.uid || '' });
       if (result.polishedText) { 
         setObservations(prev => ({ ...prev, [itemId]: result.polishedText.toUpperCase() }));
         handleSaveDraft(false);
@@ -507,7 +506,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                      </div>
                      <p className="text-[10px] font-medium text-slate-500 italic">Preenchido até às {draftToResume?.updatedAt ? format(new Date(draftToResume.
                       
-                     ), "HH:mm") : "..."}</p>
+                     updatedAt), "HH:mm") : "..."}</p>
                 </div>
                 <p className="text-[11px] font-bold text-slate-500 text-center leading-relaxed">Deseja continuar exatamente de onde parou ou iniciar um novo formulário?</p>
             </div>

@@ -29,6 +29,20 @@ export const inspecaoSchema = z.object({
  */
 export const DEFAULT_PRAZO_TEXT = `O autuado poderá apresentar defesa prévia por escrito, no prazo de 15 dias a contar da ciência do auto. A defesa deve ser dirigida à autoridade superior e protocolada eletronicamente pelo site da Prefeitura de Prudentópolis através do link: <a href="https://prudentopolisprscp.equiplano.com.br:5028/tramitacaoProcesso/#/abertura-processo/entidade/41dd0a3a-f16f-4e8f-9b2a-8832e9191835/28" target="_blank" style="color: #0000EE; text-decoration: underline; font-weight: bold;">https://prudentopolisprscp.equiplano.com.br:5028/tramitacaoProcesso/#/abertura-processo/entidade/41dd0a3a-f16f-4e8f-9b2a-8832e9191835/28</a> ou entregue presencialmente no Departamento de Vigilância Sanitária Municipal (Rua São Josafat, nº 835 – Centro).`;
 
+/**
+ * Termo de Interdição não abre prazo de defesa própria: a interdição vale até
+ * regularização. O Auto de Infração vinculado (gerado à parte) é quem carrega
+ * o prazo de defesa de fato.
+ */
+export const INTERDICAO_PRAZO_TEXT = `Fica INTERDITADO TOTALMENTE / PARCIALMENTE este estabelecimento e suspensa a sua atividade até a devida regularização e emissão do Termo de Desinterdição.`;
+
+/**
+ * Termo de Apreensão também não é quem conta o prazo de defesa: ele remete ao
+ * Auto de Infração vinculado, gerado junto, que é o documento que efetivamente
+ * abre o prazo de 15 dias.
+ */
+export const APREENSAO_PRAZO_TEXT = `O autuado dispõe do prazo de 15 (quinze) dias, descrito no Auto de Infração anexo, a contar do recebimento deste para apresentar defesa por escrito junto à Vigilância Sanitária.`;
+
 export const intimacaoSchema = z.object({
   id: z.string().optional().default(''),
   numeroProcesso: z.string().default(''),
@@ -36,6 +50,7 @@ export const intimacaoSchema = z.object({
   comarca: z.string().default('PRUDENTÓPOLIS'),
   autor: z.string().default(''),
   reu: z.string().default(''),
+  reuCargo: z.string().optional().default(''),
   responsavelLegalConselho: z.string().optional().default(''),
   responsavelLegalIdentidade: z.string().optional().default(''),
   responsavelTecnico: z.string().optional().default(''),
@@ -76,4 +91,6 @@ export const intimacaoSchema = z.object({
   pdfUrl: z.string().optional().default(''),
   municipioId: z.string().optional().default(''),
   fotoDocumento: z.string().optional().default(''),
+  documentoOrigemId: z.string().optional().default(''),
+  autoInfracaoVinculadaId: z.string().optional().default(''),
 });

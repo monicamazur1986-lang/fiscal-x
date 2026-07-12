@@ -12,13 +12,13 @@ import { useAppConfig } from "@/hooks/use-app-config"
 export function SentinelaMascot({ className, width = 280, height = 280, simplified = false }: { className?: string, width?: number, height?: number, simplified?: boolean }) {
   const { systemLogo } = useAppConfig();
   const [imgError, setImgError] = useState(false);
-  const [fallbackSrc, setFallbackSrc] = useState("/logo.jpg");
+  const [fallbackSrc, setFallbackSrc] = useState("/fiscal_x_hq.png");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     setImgError(false);
-    setFallbackSrc("/logo.jpg");
+    setFallbackSrc("/fiscal_x_hq.png");
   }, [systemLogo]);
 
   const containerStyle = { width: `${width}px`, height: `${height}px` };
@@ -55,11 +55,6 @@ export function SentinelaMascot({ className, width = 280, height = 280, simplifi
         alt="vigilanT"
         className="object-cover w-full h-full"
         style={{ width: '100%', height: '100%' }}
-        onError={() => {
-          if (fallbackSrc === "/logo.jpg") {
-            setFallbackSrc("/logo.svg");
-          }
-        }}
       />
     </div>
   );

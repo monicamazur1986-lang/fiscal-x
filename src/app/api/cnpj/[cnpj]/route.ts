@@ -78,6 +78,6 @@ export async function GET(
     return NextResponse.json(mappedData);
 
   } catch (error: any) {
-    return NextResponse.json({ message: 'Erro de conexão.' }, { status: 500 });
+    return NextResponse.json({ message: 'Erro de conexão.', details: error.message || 'Detalhes do erro desconhecidos.' }, { status: 500 });
   }
 }

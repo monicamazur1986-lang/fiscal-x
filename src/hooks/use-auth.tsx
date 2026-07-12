@@ -1,11 +1,23 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useRef, useState, ReactNode, useMemo } from "react";
+import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signOut,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
+} from "firebase/auth";
+import { doc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
+import { isConfigReady } from "@/firebase/config";
+
+export const ROOT_ADMIN_EMAIL = 'app.fiscalx@gmail.com';
 
 type User = { uid: string; email: string | null; };
-import { normalizeId } from "@/lib/utils";
-
-export const ROOT_ADMIN_EMAIL = 'monicamazur1986@gmail.com';
 
 interface UserProfile {
   uid: string;
@@ -19,6 +31,22 @@ interface UserProfile {
   status?: 'pending' | 'approved' | 'rejected';
   adminFeedback?: string;
   municipioNome?: string;
+  fcmTokens?: string[];
+}
+
+interface RegisterInput {
+  email: string;
+  password: string;
+  nome: string;
+  municipioId: string;
+  role: 'admin' | 'fiscal';
+  metadata?: {
+    nascimento?: string;
+    cpf?: string;
+    cargo?: string;
+    municipioNome?: string;
+    fiscalCode?: string;
+  };
 }
 
 interface AuthContextType {
@@ -26,252 +54,162 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   isAuthorized: boolean;
-  loginWithEmailPassword: (email: string, pass: string, options?: { rememberPassword?: boolean }) => Promise<void>;
-  registerWithEmailPassword: (data: any) => Promise<void>;
+  configError: boolean;
+  loginWithEmailPassword: (email: string, pass: string, options?: { keepConnected?: boolean }) => Promise<void>;
+  registerWithEmailPassword: (data: RegisterInput) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfileData: (data: Partial<UserProfile>) => Promise<void>;
-  getSavedPassword: (email: string) => string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const PROFILE_CACHE_KEY = "vigilant-profile-cache";
-const ACTIVE_SESSION_KEY = "vigilant-active-session";
-const LOCAL_USERS_KEY = "vigilant-local-users";
-const DEVICE_CREDENTIALS_KEY = "vigilant-device-credentials";
+const LAST_EMAIL_KEY = "vigilant-last-email";
 
-function readProfileCache(): UserProfile | null {
-  if (typeof window === "undefined") return null;
-
-  try {
-    const raw = window.localStorage.getItem(PROFILE_CACHE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as UserProfile;
-  } catch {
-    return null;
-  }
+// Lembra só o e-mail usado por último neste navegador (nunca a senha).
+export function getLastUsedEmail(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(LAST_EMAIL_KEY) || "";
 }
 
-function persistProfileCache(profileData: UserProfile | null) {
+function saveLastUsedEmail(email: string) {
   if (typeof window === "undefined") return;
+  window.localStorage.setItem(LAST_EMAIL_KEY, email);
+}
 
-  if (!profileData) {
-    window.localStorage.removeItem(PROFILE_CACHE_KEY);
-    return;
+function mapAuthError(code: string | undefined): string {
+  switch (code) {
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return "E-mail ou senha incorretos.";
+    case 'auth/email-already-in-use':
+      return "Este e-mail já possui cadastro.";
+    case 'auth/weak-password':
+      return "A senha precisa ter pelo menos 6 caracteres.";
+    case 'auth/invalid-email':
+      return "E-mail inválido.";
+    case 'auth/too-many-requests':
+      return "Muitas tentativas. Aguarde alguns minutos e tente novamente.";
+    default:
+      return "Ocorreu um erro inesperado. Tente novamente mais tarde.";
   }
-
-  window.localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profileData));
-}
-
-function readLocalUsers(): Record<string, UserProfile> {
-  if (typeof window === "undefined") return {};
-
-  try {
-    const raw = window.localStorage.getItem(LOCAL_USERS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveLocalUsers(users: Record<string, UserProfile>) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
-}
-
-function readActiveSessionUid(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(ACTIVE_SESSION_KEY);
-}
-
-function readDeviceCredentials(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-
-  try {
-    const raw = window.localStorage.getItem(DEVICE_CREDENTIALS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveDeviceCredentials(credentials: Record<string, string>) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(DEVICE_CREDENTIALS_KEY, JSON.stringify(credentials));
-}
-
-function getCredentialKey(email: string, role: UserProfile['role']) {
-  return `${email.toLowerCase().trim()}:${role}`;
-}
-
-function persistDevicePassword(email: string, password: string, role: UserProfile['role']) {
-  const credentials = readDeviceCredentials();
-  credentials[getCredentialKey(email, role)] = password;
-  saveDeviceCredentials(credentials);
-}
-
-function readDevicePassword(email: string, role: UserProfile['role']) {
-  const credentials = readDeviceCredentials();
-  return credentials[getCredentialKey(email, role)] ?? null;
-}
-
-function persistActiveSessionUid(uid: string | null) {
-  if (typeof window === "undefined") return;
-  if (!uid) {
-    window.localStorage.removeItem(ACTIVE_SESSION_KEY);
-    return;
-  }
-  window.localStorage.setItem(ACTIVE_SESSION_KEY, uid);
-}
-
-function createLocalProfile(email: string, overrides: Partial<UserProfile> = {}): UserProfile {
-  const normalizedEmail = email.toLowerCase().trim();
-  return {
-    uid: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    email: normalizedEmail,
-    displayName: overrides.displayName || "USUÁRIO LOCAL",
-    photoURL: overrides.photoURL || "",
-    isAuthorized: overrides.isAuthorized ?? true,
-    role: overrides.role || "fiscal",
-    municipioId: overrides.municipioId || "local",
-    municipioNome: overrides.municipioNome || "MODO LOCAL",
-    status: overrides.status || "approved",
-    ...overrides,
-  };
-}
-
-function getOrCreateLocalProfile(email: string, overrides: Partial<UserProfile> = {}): UserProfile {
-  const users = readLocalUsers();
-  const normalizedEmail = email.toLowerCase().trim();
-  const existing = users[normalizedEmail];
-  if (existing) {
-    const merged = { ...existing, ...overrides };
-    users[normalizedEmail] = merged;
-    saveLocalUsers(users);
-    return merged;
-  }
-
-  const profile = createLocalProfile(normalizedEmail, overrides);
-  users[normalizedEmail] = profile;
-  saveLocalUsers(users);
-  return profile;
-}
-
-function inferRoleFromEmail(email: string, fallbackRole: UserProfile['role'] = 'fiscal'): UserProfile['role'] {
-  const normalizedEmail = email.toLowerCase().trim();
-  if (normalizedEmail === ROOT_ADMIN_EMAIL) return 'root';
-  if (normalizedEmail.endsWith('.pr.gov.br')) return 'admin';
-  return fallbackRole;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfile] = useState<UserProfile | null>(() => readProfileCache());
-  const [user, setUser] = useState<User | null>(() => {
-    const cachedProfile = readProfileCache();
-    if (cachedProfile) {
-      return { uid: cachedProfile.uid, email: cachedProfile.email } as any;
-    }
-    return null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const suppressProfileReloadRef = useRef(false);
 
   useEffect(() => {
-    // Modo 100% Local
-    const storedUid = readActiveSessionUid();
-    if (storedUid) {
-      const cachedProfile = readProfileCache();
-      if (cachedProfile?.uid === storedUid) {
-        setUser({ uid: cachedProfile.uid, email: cachedProfile.email } as any);
-        setProfile(cachedProfile);
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        setUser({ uid: firebaseUser.uid, email: firebaseUser.email });
+      } else {
+        setUser(null);
+        setProfile(null);
+        setLoading(false);
       }
-    }
-    setLoading(false);
+    });
+    return () => unsubscribeAuth();
   }, []);
 
-  const memoizedProfile = useMemo(() => {
-    if (profile) {
-      persistProfileCache(profile);
-    }
-    return profile;
-  }, [profile?.uid, profile?.displayName, profile?.email, profile?.role, profile?.municipioId]);
+  useEffect(() => {
+    if (!user) return;
+    setLoading(true);
 
-  const loginWithEmailPassword = async (email: string, pass: string, options?: { rememberPassword?: boolean }) => {
+    const unsubscribeProfile = onSnapshot(doc(db, "users", user.uid), async (snap) => {
+      if (snap.exists()) {
+        setProfile(snap.data() as UserProfile);
+      } else if (user.email?.toLowerCase() === ROOT_ADMIN_EMAIL) {
+        const rootProfile: UserProfile = {
+          uid: user.uid,
+          email: user.email,
+          displayName: "ROOT",
+          photoURL: "",
+          isAuthorized: true,
+          role: 'root',
+          municipioId: 'geral',
+          status: 'approved',
+        };
+        await setDoc(doc(db, "users", user.uid), rootProfile);
+        setProfile(rootProfile);
+      } else {
+        setProfile(null);
+      }
+      setLoading(false);
+    }, () => setLoading(false));
+
+    return () => unsubscribeProfile();
+  }, [user?.uid, user?.email]);
+
+  const loginWithEmailPassword = async (email: string, pass: string, options?: { keepConnected?: boolean }) => {
     const normalizedEmail = email.toLowerCase().trim();
-    const inferredRole = inferRoleFromEmail(normalizedEmail);
-    const savedPassword = readDevicePassword(normalizedEmail, inferredRole);
-    const canUseSavedPassword = !!savedPassword && savedPassword === pass;
-
-    if (options?.rememberPassword || canUseSavedPassword) {
-      persistDevicePassword(normalizedEmail, pass, inferredRole);
+    try {
+      await setPersistence(auth, options?.keepConnected === false ? browserSessionPersistence : browserLocalPersistence);
+      await signInWithEmailAndPassword(auth, normalizedEmail, pass);
+      saveLastUsedEmail(normalizedEmail);
+    } catch (e: any) {
+      throw new Error(mapAuthError(e.code));
     }
-
-    const localProfile = getOrCreateLocalProfile(normalizedEmail, {
-      displayName: normalizedEmail === ROOT_ADMIN_EMAIL ? "ROOT" : normalizedEmail.endsWith('.pr.gov.br') ? "GESTOR MUNICIPAL" : "FISCAL SANITÁRIO",
-      role: inferredRole,
-      isAuthorized: true,
-      status: "approved",
-      municipioId: normalizedEmail.endsWith('.pr.gov.br') ? normalizeId(normalizedEmail.split('@')[0]) : "local",
-      municipioNome: normalizedEmail.endsWith('.pr.gov.br') ? normalizedEmail.split('@')[0].toUpperCase() : "",
-    });
-
-    setUser({ uid: localProfile.uid, email: localProfile.email } as any);
-    setProfile(localProfile);
-    persistProfileCache(localProfile);
-    persistActiveSessionUid(localProfile.uid);
   };
 
-  const registerWithEmailPassword = async (data: any) => {
-    const profileData = getOrCreateLocalProfile(data.email, {
-      email: data.email.toLowerCase().trim(),
-      displayName: data.nome.toUpperCase(),
-      photoURL: "",
-      isAuthorized: true, // Aprovado automaticamente em modo local
-      status: "approved",
-      role: data.role === 'admin' ? 'admin' : inferRoleFromEmail(data.email, 'fiscal'),
-      municipioId: normalizeId(data.municipioId),
-      municipioNome: data.metadata?.municipioNome || data.municipioId,
-    });
+  const registerWithEmailPassword = async (data: RegisterInput) => {
+    const normalizedEmail = data.email.toLowerCase().trim();
+    const isRoot = normalizedEmail === ROOT_ADMIN_EMAIL;
 
-    setUser({ uid: profileData.uid, email: profileData.email } as any);
-    setProfile(profileData);
-    persistProfileCache(profileData);
-    persistActiveSessionUid(profileData.uid);
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, data.password);
+
+      const newProfile: UserProfile & { cpf?: string; cargo?: string; nascimento?: string; createdAt: string } = {
+        uid: cred.user.uid,
+        email: normalizedEmail,
+        displayName: data.nome.toUpperCase(),
+        photoURL: "",
+        isAuthorized: isRoot,
+        role: isRoot ? 'root' : data.role,
+        municipioId: data.municipioId,
+        municipioNome: data.metadata?.municipioNome || "",
+        fiscalCode: data.metadata?.fiscalCode || "",
+        cpf: data.metadata?.cpf || "",
+        cargo: data.metadata?.cargo || "",
+        nascimento: data.metadata?.nascimento || "",
+        status: isRoot ? 'approved' : 'pending',
+        createdAt: new Date().toISOString(),
+      };
+
+      await setDoc(doc(db, "users", cred.user.uid), newProfile);
+    } catch (e: any) {
+      throw new Error(mapAuthError(e.code));
+    }
   };
 
-  const updateProfileData = async (data: Partial<UserProfile>) => {
-    if (!profile) return;
-
-    const nextProfile = { ...profile, ...data };
-    setProfile(nextProfile);
-    persistProfileCache(nextProfile);
-
-    const users = readLocalUsers();
-    const emailKey = nextProfile.email.toLowerCase().trim();
-    if (users[emailKey]) {
-      users[emailKey] = nextProfile;
-      saveLocalUsers(users);
+  const resetPassword = async (email: string) => {
+    try {
+      await sendPasswordResetEmail(auth, email.toLowerCase().trim());
+    } catch (e: any) {
+      // Não revela se o e-mail existe ou não (evita enumeração de contas) —
+      // só propaga erros que não são sobre a existência do usuário.
+      if (e.code === 'auth/user-not-found') return;
+      throw new Error(mapAuthError(e.code));
     }
   };
 
   const logout = async () => {
-    setUser(null);
-    setProfile(null);
-    persistProfileCache(null);
-    persistActiveSessionUid(null);
+    await signOut(auth);
   };
 
-  const getSavedPassword = (email: string) => {
-    const normalizedEmail = email.toLowerCase().trim();
-    const role = inferRoleFromEmail(normalizedEmail);
-    return readDevicePassword(normalizedEmail, role);
+  const updateProfileData = async (data: Partial<UserProfile>) => {
+    if (!user) return;
+    await updateDoc(doc(db, "users", user.uid), data);
   };
 
   return (
-    <AuthContext.Provider value={{ 
-        user, profile: memoizedProfile, loading, 
+    <AuthContext.Provider value={{
+        user, profile, loading,
         isAuthorized: !!profile?.isAuthorized || profile?.role === 'root' || profile?.role === 'admin' || profile?.status === 'approved',
-        loginWithEmailPassword, registerWithEmailPassword, 
-        logout, updateProfileData, getSavedPassword
+        configError: !isConfigReady,
+        loginWithEmailPassword, registerWithEmailPassword, resetPassword,
+        logout, updateProfileData,
     }}>
       {children}
     </AuthContext.Provider>

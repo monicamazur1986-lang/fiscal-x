@@ -5,7 +5,8 @@ export type Intimacao = {
   vara: string;
   comarca: string;
   autor: string;
-  reu: string; 
+  reu: string;
+  reuCargo?: string;
   responsavelLegalConselho?: string;
   responsavelLegalIdentidade?: string;
   responsavelTecnico?: string;
@@ -49,6 +50,8 @@ export type Intimacao = {
   signatureTestemunha2?: string;
   fotoDocumento?: string;
   municipioId?: string;
+  documentoOrigemId?: string;
+  autoInfracaoVinculadaId?: string;
 };
 
 export type Folder = {
@@ -81,8 +84,12 @@ export type Inspecao = {
   municipioId?: string;
   status: 'pendente' | 'prazo' | 'concluido' | 'cancelada' | 'arquivado' | 'rascunho';
   createdAt: string;
+  updatedAt?: string;
+  alertaMinutosAntes?: number;
+  alertaEnviadoEm?: string;
   checklistData?: {
     answers: Record<string, 'SIM' | 'NAO' | 'ND'>;
+    observations: Record<string, string>;
     itemPhotos: Record<string, any[]>;
     idData: any;
     roteiroId: string;
@@ -130,4 +137,22 @@ export type UserProfile = {
   role: 'admin' | 'fiscal' | 'root';
   municipioId: string;
   fiscalCode?: string;
+};
+
+export type Chamado = {
+  id: string;
+  tipo: 'erro' | 'duvida' | 'sugestao' | 'outro';
+  assunto: string;
+  descricao: string;
+  pagina?: string;
+  userAgent?: string;
+  status: 'aberto' | 'em_andamento' | 'resolvido';
+  resposta?: string;
+  respondidoPor?: string;
+  createdBy: string;
+  createdByName?: string;
+  createdByEmail?: string;
+  municipioId: string;
+  createdAt: string;
+  updatedAt?: string;
 };

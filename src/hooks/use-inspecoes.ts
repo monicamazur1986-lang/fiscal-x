@@ -21,11 +21,12 @@ import { normalizeId } from '@/lib/utils';
 
 const LOCAL_STORAGE_KEY = 'fiscal_x_inspecoes';
 
-export function useInspecoes() {
+export function useInspecoes(options?: { municipioIdOverride?: string }) {
   const { user, profile, configError } = useAuth();
   const [inspecoes, setInspecoes] = useState<Inspecao[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
+  const [needsMunicipioSelection, setNeedsMunicipioSelection] = useState(false);
 
   useEffect(() => {
     const updateOnlineStatus = () => setIsOnline(navigator.onLine);
@@ -43,6 +44,15 @@ export function useInspecoes() {
         return;
     }
 
+    // Root navega entre municípios clientes; sem seleção, não há o que carregar.
+    if (profile.role === 'root' && !options?.municipioIdOverride) {
+      setInspecoes([]);
+      setNeedsMunicipioSelection(true);
+      setLoading(false);
+      return;
+    }
+    setNeedsMunicipioSelection(false);
+
     // Carregamento rápido do Cache
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (saved) {
@@ -58,9 +68,11 @@ export function useInspecoes() {
     }
 
     if (db && !configError) {
-      const mid = normalizeId(profile.municipioId);
+      const mid = profile.role === 'root'
+        ? normalizeId(options!.municipioIdOverride!)
+        : normalizeId(profile.municipioId);
       const q = query(
-        collection(db, "inspecoes"), 
+        collection(db, "inspecoes"),
         where("municipioId", "==", mid),
         orderBy("data", "asc")
       );
@@ -74,7 +86,7 @@ export function useInspecoes() {
             data: data.data instanceof Timestamp ? data.data.toDate() : new Date(data.data),
           } as Inspecao;
         });
-        
+
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
         setInspecoes(items);
         setLoading(false);
@@ -85,7 +97,7 @@ export function useInspecoes() {
     } else {
       setLoading(false);
     }
-  }, [db, user, profile, configError]);
+  }, [db, user, profile, configError, options?.municipioIdOverride]);
 
   const saveInspecao = useCallback(async (data: Partial<Inspecao>, id?: string) => {
     if (!user || !profile?.municipioId) throw new Error("Não autenticado.");
@@ -101,7 +113,7 @@ export function useInspecoes() {
       data: inspectionDate.toISOString(),
       updatedAt: new Date().toISOString(),
       fiscalId: data.fiscalId || user.uid,
-      fiscalNome: data.fiscalNome || user.displayName || 'Fiscal',
+      fiscalNome: data.fiscalNome || profile?.displayName || 'Fiscal',
     };
 
     // 1. ATUALIZA LOCAL IMEDIATAMENTE
@@ -145,5 +157,5 @@ export function useInspecoes() {
     }
   }, [db, configError]);
 
-  return { inspecoes, saveInspecao, deleteInspecao, loading, isOnline };
+  return { inspecoes, saveInspecao, deleteInspecao, loading, isOnline, needsMunicipioSelection };
 }

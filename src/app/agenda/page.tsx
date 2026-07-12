@@ -22,24 +22,16 @@ import {
   LayoutGrid,
   Calendar as CalendarIcon,
   Filter,
-  Check
+  Check,
+  BellRing
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { 
-  format, 
-  isSameDay, 
-  addDays, 
-  eachDayOfInterval, 
-  startOfWeek, 
-  addMonths, 
-  subMonths, 
-  isAfter, 
-  startOfMonth, 
-  endOfMonth, 
-  endOfWeek, 
-  isSameMonth 
-} from "date-fns"
+import { format, isSameDay, addHours } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import type { SlotInfo } from "react-big-calendar"
+import type { EventInteractionArgs } from "react-big-calendar/lib/addons/dragAndDrop"
+import { AgendaCalendar, type AgendaEvent } from "@/components/agenda-calendar"
+import { ativarAlertasNesteDispositivo } from "@/lib/firebase-messaging"
 import { 
   Dialog, 
   DialogContent, 
@@ -85,12 +77,33 @@ export default function AgendaPage() {
   const [dataAgendamento, setDataAgendamento] = useState("")
   const [selectedFiscalId, setSelectedFiscalId] = useState("")
   const [status, setStatus] = useState<Inspecao['status']>("pendente")
+  const [alertaMinutosAntes, setAlertaMinutosAntes] = useState(0)
+  const [isAtivandoAlertas, setIsAtivandoAlertas] = useState(false)
+  const [alertasAtivos, setAlertasAtivos] = useState(true)
 
   useEffect(() => {
     setMounted(true)
     setDataAgendamento(format(new Date(), "yyyy-MM-dd"))
     setSelectedFiscalId(profile?.uid || "")
+    setAlertasAtivos(window.localStorage.getItem('vigilant_alertas_ativados') === '1')
   }, [profile])
+
+  const handleAtivarAlertas = useCallback(async () => {
+    if (!profile?.uid) return
+    setIsAtivandoAlertas(true)
+    try {
+      const resultado = await ativarAlertasNesteDispositivo(profile.uid)
+      if (resultado.ok) {
+        window.localStorage.setItem('vigilant_alertas_ativados', '1')
+        setAlertasAtivos(true)
+        toast({ title: "Alertas Ativados", description: "Você vai receber notificação mesmo com o app fechado." })
+      } else {
+        toast({ variant: "destructive", title: "Não foi possível ativar", description: resultado.error })
+      }
+    } finally {
+      setIsAtivandoAlertas(false)
+    }
+  }, [profile, toast])
 
   useEffect(() => {
     if (isDialogOpen && mounted) {
@@ -101,13 +114,18 @@ export default function AgendaPage() {
         setDataAgendamento(format(editingInspecao.data, "yyyy-MM-dd"))
         setSelectedFiscalId(editingInspecao.fiscalId)
         setStatus(editingInspecao.status)
+        setAlertaMinutosAntes(editingInspecao.alertaMinutosAntes ?? 0)
       } else {
         setTitulo("")
         setDescricao("")
-        setHora("08:00")
+        // Se a data selecionada veio de um clique com horário real (visão Semana/Dia
+        // do calendário), usa esse horário; senão (clique num dia da visão Mês), 08:00.
+        const temHorarioReal = selectedDate.getHours() !== 0 || selectedDate.getMinutes() !== 0;
+        setHora(temHorarioReal ? format(selectedDate, "HH:mm") : "08:00")
         setDataAgendamento(format(selectedDate, "yyyy-MM-dd"))
         setSelectedFiscalId(profile?.uid || "")
         setStatus("pendente")
+        setAlertaMinutosAntes(0)
       }
     }
   }, [isDialogOpen, editingInspecao, selectedDate, profile, mounted])
@@ -119,11 +137,34 @@ export default function AgendaPage() {
     });
   }, [inspecoes, activeCategory]);
 
-  const monthGridDays = useMemo(() => {
-    const start = startOfWeek(startOfMonth(viewMonth), { weekStartsOn: 0 });
-    const end = endOfWeek(endOfMonth(viewMonth), { weekStartsOn: 0 });
-    return eachDayOfInterval({ start, end });
-  }, [viewMonth]);
+  const calendarEvents: AgendaEvent[] = useMemo(() => filteredInspecoes.map(i => ({
+    id: i.id,
+    title: i.titulo,
+    start: i.data,
+    end: addHours(i.data, 1),
+    resource: i,
+  })), [filteredInspecoes]);
+
+  const handleSelectSlot = useCallback((slotInfo: SlotInfo) => {
+    setSelectedDate(slotInfo.start);
+    setEditingInspecao(null);
+    setIsDialogOpen(true);
+  }, []);
+
+  const handleSelectEvent = useCallback((event: AgendaEvent) => {
+    setSelectedDate(event.start);
+    setEditingInspecao(event.resource);
+    setIsDialogOpen(true);
+  }, []);
+
+  const handleEventDrop = useCallback(async ({ event, start }: EventInteractionArgs<AgendaEvent>) => {
+    try {
+      await saveInspecao({ ...event.resource, data: new Date(start), alertaEnviadoEm: '' }, event.resource.id);
+      toast({ title: "Reagendado" });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro ao reagendar" });
+    }
+  }, [saveInspecao, toast]);
 
   const dailyInspecoes = useMemo(() => {
     return filteredInspecoes
@@ -146,7 +187,11 @@ export default function AgendaPage() {
         data: dataCompleta,
         fiscalId: (fiscal as any).id,
         fiscalNome: (fiscal as any).nome,
-        status: status
+        status: status,
+        alertaMinutosAntes,
+        // Qualquer edição rearma o alarme (relevante ao reagendar um compromisso
+        // cujo alerta já tinha sido enviado).
+        alertaEnviadoEm: '',
       }, editingInspecao?.id)
       
       toast({ title: editingInspecao ? "Registro Atualizado" : "Agendamento Salvo" })
@@ -212,11 +257,18 @@ export default function AgendaPage() {
             <h1 className="text-xl lg:text-2xl font-black italic tracking-tighter text-slate-900 uppercase">Gestão de Agenda</h1>
           </div>
 
-          <div className="flex items-center gap-4 bg-slate-50 p-1 rounded-2xl border border-slate-200 no-print">
-            <button onClick={() => setViewMonth(subMonths(viewMonth, 1))} className="h-9 w-9 rounded-xl hover:bg-white flex items-center justify-center text-slate-400 transition-all"><ChevronLeft className="h-4 w-4" /></button>
-            <span className="text-[10px] font-black uppercase text-slate-900 px-4 min-w-[120px] text-center tracking-widest">{format(viewMonth, "MMMM yyyy", { locale: ptBR })}</span>
-            <button onClick={() => setViewMonth(addMonths(viewMonth, 1))} className="h-9 w-9 rounded-xl hover:bg-white flex items-center justify-center text-slate-400 transition-all"><ChevronRight className="h-4 w-4" /></button>
-          </div>
+          <div className="flex items-center gap-3 w-full lg:w-auto">
+            {!alertasAtivos && (
+              <Button
+                type="button"
+                onClick={handleAtivarAlertas}
+                disabled={isAtivandoAlertas}
+                variant="outline"
+                className="h-11 px-5 text-[10px] font-black uppercase tracking-widest rounded-xl border-primary/30 text-primary gap-2"
+              >
+                {isAtivandoAlertas ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />} Ativar Alertas
+              </Button>
+            )}
 
           <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if(!open) setEditingInspecao(null); }}>
             <DialogTrigger asChild>
@@ -259,6 +311,21 @@ export default function AgendaPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Alertar</Label>
+                  <Select value={String(alertaMinutosAntes)} onValueChange={(v) => setAlertaMinutosAntes(Number(v))}>
+                    <SelectTrigger className="h-12 rounded-xl text-xs font-bold bg-slate-50 border-none uppercase">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">Na hora marcada</SelectItem>
+                      <SelectItem value="10">10 minutos antes</SelectItem>
+                      <SelectItem value="15">15 minutos antes</SelectItem>
+                      <SelectItem value="30">30 minutos antes</SelectItem>
+                      <SelectItem value="60">1 hora antes</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} className="rounded-xl min-h-[100px] text-xs font-medium bg-slate-50 border-none resize-none" placeholder="Observações de campo..." />
                 <div className="flex gap-3 pt-4">
                    {editingInspecao && <Button type="button" variant="ghost" onClick={handleDelete} className="h-12 w-12 rounded-xl text-rose-500 bg-rose-50"><Trash2 className="h-5 w-5" /></Button>}
@@ -267,6 +334,7 @@ export default function AgendaPage() {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         <div className="bg-slate-50/50 px-4 lg:px-10 py-1.5 border-t border-slate-100 flex items-center gap-2 overflow-x-auto no-scrollbar">
@@ -292,50 +360,15 @@ export default function AgendaPage() {
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
         <main className="lg:col-span-8 bg-white flex flex-col border-r border-slate-100 overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar">
-            <div className="grid grid-cols-7 gap-px bg-slate-200 rounded-[2rem] overflow-hidden border border-slate-200 shadow-md">
-              {['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'].map(d => (
-                <div key={d} className="bg-slate-900 py-3 text-center">
-                  <span className="text-[9px] font-black text-slate-400 tracking-[0.2em]">{d}</span>
-                </div>
-              ))}
-              
-              {monthGridDays.map((day, i) => {
-                const isCurrentMonth = isSameMonth(day, viewMonth);
-                const isSelected = isSameDay(day, selectedDate);
-                const isToday = isSameDay(day, new Date());
-                const dayInspections = filteredInspecoes.filter(insp => isSameDay(insp.data, day));
-
-                return (
-                  <button
-                    key={i}
-                    onClick={() => { setSelectedDate(day); if (!isCurrentMonth) setViewMonth(day); }}
-                    className={cn(
-                      "min-h-[70px] lg:min-h-[85px] bg-white p-2.5 flex flex-col items-center gap-1.5 relative transition-all hover:bg-slate-50",
-                      !isCurrentMonth && "bg-slate-50/50 opacity-20",
-                      isSelected && "ring-4 ring-primary ring-inset z-10",
-                      isToday && !isSelected && "bg-primary/[0.03]"
-                    )}
-                  >
-                    <span className={cn(
-                      "text-sm font-black italic",
-                      isToday ? "text-primary underline underline-offset-4 decoration-2" : "text-slate-900"
-                    )}>
-                      {format(day, "d")}
-                    </span>
-
-                    <div className="flex flex-wrap justify-center gap-1 w-full max-w-[40px]">
-                       {dayInspections.map(insp => {
-                         const cfg = getStatusConfig(insp.status);
-                         return (
-                           <div key={insp.id} className={cn("h-1.5 w-1.5 rounded-full shadow-sm", cfg.dot)} title={insp.titulo} />
-                         )
-                       })}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
+          <div className="flex-1 min-h-0 p-4 lg:p-6">
+            <AgendaCalendar
+              events={calendarEvents}
+              date={viewMonth}
+              onNavigateDate={setViewMonth}
+              onSelectSlot={handleSelectSlot}
+              onSelectEvent={handleSelectEvent}
+              onEventDrop={handleEventDrop}
+            />
           </div>
         </main>
 

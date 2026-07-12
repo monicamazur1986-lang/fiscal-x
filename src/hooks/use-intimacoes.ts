@@ -3,34 +3,33 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { Intimacao } from '@/lib/types';
-import { z } from 'zod';
-import { intimacaoSchema } from '@/lib/schema';
-import { useFirestore } from '@/firebase';
-import { 
-  collection, 
-  onSnapshot, 
-  doc, 
-  setDoc, 
-  addDoc, 
+import { z } from 'zod'; //
+import { intimacaoSchema } from '@/lib/schema'; //
+import { db } from '@/lib/firebase'; // Importe a instância 'db' diretamente
+import {
+  collection,
+  onSnapshot,
+  doc,
+  setDoc,
+  addDoc,
   deleteDoc,
   Timestamp,
   query,
   orderBy,
   where,
-  getDocs,
-  limit
+  runTransaction
 } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
 
 const LOCAL_STORAGE_KEY = 'fiscal_x_intimacoes_v4';
 
-export function useIntimacoes() {
-  const db = useFirestore();
-  const { profile, user, configError } = useAuth();
-  const [intimacoes, setIntimacoes] = useState<Intimacao[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isOnline, setIsOnline] = useState(true);
+export function useIntimacoes(options?: { municipioIdOverride?: string }) {
+  const { profile, user, configError } = useAuth(); //
+  const [intimacoes, setIntimacoes] = useState<Intimacao[]>([]); //
+  const [loading, setLoading] = useState(true); //
+  const [isOnline, setIsOnline] = useState(true); //
+  const [needsMunicipioSelection, setNeedsMunicipioSelection] = useState(false);
 
   // Monitorar estado da conexão
   useEffect(() => {
@@ -49,6 +48,15 @@ export function useIntimacoes() {
       return;
     }
 
+    // Root navega entre municípios clientes; sem seleção, não há o que carregar.
+    if (profile.role === 'root' && !options?.municipioIdOverride) {
+      setIntimacoes([]);
+      setNeedsMunicipioSelection(true);
+      setLoading(false);
+      return;
+    }
+    setNeedsMunicipioSelection(false);
+
     // Carregamento inicial do Cache Local (Rápido)
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (saved) {
@@ -65,22 +73,26 @@ export function useIntimacoes() {
     }
 
     if (db && !configError) {
+      const targetMunicipioId = profile.role === 'root'
+        ? normalizeId(options!.municipioIdOverride!)
+        : profile.municipioId;
+
       let q;
       if (profile.role === 'admin' || profile.role === 'root') {
         q = query(
-          collection(db, "intimacoes"), 
-          where("municipioId", "==", profile.municipioId),
+          collection(db, "intimacoes"),
+          where("municipioId", "==", targetMunicipioId),
           orderBy("createdAt", "desc")
         );
       } else {
         q = query(
-          collection(db, "intimacoes"), 
-          where("municipioId", "==", profile.municipioId),
+          collection(db, "intimacoes"),
+          where("municipioId", "==", targetMunicipioId),
           where("createdBy", "==", user.uid),
           orderBy("createdAt", "desc")
         );
       }
-      
+
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const items = snapshot.docs.map(doc => {
           const data = doc.data();
@@ -91,7 +103,7 @@ export function useIntimacoes() {
             dataRecebimento: data.dataRecebimento instanceof Timestamp ? data.dataRecebimento.toDate() : data.dataRecebimento ? new Date(data.dataRecebimento) : undefined,
           } as Intimacao;
         });
-        
+
         // Sincroniza o Cache Local com a Nuvem
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
         setIntimacoes(items);
@@ -104,58 +116,43 @@ export function useIntimacoes() {
     } else {
       setLoading(false);
     }
-  }, [profile?.municipioId, user?.uid, db, configError, profile?.role]);
+  }, [profile?.municipioId, user?.uid, db, configError, profile?.role, options?.municipioIdOverride]);
 
-  const generateNewNumeroProcesso = useCallback(async (fiscalCode: string = "000") => {
-    const now = new Date();
-    const month = (now.getMonth() + 1).toString().padStart(2, '0');
-    const year = now.getFullYear();
-    const fCode = fiscalCode || profile?.fiscalCode || "000";
+  // Numeração oficial (0001/2026): um único contador por município e por ano,
+  // incrementado atomicamente via transação do Firestore para nunca duplicar
+  // números quando dois fiscais criam autuações ao mesmo tempo.
+  const generateNewNumeroProcesso = useCallback(async () => {
+    const year = new Date().getFullYear();
+    const mid = profile?.municipioId ? normalizeId(profile.municipioId) : null;
 
-    // Se estiver offline ou sem DB, usa lógica sequencial baseada no local
-    const localItems = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '[]');
-    const lastForFiscal = localItems
-      .filter((i: any) => i.createdBy === user?.uid)
-      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-    
-    let nextSeq = 1;
-    if (lastForFiscal && lastForFiscal.numeroProcesso) {
-      const parts = lastForFiscal.numeroProcesso.split('.');
-      if (parts.length >= 2) nextSeq = (parseInt(parts[1], 10) || 0) + 1;
-    }
-
-    if (!db || !navigator.onLine) {
-      return `${fCode}.${nextSeq}.${month}.${year}`;
-    }
-
-    try {
-      const q = query(
-        collection(db, "intimacoes"),
-        where("municipioId", "==", profile?.municipioId),
-        where("createdBy", "==", user?.uid),
-        orderBy("createdAt", "desc"),
-        limit(1)
-      );
-
-      const snap = await getDocs(q);
-      let lastSeq = 0;
-
-      if (!snap.empty) {
-        const lastNum = snap.docs[0].data().numeroProcesso || "";
-        const parts = lastNum.split('.');
-        if (parts.length >= 2) {
-            lastSeq = parseInt(parts[1], 10) || 0;
-        }
+    if (db && mid && navigator.onLine) {
+      try {
+        const counterRef = doc(db, "municipios", mid, "counters", String(year));
+        const nextSeq = await runTransaction(db, async (tx) => {
+          const snap = await tx.get(counterRef);
+          const current = snap.exists() ? (snap.data().seq || 0) : 0;
+          const next = current + 1;
+          tx.set(counterRef, { seq: next }, { merge: true });
+          return next;
+        });
+        return `${String(nextSeq).padStart(4, '0')}/${year}`;
+      } catch (e) {
+        console.warn("Falha ao gerar número atômico, usando estimativa local.", e);
       }
-
-      nextSeq = lastSeq + 1;
-      return `${fCode}.${nextSeq}.${month}.${year}`;
-    } catch (e) {
-      return `${fCode}.${nextSeq}.${month}.${year}`;
     }
-  }, [db, profile, user]);
 
-  const saveIntimacao = useCallback(async (data: z.infer<typeof intimacaoSchema>, id?: string) => {
+    // Sem conexão (ou falha acima): estimativa local a partir do cache,
+    // só para não travar o preenchimento — o número real é confirmado ao salvar online.
+    const localItems = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '[]');
+    const maxSeq = localItems.reduce((max: number, i: any) => {
+      const [seqPart, yearPart] = (i.numeroProcesso || '').split('/');
+      if (parseInt(yearPart, 10) !== year) return max;
+      return Math.max(max, parseInt(seqPart, 10) || 0);
+    }, 0);
+    return `${String(maxSeq + 1).padStart(4, '0')}/${year}`;
+  }, [db, profile?.municipioId]);
+
+  const saveIntimacao = useCallback(async (data: z.input<typeof intimacaoSchema>, id?: string) => {
     const parsedData = intimacaoSchema.parse(data);
     const now = new Date().toISOString();
     const municipioId = profile?.municipioId || 'geral';
@@ -195,26 +192,37 @@ export function useIntimacoes() {
     });
 
     // 2. ENVIA PARA FIREBASE COMO FONTE PRINCIPAL
+    // Diferente das outras operações (bulkDelete, etc.), aqui o sucesso/falha da
+    // gravação na nuvem é reportado ao chamador (cloudSaved/cloudError) — sem
+    // isso, o app mostrava "Rascunho Salvo" mesmo quando só existia no aparelho
+    // local, quebrando a garantia de recuperar o documento em outro login.
+    let cloudSaved = false;
+    let cloudError: string | undefined;
+
     if (db && !configError) {
-      const fbData = { 
-        ...docData, 
-        dataIntimacao: Timestamp.fromDate(parsedData.dataIntimacao), 
+      const fbData = {
+        ...docData,
+        dataIntimacao: Timestamp.fromDate(parsedData.dataIntimacao),
         dataRecebimento: parsedData.dataRecebimento ? Timestamp.fromDate(parsedData.dataRecebimento) : null,
-        updatedAt: Timestamp.now() 
+        updatedAt: Timestamp.now()
       };
-      
+
       try {
         if (id) {
           await setDoc(doc(db, "intimacoes", id), fbData, { merge: true });
         } else {
           await setDoc(doc(db, "intimacoes", targetId), { ...fbData, createdAt: now });
         }
-      } catch (e) {
+        cloudSaved = true;
+      } catch (e: any) {
         console.warn("Falha ao persistir intimacão no Firebase:", e);
+        cloudError = e?.message || "Falha ao salvar na nuvem";
       }
+    } else {
+      cloudError = "Sem conexão com a nuvem";
     }
 
-    return { ...docData, id: targetId } as any;
+    return { ...docData, id: targetId, cloudSaved, cloudError } as any;
   }, [db, configError, profile]);
 
   const bulkDelete = useCallback(async (ids: string[], toTrash: boolean) => {
@@ -284,6 +292,7 @@ export function useIntimacoes() {
     bulkMoveToFolder,
     getIntimacaoById: (id: string) => intimacoes.find(i => String(i.id) === String(id)) || null,
     loading,
-    isOnline
+    isOnline,
+    needsMunicipioSelection
   };
 }

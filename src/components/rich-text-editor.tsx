@@ -169,7 +169,7 @@ export function RichTextEditor({
         onBlur={handleBlur}
         className={cn(
           "data-field-input outline-none overflow-y-visible whitespace-pre-wrap break-words text-black font-serif",
-          !value && !disabled && "before:content-[attr(placeholder)] before:text-zinc-300 before:pointer-events-none"
+          !value && !disabled && "before:content-[attr(data-placeholder)] before:text-zinc-300 before:pointer-events-none"
         )}
         style={{ 
           minHeight, 
@@ -184,7 +184,7 @@ export function RichTextEditor({
           textTransform: 'none',
           padding: '0'
         }}
-        placeholder={disabled ? "" : placeholder}
+        data-placeholder={disabled ? "" : placeholder}
       />
     </div>
   );

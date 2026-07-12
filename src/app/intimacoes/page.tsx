@@ -62,10 +62,45 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { format, addDays, isWeekend, startOfDay, differenceInDays } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandList,
+} from "@/components/ui/command"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { ChevronsUpDown, Building2 } from "lucide-react"
+import municipiosPR from "@/lib/municipios-pr.json"
+import { normalizeId } from "@/lib/utils"
+import { gerarPdfBlobDeIntimacao } from "@/lib/generate-intimacao-pdf"
+import { auth } from "@/lib/firebase"
+import Papa from "papaparse"
+
+interface RelatorioMunicipal {
+  ano: number;
+  municipioId: string;
+  totalNoAno: number;
+  porStatus: Record<string, number>;
+  porTipo: Record<string, number>;
+  porFiscal: { nome: string; total: number }[];
+  numeracao: {
+    duplicados: string[];
+    gapsInternos: number[];
+    valorContador: number;
+    maiorSequencialUsado: number;
+    acimaDoContador: boolean;
+  };
+}
 
 /**
  * Função para calcular a data final pulando finais de semana (Dias Úteis)
@@ -85,9 +120,23 @@ function addBusinessDays(startDate: Date, days: number): Date {
 export default function DocumentosPage() {
   const { profile } = useAuth();
   const { config } = useAppConfig();
-  const { intimacoes, bulkMoveToFolder, bulkDelete, permanentDelete, saveIntimacao, loading: loadingInt, isOnline } = useIntimacoes();
+  const isRoot = profile?.role === 'root';
+
+  const [selectedMunicipioForRoot, setSelectedMunicipioForRoot] = useState("");
+  const [municipioPickerOpen, setMunicipioPickerOpen] = useState(false);
+  const [municipioSearchTerm, setMunicipioSearchTerm] = useState("");
+
+  const { intimacoes, bulkMoveToFolder, bulkDelete, permanentDelete, saveIntimacao, loading: loadingInt, isOnline, needsMunicipioSelection } = useIntimacoes(
+    isRoot ? { municipioIdOverride: selectedMunicipioForRoot || undefined } : undefined
+  );
   const { folders, createFolder, loading: loadingFold } = useFolders();
-  
+
+  const filteredMunicipiosPicker = useMemo(() => {
+    const term = normalizeId(municipioSearchTerm);
+    if (!term) return municipiosPR;
+    return municipiosPR.filter(m => normalizeId(m).includes(term));
+  }, [municipioSearchTerm]);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFolderId, setActiveFolderId] = useState<string | "all" | "trash">("all");
   const [filterByFiscal, setFilterByFiscal] = useState<string | null>(null);
@@ -96,7 +145,14 @@ export default function DocumentosPage() {
   const [isMoveDialogOpen, setIsMoveDialogOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [isTriggeringAutomation, setIsTriggeringAutomation] = useState(false);
-  
+  const [isZipping, setIsZipping] = useState(false);
+  const [zipProgress, setZipProgress] = useState({ current: 0, total: 0 });
+  const [dismissedZipBanner, setDismissedZipBanner] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isLoadingReport, setIsLoadingReport] = useState(false);
+  const [reportYear, setReportYear] = useState(new Date().getFullYear());
+  const [reportData, setReportData] = useState<RelatorioMunicipal | null>(null);
+
   // ESTADOS PARA AJUSTE DE PRAZO
   const [isAdjustmentDialogOpen, setIsAdjustmentDialogOpen] = useState(false);
   const [adjustingDocId, setAdjustingDocId] = useState<string | null>(null);
@@ -120,7 +176,7 @@ export default function DocumentosPage() {
   const calculateDeadline = (doc: any) => {
     if (doc.status !== 'finalizado') return null;
     const baseDate = doc.dataIntimacao ? new Date(doc.dataIntimacao) : new Date();
-    const daysAllowed = doc.prazoDays || 15;
+    const daysAllowed = doc.prazoDias || 15;
     
     const deadlineDate = addBusinessDays(baseDate, daysAllowed);
     const today = startOfDay(new Date());
@@ -169,6 +225,13 @@ export default function DocumentosPage() {
       return true;
     });
   }, [intimacoes, searchQuery, activeFolderId, filterByFiscal]);
+
+  // Documentos salvos deste fiscal (não excluídos), para o aviso de limite de 100.
+  const minhasIntimacoes = useMemo(() => {
+    return intimacoes.filter(i => i.createdBy === profile?.uid && !i.deleted);
+  }, [intimacoes, profile?.uid]);
+  const LIMITE_DOCUMENTOS = 100;
+  const AVISO_A_PARTIR_DE = 90;
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
@@ -242,7 +305,7 @@ export default function DocumentosPage() {
     const doc = intimacoes.find(i => i.id === id);
     if (!doc) return;
     setAdjustingDocId(id);
-    setCustomDays(String(doc.prazoDays || 15));
+    setCustomDays(String(doc.prazoDias || 15));
     setAdjustmentJustification(doc.prazoJustificativa || "");
     setIsAdjustmentDialogOpen(true);
   };
@@ -253,10 +316,10 @@ export default function DocumentosPage() {
     if (!doc) return;
 
     try {
-      await saveIntimacao({ 
-        ...doc, 
-        prazoDays: parseInt(customDays, 10), 
-        prazoJustificativa: adjustmentReason.toUpperCase() 
+      await saveIntimacao({
+        ...doc,
+        prazoDias: parseInt(customDays, 10),
+        prazoJustificativa: adjustmentReason.toUpperCase()
       }, adjustingDocId);
       
       toast({ title: "Prazo Atualizado", description: "O cálculo de vencimento foi recalculado considerando apenas dias úteis." });
@@ -295,6 +358,87 @@ export default function DocumentosPage() {
     }
   }
 
+  // Gera o PDF de cada intimação selecionada (sequencialmente, para não travar
+  // o navegador) e empacota tudo num único .zip.
+  const handleBulkDownloadZip = async () => {
+    if (selectedIds.length === 0) return;
+    const docs = intimacoes.filter(i => selectedIds.includes(i.id));
+
+    setIsZipping(true);
+    setZipProgress({ current: 0, total: docs.length });
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+
+      for (let i = 0; i < docs.length; i++) {
+        const doc = docs[i];
+        try {
+          const blob = await gerarPdfBlobDeIntimacao(doc, config);
+          const filename = `${doc.tipoTermo || 'DOCUMENTO'} - ${doc.numeroProcesso || doc.id}.pdf`.replace(/[\\/:*?"<>|]/g, '_');
+          zip.file(filename, blob);
+        } catch (e) {
+          console.error('Erro ao gerar PDF de', doc.id, e);
+        }
+        setZipProgress({ current: i + 1, total: docs.length });
+      }
+
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `documentos-${format(new Date(), 'yyyy-MM-dd')}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "ZIP Gerado", description: `${docs.length} documento(s) baixado(s) em um único arquivo.` });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro ao gerar ZIP" });
+    } finally {
+      setIsZipping(false);
+    }
+  };
+
+  const fetchRelatorio = async (ano: number) => {
+    setIsLoadingReport(true);
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error("Não autenticado");
+      const res = await fetch(`/api/relatorio-municipal?ano=${ano}`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      if (!res.ok) throw new Error("Falha ao carregar relatório");
+      const data: RelatorioMunicipal = await res.json();
+      setReportData(data);
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro ao carregar relatório" });
+      setReportData(null);
+    } finally {
+      setIsLoadingReport(false);
+    }
+  };
+
+  const handleOpenReport = () => {
+    setIsReportOpen(true);
+    fetchRelatorio(reportYear);
+  };
+
+  const handleChangeReportYear = (ano: number) => {
+    setReportYear(ano);
+    fetchRelatorio(ano);
+  };
+
+  const handleExportReportCsv = () => {
+    if (!reportData) return;
+    const linhas = reportData.porFiscal.map(f => ({ FISCAL: f.nome, TOTAL_AUTUACOES: f.total }));
+    const csv = Papa.unparse(linhas);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio-municipal-${reportData.ano}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (loadingInt || loadingFold) {
     return (
       <div className="flex h-[80vh] w-full flex-col items-center justify-center gap-4">
@@ -311,7 +455,45 @@ export default function DocumentosPage() {
         <aside className="lg:col-span-3 space-y-6">
           <div className="space-y-1 px-4">
             <h2 className="text-2xl font-black uppercase tracking-tighter text-zinc-900 italic">Arquivos</h2>
-            <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">{profile?.municipioNome || "SISTEMA"}</p>
+            {isRoot ? (
+              <Popover open={municipioPickerOpen} onOpenChange={setMunicipioPickerOpen}>
+                <PopoverTrigger asChild>
+                  <button className="flex items-center gap-1.5 text-[8px] font-black text-primary uppercase tracking-widest hover:opacity-70 transition-opacity">
+                    <Building2 className="h-3 w-3" />
+                    {selectedMunicipioForRoot ? selectedMunicipioForRoot.toUpperCase() : "SELECIONAR MUNICÍPIO"}
+                    <ChevronsUpDown className="h-3 w-3 opacity-50" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[280px] p-0 bg-white border-slate-200 rounded-2xl shadow-2xl">
+                  <Command className="bg-transparent" shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Pesquisar município..."
+                      value={municipioSearchTerm}
+                      onValueChange={setMunicipioSearchTerm}
+                      className="h-11 border-none focus:ring-0"
+                    />
+                    <CommandList className="max-h-[300px] overflow-y-auto">
+                      {filteredMunicipiosPicker.length === 0 && (
+                        <CommandEmpty className="p-4 text-center text-[10px] text-slate-400 uppercase font-bold">Não encontrado.</CommandEmpty>
+                      )}
+                      <CommandGroup>
+                        {filteredMunicipiosPicker.map((m) => (
+                          <div
+                            key={m}
+                            onClick={() => { setSelectedMunicipioForRoot(m); setMunicipioPickerOpen(false); setMunicipioSearchTerm(""); }}
+                            className="hover:bg-blue-50 cursor-pointer py-3 px-4 transition-colors font-bold uppercase text-[11px] border-b border-slate-50 last:border-0"
+                          >
+                            {m}
+                          </div>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            ) : (
+              <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">{profile?.municipioNome || "SISTEMA"}</p>
+            )}
           </div>
 
           <div className="flex flex-col gap-1">
@@ -395,7 +577,14 @@ export default function DocumentosPage() {
         </aside>
 
         <main className="lg:col-span-9 space-y-6">
-          
+          {isRoot && needsMunicipioSelection ? (
+            <div className="py-32 flex flex-col items-center justify-center gap-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[3rem] text-center">
+              <Building2 className="h-12 w-12 text-slate-300" />
+              <p className="text-sm font-black uppercase tracking-widest text-slate-400">Selecione um município para visualizar os documentos</p>
+              <p className="text-[10px] font-bold text-slate-300 uppercase max-w-sm">Use o seletor no topo do menu lateral para escolher qual cidade cliente você quer inspecionar.</p>
+            </div>
+          ) : (
+          <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-white border border-slate-200 p-6 rounded-[2.5rem] shadow-sm flex items-center gap-5">
               <div className="h-12 w-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary"><BarChart3 className="h-6 w-6" /></div>
@@ -411,6 +600,29 @@ export default function DocumentosPage() {
             </div>
           </div>
 
+          {minhasIntimacoes.length >= AVISO_A_PARTIR_DE && !dismissedZipBanner && (
+            <div className="bg-amber-50 border border-amber-200 p-5 rounded-[2rem] flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="h-11 w-11 shrink-0 bg-amber-100 rounded-2xl flex items-center justify-center text-amber-600"><Archive className="h-5 w-5" /></div>
+                <p className="text-xs font-bold text-amber-800">
+                  Você está com <strong>{minhasIntimacoes.length} de {LIMITE_DOCUMENTOS}</strong> documentos salvos. Baixe tudo em um único ZIP para liberar espaço.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  onClick={() => setSelectedIds(minhasIntimacoes.map(i => i.id))}
+                  className="h-10 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-black uppercase tracking-widest gap-2"
+                >
+                  <CheckSquare className="h-3.5 w-3.5" /> Selecionar Meus Documentos
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setDismissedZipBanner(true)} className="h-10 rounded-xl text-amber-700 text-[9px] font-black uppercase tracking-widest">
+                  Dispensar
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="bg-white p-4 rounded-[2rem] border border-zinc-200 shadow-sm flex flex-col sm:flex-row gap-4 items-center">
             <div className="relative flex-1 w-full">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
@@ -422,6 +634,9 @@ export default function DocumentosPage() {
               />
             </div>
             <div className="flex gap-2">
+                <Button onClick={handleOpenReport} variant="ghost" className="h-12 rounded-2xl gap-2 font-black text-[9px] uppercase tracking-widest text-primary">
+                    <BarChart3 className="h-4 w-4" /> Relatório Municipal
+                </Button>
                 <Button onClick={toggleSelectAll} variant="ghost" className="h-12 rounded-2xl gap-2 font-black text-[9px] uppercase tracking-widest text-zinc-500">
                     {selectedIds.length > 0 && selectedIds.length === filteredIntimacoes.length ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
                     {selectedIds.length > 0 ? `${selectedIds.length} Selecionados` : "Selecionar Tudo"}
@@ -445,9 +660,15 @@ export default function DocumentosPage() {
                         <RotateCcw className="h-4 w-4" /> Restaurar
                     </Button>
                 ) : (
-                    <Button size="sm" variant="ghost" onClick={() => setIsMoveDialogOpen(true)} className="text-[9px] font-black uppercase tracking-widest gap-2 hover:bg-white/10">
-                        <MoveHorizontal className="h-4 w-4" /> Mover Pasta
-                    </Button>
+                    <>
+                        <Button size="sm" variant="ghost" onClick={() => setIsMoveDialogOpen(true)} className="text-[9px] font-black uppercase tracking-widest gap-2 hover:bg-white/10">
+                            <MoveHorizontal className="h-4 w-4" /> Mover Pasta
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={handleBulkDownloadZip} disabled={isZipping} className="text-[9px] font-black uppercase tracking-widest gap-2 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10">
+                            {isZipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+                            {isZipping ? `Gerando ${zipProgress.current}/${zipProgress.total}...` : "Baixar ZIP"}
+                        </Button>
+                    </>
                 )}
                 <Button size="sm" variant="ghost" onClick={handleBulkDelete} className="text-[9px] font-black uppercase tracking-widest gap-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10">
                   <Trash2 className="h-4 w-4" /> {activeFolderId === 'trash' ? 'Excluir Definitivo' : 'Lixeira'}
@@ -560,6 +781,8 @@ export default function DocumentosPage() {
               </div>
             )}
           </div>
+          </>
+          )}
         </main>
       </div>
 
@@ -617,6 +840,109 @@ export default function DocumentosPage() {
             <DialogFooter>
                 <Button onClick={handleApplyAdjustment} className="w-full h-12 rounded-xl font-black uppercase text-[10px]">Recalcular Prazo</Button>
             </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
+        <DialogContent className="rounded-[2.5rem] sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Relatório Municipal</DialogTitle>
+            <DialogDescription className="text-[10px] font-bold uppercase tracking-widest">Autuações aplicadas no ano — visível a todos os usuários do município</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center justify-between gap-3 py-2">
+            <Select value={String(reportYear)} onValueChange={(v) => handleChangeReportYear(Number(v))}>
+              <SelectTrigger className="w-32 h-11 rounded-xl bg-slate-50 border-none font-bold text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button onClick={handleExportReportCsv} disabled={!reportData} variant="outline" size="sm" className="h-11 rounded-xl gap-2 font-black text-[9px] uppercase tracking-widest">
+              <ArrowUpRight className="h-3.5 w-3.5" /> Exportar CSV
+            </Button>
+          </div>
+
+          {isLoadingReport ? (
+            <div className="py-16 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+          ) : reportData ? (
+            <div className="space-y-6 pb-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-slate-50 p-4 rounded-2xl text-center">
+                  <p className="text-2xl font-black italic">{reportData.totalNoAno}</p>
+                  <p className="text-[8px] font-black uppercase text-zinc-400 tracking-widest mt-1">Total no Ano</p>
+                </div>
+                <div className="bg-emerald-50 p-4 rounded-2xl text-center">
+                  <p className="text-2xl font-black italic text-emerald-600">{reportData.porStatus['finalizado'] || 0}</p>
+                  <p className="text-[8px] font-black uppercase text-zinc-400 tracking-widest mt-1">Finalizados</p>
+                </div>
+                <div className="bg-amber-50 p-4 rounded-2xl text-center">
+                  <p className="text-2xl font-black italic text-amber-600">{reportData.porStatus['rascunho'] || 0}</p>
+                  <p className="text-[8px] font-black uppercase text-zinc-400 tracking-widest mt-1">Rascunhos</p>
+                </div>
+                <div className={cn("p-4 rounded-2xl text-center", (reportData.numeracao.duplicados.length > 0 || reportData.numeracao.acimaDoContador) ? "bg-rose-50" : "bg-cyan-50")}>
+                  <p className={cn("text-2xl font-black italic", (reportData.numeracao.duplicados.length > 0 || reportData.numeracao.acimaDoContador) ? "text-rose-600" : "text-cyan-600")}>{reportData.numeracao.duplicados.length}</p>
+                  <p className="text-[8px] font-black uppercase text-zinc-400 tracking-widest mt-1">Números Duplicados</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[9px] font-black uppercase text-zinc-400 tracking-widest mb-2">Por Tipo de Documento</p>
+                <div className="space-y-1.5">
+                  {Object.entries(reportData.porTipo).map(([tipo, total]) => (
+                    <div key={tipo} className="flex items-center justify-between bg-slate-50 px-4 py-2.5 rounded-xl text-xs font-bold">
+                      <span className="uppercase text-zinc-600">{tipo}</span>
+                      <span className="text-primary">{total}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[9px] font-black uppercase text-zinc-400 tracking-widest mb-2">Por Fiscal</p>
+                <div className="space-y-1.5">
+                  {reportData.porFiscal.map(f => (
+                    <div key={f.nome} className="flex items-center justify-between bg-slate-50 px-4 py-2.5 rounded-xl text-xs font-bold">
+                      <span className="uppercase text-zinc-600">{f.nome}</span>
+                      <span className="text-primary">{f.total}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[9px] font-black uppercase text-zinc-400 tracking-widest mb-2">Conferência de Numeração</p>
+                {reportData.numeracao.duplicados.length === 0 && reportData.numeracao.gapsInternos.length === 0 && !reportData.numeracao.acimaDoContador ? (
+                  <div className="flex items-center gap-3 bg-emerald-50 text-emerald-700 p-4 rounded-xl text-xs font-bold">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" /> Nenhuma inconsistência encontrada na numeração deste ano.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {reportData.numeracao.duplicados.length > 0 && (
+                      <div className="bg-rose-50 text-rose-700 p-4 rounded-xl text-xs font-bold">
+                        Números duplicados: {reportData.numeracao.duplicados.join(', ')}
+                      </div>
+                    )}
+                    {reportData.numeracao.gapsInternos.length > 0 && (
+                      <div className="bg-amber-50 text-amber-700 p-4 rounded-xl text-xs font-bold">
+                        Números pulados na sequência: {reportData.numeracao.gapsInternos.join(', ')}
+                      </div>
+                    )}
+                    {reportData.numeracao.acimaDoContador && (
+                      <div className="bg-rose-50 text-rose-700 p-4 rounded-xl text-xs font-bold">
+                        Existe documento com número ({reportData.numeracao.maiorSequencialUsado}) maior que o contador oficial ({reportData.numeracao.valorContador}) — possível edição manual indevida do campo Nº.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="py-16 text-center text-xs font-bold text-zinc-400 uppercase">Nenhum dado encontrado para este ano.</div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

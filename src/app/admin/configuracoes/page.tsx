@@ -6,16 +6,15 @@ import { useAuth } from "@/hooks/use-auth"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useStorage } from "@/firebase"
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
-import { 
-  Building2, 
-  Upload, 
-  Loader2, 
+import {
+  Building2,
+  Upload,
+  Loader2,
   ImageIcon,
   Trash2,
   Save,
   Type,
   ShieldCheck,
-  ArrowLeft,
   RotateCcw,
   Scale,
   Landmark,
@@ -26,7 +25,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
+import { BackButton } from "@/components/back-button"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { DEFAULT_PRAZO_TEXT } from "@/lib/schema"
 
@@ -133,9 +132,7 @@ export default function IdentidadeMunicipalPage() {
             Município: {profile?.municipioNome?.toUpperCase() || "SISTEMA"}
           </p>
         </div>
-        <Button asChild variant="ghost" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 text-zinc-400">
-            <Link href="/dashboard"><ArrowLeft className="h-4 w-4" /> Cancelar e Voltar</Link>
-        </Button>
+        <BackButton href="/dashboard" label="Cancelar e Voltar" className="bg-transparent border-none shadow-none text-zinc-400" />
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

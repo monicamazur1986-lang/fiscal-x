@@ -1,9 +1,10 @@
 "use client"
 
-import { 
-  LogOut, Home, User, MessageSquare, Users, ShieldCheck, 
-  UserCircle, Landmark, Sparkles, Library 
+import {
+  LogOut, Home, Users, ShieldCheck,
+  UserCircle, Sparkles, Settings, LifeBuoy, Inbox
 } from "lucide-react"
+import { SentinelaMascot } from "./brand-logo"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -26,7 +27,7 @@ import { Input } from "@/components/ui/input"
 /**
  * Dialog para alteração de senha
  */
-function PasswordChangeDialog({ isOpen, onOpenChange, userId }) {
+function PasswordChangeDialog({ isOpen, onOpenChange, userId }: { isOpen: boolean; onOpenChange: (open: boolean) => void; userId: string }) {
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -36,20 +37,28 @@ function PasswordChangeDialog({ isOpen, onOpenChange, userId }) {
       alert("As senhas não coincidem")
       return
     }
+    // Opcional: Adicionar um estado de loading aqui para o botão
     try {
       const res = await fetch(`/api/users/${userId}/password`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        // Opcional: Adicionar um token de autenticação no header (e.g., Authorization: Bearer <idToken>)
         body: JSON.stringify({ currentPassword, newPassword }),
       })
-      if (res.ok) {
-        alert("Senha alterada com sucesso!")
-        onOpenChange(false)
-      } else {
-        alert("Erro ao alterar senha")
+
+      // Sempre tentar ler a resposta JSON para obter mensagens de erro detalhadas do backend
+      const data = await res.json();
+
+      if (res.ok) { // Verifica se a resposta HTTP foi bem-sucedida (status 2xx)
+        alert(data.message || "Senha alterada com sucesso!");
+        onOpenChange(false);
+      } else { // Se a resposta HTTP não foi bem-sucedida
+        alert(data.message || "Erro ao alterar senha.");
+        // Opcional: Logar o erro completo do backend para depuração
       }
     } catch (error) {
       alert("Falha na requisição")
+      console.error("Erro na requisição de alteração de senha:", error);
     }
   }
 
@@ -97,7 +106,6 @@ export function AppHeader() {
   const { user, profile, logout } = useAuth()
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [isPasswordOpen, setIsPasswordOpen] = useState(false)
-  const pendingCount = 0
 
   const handleLogout = useCallback(async () => {
     try {
@@ -110,36 +118,42 @@ export function AppHeader() {
 
   // Definição clara dos papéis
   const role = profile?.role
-  const isRoot = role === "root" // exclusivo para Monica
+  const isRoot = role === "root" // exclusivo para o root da plataforma
   const isAdmin = role === "admin"
-  const isFiscal = role === "fiscal"
 
   return (
     <>
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-14 items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Link href="/" className="mr-6 flex items-center space-x-2">
-              <Landmark className="h-6 w-6" />
-              <span className="font-bold">vigilanT</span>
+            <Link href="/dashboard" className="mr-6 flex items-center">
+              <SentinelaMascot className="rounded-lg border-none shadow-none" width={36} height={36} simplified />
             </Link>
             <nav className="flex items-center space-x-6 text-sm font-medium">
-              <Link href="/" className={cn("transition-colors hover:text-foreground/80", pathname === "/" ? "text-foreground" : "text-foreground/60")}>
+              <Link href="/dashboard" className={cn("transition-colors hover:text-foreground/80", pathname === "/dashboard" ? "text-foreground" : "text-foreground/60")} title="Início">
                 <Home className="h-5 w-5" />
               </Link>
-              {isAdmin && (
-                <Link href="/users" className={cn("transition-colors hover:text-foreground/80", pathname === "/users" ? "text-foreground" : "text-foreground/60")}>
+              {(isAdmin || isRoot) && (
+                <Link href="/admin/usuarios" className={cn("transition-colors hover:text-foreground/80", pathname === "/admin/usuarios" ? "text-foreground" : "text-foreground/60")} title="Equipe">
                   <Users className="h-5 w-5" />
                 </Link>
               )}
+              {(isAdmin || isRoot) && (
+                <Link href="/admin/configuracoes" className={cn("transition-colors hover:text-foreground/80", pathname === "/admin/configuracoes" ? "text-foreground" : "text-foreground/60")} title="Configurações">
+                  <Settings className="h-5 w-5" />
+                </Link>
+              )}
               {isRoot && (
-                <Link href="/admin" className={cn("transition-colors hover:text-foreground/80", pathname === "/admin" ? "text-foreground" : "text-foreground/60")}>
+                <Link href="/admin/solicitacoes" className={cn("transition-colors hover:text-foreground/80", pathname === "/admin/solicitacoes" ? "text-foreground" : "text-foreground/60")} title="Solicitações">
                   <ShieldCheck className="h-5 w-5" />
                 </Link>
               )}
-              {isFiscal && (
-                <Link href="/inspections" className={cn("transition-colors hover:text-foreground/80", pathname === "/inspections" ? "text-foreground" : "text-foreground/60")}>
-                  <Library className="h-5 w-5" />
+              <Link href="/suporte" className={cn("transition-colors hover:text-foreground/80", pathname === "/suporte" ? "text-foreground" : "text-foreground/60")} title="Suporte / Reportar Erro">
+                <LifeBuoy className="h-5 w-5" />
+              </Link>
+              {(isAdmin || isRoot) && (
+                <Link href="/admin/suporte" className={cn("transition-colors hover:text-foreground/80", pathname === "/admin/suporte" ? "text-foreground" : "text-foreground/60")} title="Gestão de Suporte">
+                  <Inbox className="h-5 w-5" />
                 </Link>
               )}
             </nav>

@@ -6,11 +6,13 @@
 
 import { ai, z, isAIReady } from '@/ai/genkit';
 import { retry } from '@genkit-ai/middleware';
+import { checkAndConsumeAiQuota, MONTHLY_AI_LIMIT } from '@/ai/usage-limit';
 
 const ExtractDataFromIntimacaoInputSchema = z.object({
   intimacaoFormDataUri: z.string().describe(
     "Uma foto de um documento de fiscalização, como uma data URI (Base64)."
   ),
+  uid: z.string().optional().default(''),
 });
 export type ExtractDataFromIntimacaoInput = z.infer<typeof ExtractDataFromIntimacaoInputSchema>;
 
@@ -57,6 +59,14 @@ const extractDataFromIntimacaoFlow = ai.defineFlow(
       return {
         extractedData: {},
         error: "CONFIGURAÇÃO PENDENTE: Verifique a chave API no servidor."
+      };
+    }
+
+    const quota = await checkAndConsumeAiQuota(input.uid);
+    if (!quota.ok) {
+      return {
+        extractedData: {},
+        error: `LIMITE MENSAL DE IA ATINGIDO (${MONTHLY_AI_LIMIT}/mês).`,
       };
     }
 

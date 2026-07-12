@@ -14,7 +14,7 @@ service cloud.firestore {
 
     function isRoot() {
       return isAuthenticated() && (
-        request.auth.token.email == 'monicamazur1986@gmail.com' || 
+        request.auth.token.email == 'app.fiscalx@gmail.com' ||
         getUserData().role == 'root'
       );
     }
@@ -71,6 +71,21 @@ service cloud.firestore {
       );
     }
 
+    match /chamados/{id} {
+      allow read: if isAuthenticated() && (
+        isRoot() ||
+        (isAdmin() && resource.data.municipioId == getUserData().municipioId) ||
+        (resource.data.createdBy == request.auth.uid)
+      );
+      allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
+      // Só quem abriu o chamado ou um gestor do mesmo município (ou root) pode
+      // atualizar (responder, mudar status) — mesmo isolamento por município
+      // já usado em intimações e inspeções.
+      allow update: if isAuthenticated() && (
+        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()))
+      );
+    }
+
     match /autoridades/{id} {
       allow read: if belongsToMyMunicipio(resource.data);
       allow write: if isAdmin() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
@@ -78,7 +93,7 @@ service cloud.firestore {
 
     match /inspecoes/{id} {
       allow read: if isAuthenticated() && (
-        isRoot() || 
+        isRoot() ||
         (isAdmin() && resource.data.municipioId == getUserData().municipioId) ||
         (resource.data.fiscalId == request.auth.uid)
       );
@@ -86,6 +101,28 @@ service cloud.firestore {
       allow update, delete: if isAuthenticated() && (
         isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.fiscalId == request.auth.uid || isAdmin()))
       );
+    }
+
+    // Configuração de marca/identidade de cada município (logo, secretaria, etc.)
+    match /municipios/{municipioId}/config/{configId} {
+      allow read: if isAuthenticated() && (isRoot() || municipioId == getUserData().municipioId);
+      allow write: if isRoot() || (isAdmin() && municipioId == getUserData().municipioId);
+    }
+
+    // Contador de numeração de autuações por município/ano (incremento atômico)
+    match /municipios/{municipioId}/counters/{year} {
+      allow read, write: if isAuthenticated() && (isRoot() || municipioId == getUserData().municipioId);
+    }
+
+    // Mural/chat interno de cada município
+    match /municipios/{municipioId}/topics/{topicId}/messages/{messageId} {
+      allow read, create, update: if isAuthenticated() && (isRoot() || municipioId == getUserData().municipioId);
+      allow delete: if isRoot();
+
+      match /comments/{commentId} {
+        allow read, create: if isAuthenticated() && (isRoot() || municipioId == getUserData().municipioId);
+        allow update, delete: if isRoot();
+      }
     }
 
     match /{document=**} {
