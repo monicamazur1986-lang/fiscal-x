@@ -5,3 +5,40 @@ runConfig:
   # Increase this value if you'd like to automatically spin up
   # more instances in response to increased traffic.
   maxInstances: 1
+
+env:
+  # Config pública do Firebase (não é segredo — já fica embutida no bundle do
+  # cliente de qualquer forma), mas precisa existir no ambiente de build/nuvem.
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: AIzaSyDa92YDLvsFQ7OP-9OAIUJiblL2ROUAI4o
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: studio-1937074168-6d495.firebaseapp.com
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: studio-1937074168-6d495
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: studio-1937074168-6d495.firebasestorage.app
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "683856797459"
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:683856797459:web:c9e4461dbeb37ebd5b84e6"
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_VAPID_KEY
+    value: BBwqYAQK4FFBj_Hi9DT-z96Kpv3SytA65AdoM839JdGWx_lDbuVt3BcV_qtTIfn9wl9eej4wU8CTZxCsN9HX5Lg
+    availability: [BUILD, RUNTIME]
+
+  # Segredos reais — valores gravados no Secret Manager via
+  # `firebase apphosting:secrets:set`, nunca em texto puro neste arquivo.
+  - variable: FIREBASE_ADMIN_SDK_PRIVATE_KEY_JSON
+    secret: firebase-admin-key
+    availability: [BUILD, RUNTIME]
+  - variable: ANTHROPIC_API_KEY
+    secret: anthropic-api-key
+    availability: [BUILD, RUNTIME]
+  - variable: CRON_SECRET
+    secret: cron-secret
+    availability: [RUNTIME]
