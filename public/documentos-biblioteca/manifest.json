@@ -1,32 +1,23 @@
 {
-  "version": "1.0.2",
+  "version": "2.0.0",
   "documents": [
     {
-      "id": "codigo-sanitario-estadual",
-      "titulo": "Código Sanitário Estadual",
-      "path": "/documentos-biblioteca/codigo-sanitario-estadual.pdf",
+      "id": "codigo-sanitario-estadual-pr",
+      "titulo": "Código de Saúde do Paraná",
+      "path": "/documentos-biblioteca/codigo_sanitario_estadual.pdf",
       "esfera": "estadual",
       "categoria": "Código",
-      "descricao": "Compilação das normas e diretrizes sanitárias para o âmbito estadual.",
-      "keywords": "sanitário, estadual, código, lei"
+      "descricao": "Lei Estadual nº 13.331/2001 e Decreto nº 5.711/2002 — organização, regulamentação, fiscalização e infrações sanitárias no Estado do Paraná.",
+      "keywords": "codigo sanitario, lei 13331, decreto 5711, parana, infracoes sanitarias, vigilancia sanitaria, sus, licenca sanitaria, penalidades"
     },
     {
-      "id": "exemplo-rdc",
-      "titulo": "RDC de Exemplo",
-      "path": "/documentos-biblioteca/rdc-exemplo.pdf",
+      "id": "rdc-1002-2025-odontologia",
+      "titulo": "RDC nº 1.002/2025 — Boas Práticas em Serviços Odontológicos",
+      "path": "/documentos-biblioteca/RDC%201002%202025.pdf",
       "esfera": "federal",
       "categoria": "RDC",
-      "descricao": "Exemplo de uma Resolução da Diretoria Colegiada da ANVISA.",
-      "keywords": "anvisa, rdc, federal, resolução"
-    },
-    {
-      "id": "nova-portaria-123",
-      "titulo": "Nova Portaria Nº 123",
-      "path": "/documentos-biblioteca/nova-portaria-123.pdf",
-      "esfera": "federal",
-      "categoria": "Portaria",
-      "descricao": "Esta é a descrição da nova portaria que você adicionou.",
-      "keywords": "portaria, nova, rdc, anvisa, federal"
+      "descricao": "Resolução da Diretoria Colegiada da ANVISA que estabelece requisitos de boas práticas para serviços de assistência odontológica e laboratórios de prótese dentária em todo o país.",
+      "keywords": "rdc 1002, anvisa, odontologia, boas praticas, biosseguranca, clinica odontologica, protese dentaria"
     }
   ]
 }

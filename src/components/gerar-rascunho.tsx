@@ -30,6 +30,7 @@ import { BackButton } from "./back-button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { generateIntimacaoDraft } from "@/ai/flows/generate-intimacao-draft"
+import { salvarExemploFiscalAi } from "@/lib/fiscal-ai-exemplos"
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
 import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
@@ -203,6 +204,22 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
       'apreensão': 'TERMO DE APREENSÃO',
       'interdição': 'TERMO DE INTERDIÇÃO',
     };
+
+    // O fiscal escolher exportar (em vez de limpar e gerar de novo) é o sinal
+    // de que o rascunho ficou bom — guarda como referência de estilo pra
+    // casos futuros parecidos. Falha aqui não deve travar a exportação.
+    if (profile?.municipioId) {
+      salvarExemploFiscalAi({
+        caseDescription,
+        reportType,
+        draftGerado: draft,
+        fundamentacao,
+        engine: engine || 'local',
+        municipioId: profile.municipioId,
+        createdBy: profile.uid,
+        createdByName: profile.displayName,
+      }).catch(() => {});
+    }
 
     const params = new URLSearchParams();
     params.set('draftText', isUppercase ? draft.toUpperCase() : draft);

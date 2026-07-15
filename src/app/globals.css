@@ -132,6 +132,13 @@
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.2), 0 16px 32px -18px rgba(225,29,72,0.3);
       border: 1px solid rgba(255,255,255,0.1);
     }
+    .dash-tile-sky {
+      background:
+        linear-gradient(105deg, transparent 42%, rgba(255,255,255,0.14) 50%, transparent 58%),
+        linear-gradient(135deg, #0284c7 0%, #075985 100%);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.2), 0 16px 32px -18px rgba(2,132,199,0.3);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
 
     /* DOCUMENT OFFICIAL STYLES (PDF/A4) */
     .document-container {

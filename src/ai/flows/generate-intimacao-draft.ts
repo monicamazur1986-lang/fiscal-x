@@ -12,6 +12,7 @@ import { claude, isClaudeReady, CLAUDE_MODEL } from '@/ai/claude';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { searchLegislacao } from '@/lib/legal-search';
 import { checkAndConsumeAiQuota, MONTHLY_AI_LIMIT } from '@/ai/usage-limit';
+import { buscarMelhorExemplo } from '@/lib/draft-examples-search';
 
 // zodOutputFormat exige um schema construído com 'zod/v4' — a instância `z`
 // re-exportada pelo Genkit é do zod v3 e não é estruturalmente compatível.
@@ -24,6 +25,13 @@ const ClaudeDraftOutputSchema = z4.object({
 
 const ReportTypeSchema = z.enum(['intimação', 'infração', 'apreensão', 'interdição']);
 const LawPreferenceSchema = z.enum(['todas', 'municipal', 'estadual']).default('todas');
+
+// Origem/contexto da ação — define como o texto abre (não é sempre "durante
+// inspeção no estabelecimento": pode ser denúncia, monitoramento de
+// propaganda, retorno de notificação anterior, etc.). Não é escolhida pelo
+// fiscal em tela nenhuma — é inferida automaticamente do próprio relato (ver
+// inferOrigem/prompt da Claude mais abaixo), pra não empilhar mais um menu.
+export type Origem = 'rotina' | 'denuncia' | 'monitoramento' | 'reincidencia';
 
 const GenerateIntimacaoDraftInputSchema = z.object({
   caseDescription: z.string().describe('O relato informal do fiscal.'),
@@ -43,6 +51,27 @@ const GenerateIntimacaoDraftOutputSchema = z.object({
   error: z.string().optional(),
 });
 export type GenerateIntimacaoDraftOutput = z.infer<typeof GenerateIntimacaoDraftOutputSchema>;
+
+// Abertura do texto conforme a origem da ação — o motor local escolhe direto
+// daqui; o prompt da nuvem (mais abaixo) recebe a mesma lista como exemplo,
+// pra manter os dois motores consistentes entre si.
+const ORIGEM_ABERTURA: Record<Origem, string> = {
+  rotina: 'Durante inspeção realizada no estabelecimento identificado, esta Autoridade Sanitária constatou',
+  denuncia: 'Em decorrência de denúncia recebida por esta Vigilância Sanitária, foi constatado que',
+  monitoramento: 'Em ação de monitoramento de propaganda e publicidade, esta Autoridade Sanitária constatou que',
+  reincidencia: 'Em verificação de cumprimento de notificação sanitária anterior, esta Autoridade Sanitária constatou que',
+};
+
+// Detecta a origem a partir do próprio relato do fiscal (sem exigir seleção
+// manual em tela) — usado só pelo motor local, que não tem compreensão de
+// linguagem própria; a versão na nuvem (Claude) infere isso sozinha, direto
+// das notas, sem precisar desta lista de palavras-chave.
+function inferOrigem(descLower: string): Origem {
+  if (/den[uú]ncia|reclama[cç][aã]o|denunciad/.test(descLower)) return 'denuncia';
+  if (/r[aá]dio|propaganda|publicidade|an[uú]ncio|outdoor|\btv\b|comercial veiculad/.test(descLower)) return 'monitoramento';
+  if (/reincid|j[aá] notificad|segunda visita|nova verifica[cç][aã]o|retorno d[ao] (fiscaliza|inspe)/.test(descLower)) return 'reincidencia';
+  return 'rotina';
+}
 
 /**
  * MOTOR DE INTELIGÊNCIA NATIVA (OFFLINE)
@@ -102,7 +131,8 @@ function generateLocalHeuristicDraft(input: GenerateIntimacaoDraftInput): Genera
   }
 
   // 5. MONTAGEM DO BLOCO ÚNICO
-  const opening = `Durante inspeção realizada no estabelecimento identificado, esta Autoridade Sanitária constatou ${factAnalysis}. `;
+  const abertura = ORIGEM_ABERTURA[inferOrigem(descLower)];
+  const opening = `${abertura} ${factAnalysis}. `;
   const risk = `A situação configura risco sanitário aos consumidores e está em desacordo com as normas de saúde pública e biossegurança. `;
   const legal = `Tal conduta caracteriza irregularidade sanitária e a inobservância das exigências legais aplicáveis ao setor, em violação direta à ${fundamentacao}. `;
   
@@ -134,7 +164,12 @@ REGRAS CRÍTICAS DE FUNDAMENTAÇÃO:
 5. VALIDAÇÃO: Se o relato for vago demais para ser enquadrado na legislação fornecida, retorne draftIntimacao como string vazia e preencha o campo error solicitando mais detalhes.
 
 ESTRUTURA OBRIGATÓRIA DO draftIntimacao:
-- Abertura: "Durante inspeção realizada no estabelecimento identificado, esta Autoridade Sanitária constatou [FATO REESCRITO COM RIGOR TÉCNICO]..."
+- Abertura: infira a origem da ação diretamente das NOTAS DO FISCAL (nenhuma tela pede isso ao fiscal — a origem não vem pronta, você deduz do próprio relato) e adapte a frase inicial de acordo, em vez de usar sempre a mesma frase de inspeção:
+  - Relato descreve visita/inspeção comum ao local: "Durante inspeção realizada no estabelecimento identificado, esta Autoridade Sanitária constatou [FATO]..."
+  - Relato menciona denúncia/reclamação recebida: "Em decorrência de denúncia recebida por esta Vigilância Sanitária, foi constatado que [FATO]..."
+  - Relato é sobre propaganda/publicidade veiculada (rádio, TV, anúncio, outdoor): "Em ação de monitoramento de propaganda e publicidade, esta Autoridade Sanitária constatou que [FATO]..." — aqui o foco é a propaganda/veiculação em si, não "o estabelecimento".
+  - Relato menciona retorno/reincidência de uma notificação anterior: "Em verificação de cumprimento de notificação sanitária anterior, esta Autoridade Sanitária constatou que [FATO]..."
+  - Nenhum desses cenários bater: componha uma abertura equivalente e coerente com o contexto descrito, sem forçar a frase de inspeção padrão.
 - Risco: "A situação configura risco sanitário aos consumidores e está em desacordo com as normas de saúde pública e biossegurança."
 - Enquadramento: "Tal conduta caracteriza irregularidade sanitária e a inobservância das exigências legais, em violação à [CITAÇÃO ESPECÍFICA: LEI (ARTIGO, INCISO)]."
 - Fechamento: Conforme o tipo (Apreensão: processo administrativo; Interdição: interdição cautelar; Outros: notificação).
@@ -175,6 +210,15 @@ export const generateIntimacaoDraftFlow = ai.defineFlow(
 
       const finalContext = selectedArticles.map(a => `ID: ${a.id} | LEI: ${a.lawTitle} | ARTIGO/INCISO: ${a.label} | TEXTO LEGAL: ${a.texto}${a.pena ? ` | PENA APLICÁVEL: ${a.pena}` : ''}`).join('\n');
 
+      // Aprendizado a partir do uso: busca o rascunho anterior mais parecido
+      // que o próprio fiscal já exportou (aprovou) antes, pra usar como
+      // referência de estilo — sem exemplos ainda cadastrados, isso não
+      // muda em nada o comportamento atual.
+      const melhorExemplo = await buscarMelhorExemplo(input.caseDescription, input.uid);
+      const exemploBlock = melhorExemplo
+        ? `\n\nEXEMPLO DE RASCUNHO ANTERIOR JÁ APROVADO PELO FISCAL (use só como referência de estilo, tom e nível de detalhe — NUNCA copie fatos, nomes ou números deste exemplo; gere um texto novo, específico pro caso atual):\n"${melhorExemplo.draftGerado}"`
+        : '';
+
       const response = await claude.messages.parse({
         model: CLAUDE_MODEL,
         max_tokens: 2048,
@@ -182,7 +226,7 @@ export const generateIntimacaoDraftFlow = ai.defineFlow(
         messages: [
           {
             role: 'user',
-            content: `CONTEXTO LEGAL DISPONÍVEL:\n${finalContext}\n\nNOTAS DO FISCAL: "${input.caseDescription}"\nTIPO: ${input.reportType}`,
+            content: `CONTEXTO LEGAL DISPONÍVEL:\n${finalContext}\n\nNOTAS DO FISCAL: "${input.caseDescription}"\nTIPO: ${input.reportType}${exemploBlock}`,
           },
         ],
         output_config: { format: zodOutputFormat(ClaudeDraftOutputSchema) },

@@ -1,24 +1,20 @@
 
 "use client"
 
-import { 
-  ClipboardList, 
-  Search, 
-  FileText, 
-  ChevronRight, 
-  ShieldCheck, 
-  Store, 
-  Zap, 
-  Utensils, 
-  GraduationCap,
-  Plus,
-  Home
+import {
+  ClipboardList,
+  Search,
+  FileText,
+  ChevronRight,
+  ShieldCheck,
+  Plus
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import Link from "next/link"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
+import { BackButton } from "@/components/back-button"
 import {
   Dialog,
   DialogContent,
@@ -45,29 +41,8 @@ const ToothIcon = ({ className }: { className?: string }) => (
   </svg>
 )
 
-// ÍCONE CUSTOMIZADO: FARMÁCIA (CÁPSULA)
-const PharmacyIcon = ({ className }: { className?: string }) => (
-  <svg 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
-    strokeWidth="2" 
-    strokeLinecap="round" 
-    strokeLinejoin="round" 
-    className={className}
-  >
-    <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z" />
-    <path d="m8.5 8.5 7 7" />
-  </svg>
-)
-
 const roteiros = [
-  { id: '6', titulo: 'Roteiro Serviços de Odontologia', categoria: 'Saúde', icone: ToothIcon, cor: 'text-emerald-500', base: '(Resolução SESA nº 442/2012)' },
-  { id: '3', titulo: 'Roteiro Farmácias e Drogarias', categoria: 'Saúde', icone: PharmacyIcon, cor: 'text-blue-500', base: '(RDC ANVISA nº 44/2009)' },
-  { id: '1', titulo: 'Supermercados e Mercearias', categoria: 'Alimentos', icone: Store, cor: 'text-amber-500', base: 'Lei Municipal 2.276/2017' },
-  { id: '2', titulo: 'Restaurantes e Lanchonetes', categoria: 'Alimentos', icone: Utensils, cor: 'text-orange-500', base: 'Lei Municipal 2.276/2017' },
-  { id: '4', titulo: 'Instituições de Ensino', categoria: 'Educação', icone: GraduationCap, cor: 'text-indigo-500', base: 'Lei Municipal 2.276/2017' },
-  { id: '5', titulo: 'Clínicas de Estética e Salões', categoria: 'Saúde', icone: Zap, cor: 'text-rose-500', base: 'Lei Municipal 2.276/2017' },
+  { id: 'odontologia', titulo: 'Roteiro de Inspeção de Odontologia', categoria: 'Saúde', icone: ToothIcon, cor: 'text-emerald-500', base: 'Resolução SESA nº 0414/2001' },
 ]
 
 export default function RoteirosPage() {
@@ -93,9 +68,7 @@ export default function RoteirosPage() {
         </div>
 
         <div className="flex items-center gap-3">
-           <Button asChild variant="outline" className="h-12 rounded-2xl font-black uppercase text-[10px] tracking-widest gap-2 border-zinc-200 text-zinc-500 hover:bg-zinc-50">
-             <Link href="/dashboard"><Home className="h-4 w-4" /> Início</Link>
-           </Button>
+           <BackButton href="/dashboard" />
 
            <Dialog open={isNewDialogOpen} onOpenChange={setIsNewDialogOpen}>
              <DialogTrigger asChild>

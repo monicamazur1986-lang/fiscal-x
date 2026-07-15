@@ -101,6 +101,8 @@ export type LegislacaoDocumento = {
   titulo: string;
   categoria: string;
   esfera: 'municipal' | 'estadual' | 'federal';
+  /** Só presente em documentos municipais — vem da pasta do manifest, nunca do conteúdo dele (evita erro de copiar/colar entre municípios). */
+  municipioId?: string;
   descricao: string;
   conteudoIntegral?: string;
   linkOficial?: string;
@@ -155,4 +157,47 @@ export type Chamado = {
   municipioId: string;
   createdAt: string;
   updatedAt?: string;
+};
+
+export type DocfacilTipo = 'oficio' | 'memorando' | 'circular';
+
+export type DocfacilModelo = {
+  id: string;
+  codigo: number;
+  tipo: DocfacilTipo;
+  descricao: string;
+  tags: string[];
+  conteudo: string;
+  municipioId: string;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type FiscalAiExemplo = {
+  id: string;
+  caseDescription: string;
+  reportType: string;
+  draftGerado: string;
+  fundamentacao?: string;
+  engine: 'local' | 'cloud';
+  municipioId: string;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+};
+
+export type DocfacilDocumento = {
+  id: string;
+  modeloId: string;
+  tipo: DocfacilTipo;
+  numero: string;
+  destinatario: string;
+  assunto: string;
+  conteudo: string;
+  municipioId: string;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
 };

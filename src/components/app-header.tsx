@@ -1,8 +1,8 @@
 "use client"
 
 import {
-  LogOut, Home, Users, ShieldCheck,
-  UserCircle, Sparkles, Settings, LifeBuoy, Inbox
+  LogOut, Users, ShieldCheck,
+  UserCircle, Sparkles, Settings, Inbox
 } from "lucide-react"
 import { SentinelaMascot } from "./brand-logo"
 import { Button } from "@/components/ui/button"
@@ -19,7 +19,6 @@ import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
 import { useCallback, useState } from "react"
-import { cn } from "@/lib/utils"
 import { ProfileEditDialog } from "./profile-edit-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -125,39 +124,9 @@ export function AppHeader() {
     <>
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-14 items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Link href="/dashboard" className="mr-6 flex items-center">
-              <SentinelaMascot className="rounded-lg border-none shadow-none" width={36} height={36} simplified />
-            </Link>
-            <nav className="flex items-center space-x-6 text-sm font-medium">
-              <Link href="/dashboard" className={cn("transition-colors hover:text-foreground/80", pathname === "/dashboard" ? "text-foreground" : "text-foreground/60")} title="Início">
-                <Home className="h-5 w-5" />
-              </Link>
-              {(isAdmin || isRoot) && (
-                <Link href="/admin/usuarios" className={cn("transition-colors hover:text-foreground/80", pathname === "/admin/usuarios" ? "text-foreground" : "text-foreground/60")} title="Equipe">
-                  <Users className="h-5 w-5" />
-                </Link>
-              )}
-              {(isAdmin || isRoot) && (
-                <Link href="/admin/configuracoes" className={cn("transition-colors hover:text-foreground/80", pathname === "/admin/configuracoes" ? "text-foreground" : "text-foreground/60")} title="Configurações">
-                  <Settings className="h-5 w-5" />
-                </Link>
-              )}
-              {isRoot && (
-                <Link href="/admin/solicitacoes" className={cn("transition-colors hover:text-foreground/80", pathname === "/admin/solicitacoes" ? "text-foreground" : "text-foreground/60")} title="Solicitações">
-                  <ShieldCheck className="h-5 w-5" />
-                </Link>
-              )}
-              <Link href="/suporte" className={cn("transition-colors hover:text-foreground/80", pathname === "/suporte" ? "text-foreground" : "text-foreground/60")} title="Suporte / Reportar Erro">
-                <LifeBuoy className="h-5 w-5" />
-              </Link>
-              {(isAdmin || isRoot) && (
-                <Link href="/admin/suporte" className={cn("transition-colors hover:text-foreground/80", pathname === "/admin/suporte" ? "text-foreground" : "text-foreground/60")} title="Gestão de Suporte">
-                  <Inbox className="h-5 w-5" />
-                </Link>
-              )}
-            </nav>
-          </div>
+          <Link href="/dashboard" className="flex items-center">
+            <SentinelaMascot className="rounded-lg border-none shadow-none" width={36} height={36} simplified />
+          </Link>
           <div className="flex items-center space-x-4">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -186,6 +155,31 @@ export function AppHeader() {
                   <Sparkles className="mr-2 h-4 w-4" />
                   <span>Alterar Senha</span>
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {(isAdmin || isRoot) && (
+                  <DropdownMenuItem onClick={() => router.push("/admin/usuarios")}>
+                    <Users className="mr-2 h-4 w-4" />
+                    <span>Equipe</span>
+                  </DropdownMenuItem>
+                )}
+                {(isAdmin || isRoot) && (
+                  <DropdownMenuItem onClick={() => router.push("/admin/configuracoes")}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Configurações</span>
+                  </DropdownMenuItem>
+                )}
+                {isRoot && (
+                  <DropdownMenuItem onClick={() => router.push("/admin/solicitacoes")}>
+                    <ShieldCheck className="mr-2 h-4 w-4" />
+                    <span>Solicitações</span>
+                  </DropdownMenuItem>
+                )}
+                {(isAdmin || isRoot) && (
+                  <DropdownMenuItem onClick={() => router.push("/admin/suporte")}>
+                    <Inbox className="mr-2 h-4 w-4" />
+                    <span>Gestão de Suporte</span>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />

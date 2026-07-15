@@ -4,27 +4,43 @@ import { useState, useEffect, useCallback } from 'react';
 import type { LegislacaoDocumento } from '@/lib/types';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// IMPORTANTE: Garanta que o arquivo `pdf.worker.min.js` da pasta `node_modules/pdfjs-dist/build/`
-// seja copiado para a pasta `public/` do seu projeto.
-pdfjsLib.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.js`;
+// pdfjs-dist 4.x só publica o worker como ES module (.mjs) — precisa estar em
+// public/pdf.worker.min.mjs (copiado de node_modules/pdfjs-dist/build/).
+pdfjsLib.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs`;
 
 const LOCAL_STORAGE_KEY = 'fiscal_x_biblioteca_local_v2';
 const MANIFEST_VERSION_KEY = 'fiscal_x_biblioteca_version_v2';
 
-async function processLocalDocuments(
-  manifest: any, // Passamos o manifesto já buscado como um argumento
-  setLoadingMessage: (message: string) => void
-): Promise<{docs: LegislacaoDocumento[], version: string}> {
-  const processedDocs: LegislacaoDocumento[] = [];
+interface ManifestFile {
+  version: string;
+  documents: any[];
+}
 
-  if (!manifest.documents || !manifest.version) {
-    throw new Error("ERRO: 'manifest.json' inválido. Faltando a chave 'documents' ou 'version'.");
+async function fetchManifest(path: string): Promise<ManifestFile | null> {
+  const res = await fetch(path);
+  if (!res.ok) return null;
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    const manifest = JSON.parse(text);
+    if (!manifest.documents || !manifest.version) return null;
+    return manifest;
+  } catch {
+    return null;
   }
+}
+
+async function processManifestDocuments(
+  manifest: ManifestFile,
+  setLoadingMessage: (message: string) => void,
+  forceMunicipioId?: string
+): Promise<LegislacaoDocumento[]> {
+  const processedDocs: LegislacaoDocumento[] = [];
 
   for (const [index, docInfo] of manifest.documents.entries()) {
     try {
       setLoadingMessage(`Processando ${index + 1}/${manifest.documents.length}: ${docInfo.titulo}`);
-      
+
       const pdfResponse = await fetch(docInfo.path);
       if (!pdfResponse.ok) {
         console.warn(`Arquivo PDF não encontrado em ${docInfo.path}. Pulando.`);
@@ -41,10 +57,14 @@ async function processLocalDocuments(
         fullText += textContent.items.map((item: any) => item.str).join(' ') + '\n';
       }
 
-      const newDoc: LegislacaoDocumento = {
+      processedDocs.push({
         id: docInfo.id,
         titulo: docInfo.titulo,
-        esfera: docInfo.esfera,
+        // Documentos municipais sempre têm a esfera/município herdados da
+        // pasta de onde vieram — nunca do conteúdo do manifest — pra um
+        // erro de copiar/colar entre municípios nunca vazar a lei errada.
+        esfera: forceMunicipioId ? 'municipal' : docInfo.esfera,
+        municipioId: forceMunicipioId,
         categoria: docInfo.categoria,
         descricao: docInfo.descricao || `Documento carregado de ${docInfo.path}`,
         conteudoIntegral: fullText,
@@ -52,18 +72,24 @@ async function processLocalDocuments(
         linkOficial: docInfo.linkOficial || '',
         pdfUrl: docInfo.path,
         updatedAt: new Date().toISOString(),
-        chunks: [], // Chunks não são necessários para esta implementação
-      };
-      processedDocs.push(newDoc);
+        chunks: [],
+      });
     } catch (docError) {
       console.error(`Erro ao processar o documento ${docInfo.path}:`, docError);
     }
   }
 
-  return { docs: processedDocs, version: manifest.version };
+  return processedDocs;
 }
 
-export function useBiblioteca() {
+/**
+ * Carrega o acervo compartilhado (federal/estadual/RDC/resolução) e, se um
+ * municipioId for informado, também o acervo próprio daquele município —
+ * cada fiscal só enxerga o manifest do seu próprio município, nunca de
+ * outro. A ausência de um manifest municipal é normal (município ainda sem
+ * legislação local cadastrada) e não é tratada como erro.
+ */
+export function useBiblioteca(municipioId?: string) {
   const [documents, setDocuments] = useState<LegislacaoDocumento[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,25 +99,28 @@ export function useBiblioteca() {
     setLoading(true);
     setError(null);
 
+    const cacheSuffix = municipioId || 'geral';
+    const localStorageKey = `${LOCAL_STORAGE_KEY}_${cacheSuffix}`;
+    const versionKey = `${MANIFEST_VERSION_KEY}_${cacheSuffix}`;
+
     try {
-      const manifestResponse = await fetch('/documentos-biblioteca/manifest.json');
-      if (!manifestResponse.ok) {
-        throw new Error("ERRO 404: 'manifest.json' não encontrado em 'public/documentos-biblioteca/'.");
+      setLoadingMessage('Verificando manifesto...');
+      const rootManifest = await fetchManifest('/documentos-biblioteca/manifest.json');
+      if (!rootManifest) {
+        throw new Error("ERRO: 'manifest.json' não encontrado ou inválido em 'public/documentos-biblioteca/'.");
       }
 
-      // Adiciona uma verificação para o caso do arquivo estar vazio
-      const manifestText = await manifestResponse.text();
-      if (!manifestText) {
-        throw new Error("ERRO: O arquivo 'manifest.json' foi encontrado, mas está vazio.");
-      }
-      const manifest = JSON.parse(manifestText);
-      const remoteVersion = manifest.version;
-      const localVersion = localStorage.getItem(MANIFEST_VERSION_KEY);
+      const municipalManifest = municipioId
+        ? await fetchManifest(`/documentos-biblioteca/municipios/${municipioId}/manifest.json`)
+        : null;
 
-      if (remoteVersion && localVersion === remoteVersion) {
-        setLoadingMessage('Carregando do cache local...');
-        const cachedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+      const combinedVersion = `${rootManifest.version}::${municipalManifest?.version || ''}`;
+      const localVersion = localStorage.getItem(versionKey);
+
+      if (localVersion === combinedVersion) {
+        const cachedData = localStorage.getItem(localStorageKey);
         if (cachedData) {
+          setLoadingMessage('Carregando do cache local...');
           setDocuments(JSON.parse(cachedData));
           setLoading(false);
           return;
@@ -99,13 +128,15 @@ export function useBiblioteca() {
       }
 
       setLoadingMessage('Sincronizando acervo local (isso pode levar um minuto)...');
-      const { docs, version } = await processLocalDocuments(manifest, setLoadingMessage);
-      
-      setDocuments(docs);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(docs));
-      if (version) {
-        localStorage.setItem(MANIFEST_VERSION_KEY, version);
-      }
+      const rootDocs = await processManifestDocuments(rootManifest, setLoadingMessage);
+      const municipalDocs = municipalManifest
+        ? await processManifestDocuments(municipalManifest, setLoadingMessage, municipioId)
+        : [];
+
+      const allDocs = [...rootDocs, ...municipalDocs];
+      setDocuments(allDocs);
+      localStorage.setItem(localStorageKey, JSON.stringify(allDocs));
+      localStorage.setItem(versionKey, combinedVersion);
       setLoadingMessage('Biblioteca carregada!');
 
     } catch (err: any) {
@@ -114,7 +145,7 @@ export function useBiblioteca() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [municipioId]);
 
   useEffect(() => {
     fetchDocuments();

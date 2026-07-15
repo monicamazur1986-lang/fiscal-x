@@ -58,6 +58,18 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
+
+    // Índice local dos dados públicos da ANVISA (sincronizado por um cron via
+    // Admin SDK, que ignora estas regras). Cliente só lê; nunca escreve.
+    match /anvisaIndex/{datasetKey} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+
+      match /registros/{id} {
+        allow read: if isAuthenticated();
+        allow write: if false;
+      }
+    }
     
     match /intimacoes/{id} {
       allow read: if isAuthenticated() && (
@@ -84,6 +96,35 @@ service cloud.firestore {
       allow update: if isAuthenticated() && (
         isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()))
       );
+    }
+
+    // DOCFACIL — modelos e documentos oficiais (ofício/memorando/circular),
+    // isolados por município. Leitura aberta a todo o município (modelos são
+    // pra reaproveitar em equipe); escrita só de quem criou ou de um gestor.
+    match /docfacilModelos/{id} {
+      allow read: if belongsToMyMunicipio(resource.data);
+      allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
+      allow update, delete: if isAuthenticated() && (
+        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()))
+      );
+    }
+
+    match /docfacilDocumentos/{id} {
+      allow read: if belongsToMyMunicipio(resource.data);
+      allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
+      allow update, delete: if isAuthenticated() && (
+        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()))
+      );
+    }
+
+    // Exemplos de rascunhos do Fiscal AI que o próprio fiscal decidiu usar
+    // (exportou pro formulário de autuação) — servem de referência de estilo
+    // pra Claude em casos novos parecidos. Isolado por município: o relato
+    // pode citar nome de estabelecimento, CNPJ etc.
+    match /fiscalAiExemplos/{id} {
+      allow read: if belongsToMyMunicipio(resource.data);
+      allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
+      allow update, delete: if isRoot() || (isAdmin() && resource.data.municipioId == getUserData().municipioId);
     }
 
     match /autoridades/{id} {
