@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react"
 import { useAuth } from "@/hooks/use-auth"
 import { useAppConfig } from "@/hooks/use-app-config"
-import { useStorage } from "@/firebase"
+import { storage } from "@/lib/firebase"
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
 import {
   Sparkles,
@@ -27,7 +27,6 @@ import { BackButton } from "@/components/back-button"
 export default function ConfigSistemaGlobalPage() {
   const { profile, loading: authLoading } = useAuth()
   const { systemLogo, updateSystemLogo } = useAppConfig()
-  const storage = useStorage()
   const { toast } = useToast()
   const router = useRouter()
   
@@ -65,8 +64,17 @@ export default function ConfigSistemaGlobalPage() {
       if (storage) {
         // Upload oficial para o Storage
         const storageRef = ref(storage, `system/brand/logo_global_${Date.now()}`);
-        const uploadResult = await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(uploadResult.ref);
+        // O SDK do Storage tem retry interno que pode levar bem mais de um
+        // minuto pra desistir sozinho quando o bucket não responde — sem um
+        // prazo nosso, isso parece um travamento eterno em vez de um erro.
+        const uploadWithTimeout = (async () => {
+          const uploadResult = await uploadBytes(storageRef, file);
+          return getDownloadURL(uploadResult.ref);
+        })();
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Tempo esgotado ao enviar para o Storage.')), 20000)
+        );
+        const url = await Promise.race([uploadWithTimeout, timeout]);
         await updateSystemLogo(url);
         toast({ title: "Marca Global Atualizada", description: "Logo persistido no Google Cloud." });
       } else {

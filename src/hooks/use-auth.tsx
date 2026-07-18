@@ -28,7 +28,7 @@ interface UserProfile {
   role: 'admin' | 'fiscal' | 'root';
   municipioId: string;
   fiscalCode?: string;
-  status?: 'pending' | 'approved' | 'rejected';
+  status?: 'pending' | 'approved' | 'rejected' | 'revoked';
   adminFeedback?: string;
   municipioNome?: string;
   fcmTokens?: string[];
@@ -63,7 +63,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const LAST_EMAIL_KEY = "vigilant-last-email";
+const LAST_EMAIL_KEY = "fiscal-x-last-email";
 
 // Lembra só o e-mail usado por último neste navegador (nunca a senha).
 export function getLastUsedEmail(): string {
@@ -206,7 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{
         user, profile, loading,
-        isAuthorized: !!profile?.isAuthorized || profile?.role === 'root' || profile?.role === 'admin' || profile?.status === 'approved',
+        isAuthorized: profile?.role === 'root' || !!profile?.isAuthorized || profile?.status === 'approved',
         configError: !isConfigReady,
         loginWithEmailPassword, registerWithEmailPassword, resetPassword,
         logout, updateProfileData,

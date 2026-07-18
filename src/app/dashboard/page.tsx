@@ -15,12 +15,16 @@ import {
   Landmark,
   LifeBuoy,
   FileSignature,
-  ArrowUpRight
+  UserCheck,
+  Clock,
+  HelpCircle,
 } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
-import { useInspecoes } from "@/hooks/use-inspecoes"
-import { useChamados } from "@/hooks/use-chamados"
 import { cn } from "@/lib/utils"
+import { useInspecoes } from "@/hooks/use-inspecoes"
+import { useIntimacoes } from "@/hooks/use-intimacoes"
+import { calculateDeadline } from "@/lib/prazo"
+import { usePendingAlerts } from "@/hooks/use-pending-alerts"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { AlertCard } from "@/components/alert-card"
 import { isSameDay, format } from "date-fns"
@@ -28,7 +32,8 @@ import { isSameDay, format } from "date-fns"
 export default function Dashboard() {
   const { profile } = useAuth()
   const { inspecoes } = useInspecoes()
-  const { chamados } = useChamados()
+  const { intimacoes } = useIntimacoes()
+  const { pendingUsersCount, pendingUserNames, pendingChamadosCount } = usePendingAlerts()
   const [greeting, setGreeting] = useState("Olá")
   const [currentTime, setCurrentTime] = useState("")
 
@@ -59,43 +64,60 @@ export default function Dashboard() {
     return agendaHoje.find(i => new Date(i.data).getTime() >= Date.now())
   }, [agendaHoje])
 
-  const chamadosPendentes = useMemo(() => {
-    if (profile?.role !== 'admin') return [];
-    return chamados.filter(c => c.status !== 'resolvido');
-  }, [chamados, profile?.role]);
+  // Autuações finalizadas cujo prazo de defesa vence hoje (0 dias úteis
+  // restantes) — mesmo cálculo usado em Documentos (src/lib/prazo.ts).
+  const prazosVencendoHoje = useMemo(() => {
+    return intimacoes.filter(i => !i.deleted && calculateDeadline(i)?.remaining === 0)
+  }, [intimacoes])
 
-  const temAlertas = agendaHoje.length > 0 || chamadosPendentes.length > 0;
+  const isGestor = profile?.role === 'admin' || profile?.role === 'root';
+  const temAlertas = agendaHoje.length > 0 || prazosVencendoHoje.length > 0 || pendingChamadosCount > 0 || pendingUsersCount > 0;
 
   const userName = profile?.displayName || "Fiscal";
 
+  const pendingNotificationTitle = pendingUserNames.length === 1
+    ? `${pendingUserNames[0]} aguardando aprovação`
+    : pendingUserNames.length > 1
+      ? `${pendingUserNames[0]} e mais ${pendingUserNames.length - 1} aguardando aprovação`
+      : "";
+
+  // Cartões coloridos de volta (fundo sólido, como era antes), mas com tons
+  // adaptados à paleta institucional — mais profundos/abatidos que as cores
+  // puras do Tailwind, pra não destoar do papel/verde-petróleo/latão do
+  // resto do sistema, mantendo a distinção visual rápida entre os itens.
   const menuItems = [
-    { href: "/intimacoes/nova", label: "Nova Autuação", icon: FileText, bg: "bg-emerald-500" },
-    { href: "/rascunho", label: "Fiscal AI", icon: Sparkles, bg: "bg-amber-500", isAI: true },
-    { href: "/agenda", label: "Agenda", icon: CalendarDays, bg: "bg-sky-500" },
-    { href: "/intimacoes", label: "Documentos", icon: Archive, bg: "bg-slate-700" },
-    { href: "/roteiros", label: "Roteiros", icon: ClipboardList, bg: "bg-violet-500" },
-    { href: "/biblioteca", label: "Biblioteca", icon: Library, bg: "bg-pink-500" },
-    { href: "/consulta-anvisa", label: "Consulta ANVISA", icon: Landmark, bg: "bg-cyan-600" },
-    { href: "/docfacil", label: "DOCFACIL", icon: FileSignature, bg: "bg-indigo-600" },
-    { href: "/suporte", label: "Suporte Técnico", icon: LifeBuoy, bg: "bg-red-500" }
+    { href: "/intimacoes/nova", label: "Nova Autuação", description: "Termo de intimação ou auto de infração", icon: FileText, bg: "bg-[#1F7A5C]" },
+    { href: "/rascunho", label: "Fiscal AI", description: "Assistente de redação com inteligência artificial", icon: Sparkles, bg: "bg-[#9C7A3C]" },
+    { href: "/agenda", label: "Agenda", description: "Compromissos e inspeções do dia", icon: CalendarDays, bg: "bg-[#3D5A73]" },
+    { href: "/intimacoes", label: "Documentos", description: "Autuações emitidas e rascunhos", icon: Archive, bg: "bg-[#524E45]" },
+    { href: "/roteiros", label: "Roteiros", description: "Checklists técnicos de inspeção", icon: ClipboardList, bg: "bg-[#6B4C80]" },
+    { href: "/biblioteca", label: "Biblioteca", description: "Legislação e normas aplicáveis", icon: Library, bg: "bg-[#8A4B5C]" },
+    { href: "/consulta-anvisa", label: "Consulta ANVISA", description: "Registros e processos sanitários", icon: Landmark, bg: "bg-[#2F6668]" },
+    { href: "/docfacil", label: "Docfacil", description: "Modelos e documentos administrativos", icon: FileSignature, bg: "bg-[#454680]" },
+    { href: "/suporte", label: "Suporte Técnico", description: "Abrir chamado com a equipe", icon: LifeBuoy, bg: "bg-[#A15437]" },
   ];
 
   return (
-    <div className="flex-1 flex flex-col min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
-      <div className="max-w-3xl mx-auto w-full space-y-6">
+    <div className="flex-1 flex flex-col min-h-screen bg-[#F5F2EA] p-4 sm:p-6 lg:p-8">
+      <div className="max-w-3xl mx-auto w-full space-y-8">
 
-        <section className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <Avatar className="h-14 w-14 border-2 border-white shadow">
+        <section className="flex items-center gap-4 rounded-lg border border-[#E4DFD1] bg-white p-5 shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
+          <Avatar className="h-14 w-14 border-2 border-[#E4EEEC] shadow-sm">
             <AvatarImage src={profile?.photoURL} className="object-cover" />
-            <AvatarFallback className="bg-slate-100 text-slate-400 font-bold text-lg uppercase">
+            <AvatarFallback className="bg-[#E4EEEC] text-[#0E4A44] font-black text-lg uppercase">
               {userName[0]}
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-slate-400">{greeting},</p>
-            <h1 className="text-lg font-bold text-slate-900 truncate">{userName}</h1>
+            <p className="text-xs text-[#A39D8C]">{greeting},</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="font-serif text-lg text-[#262420] truncate">{userName}</h1>
+              {isGestor && (
+                <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-[#9C7A3C] bg-[#F1E9D6] px-2 py-0.5 rounded-full">Gestor</span>
+              )}
+            </div>
           </div>
-          <span className="shrink-0 text-xs font-medium text-slate-400">{currentTime}</span>
+          <span className="shrink-0 text-xs font-medium text-[#A39D8C] tabular-nums">{currentTime}</span>
         </section>
 
         <section className="space-y-2">
@@ -108,43 +130,72 @@ export default function Dashboard() {
               href="/agenda"
             />
           )}
-          {chamadosPendentes.length > 0 && (
+          {prazosVencendoHoje.length > 0 && (
+            <AlertCard
+              icon={Clock}
+              tone="urgent"
+              title={prazosVencendoHoje.length === 1
+                ? `Prazo de ${prazosVencendoHoje[0].numeroProcesso || prazosVencendoHoje[0].autor || "1 autuação"} vence hoje`
+                : `${prazosVencendoHoje.length} prazos vencem hoje`}
+              description="Toque para revisar"
+              href="/intimacoes"
+            />
+          )}
+          {isGestor && pendingUsersCount > 0 && (
+            <AlertCard
+              icon={UserCheck}
+              tone="warning"
+              title={pendingNotificationTitle}
+              description="Toque para revisar"
+              href="/admin/usuarios"
+            />
+          )}
+          {isGestor && pendingChamadosCount > 0 && (
             <AlertCard
               icon={Inbox}
               tone="warning"
-              title={`${chamadosPendentes.length} ${chamadosPendentes.length === 1 ? 'chamado pendente' : 'chamados pendentes'} de suporte`}
+              title={`${pendingChamadosCount} ${pendingChamadosCount === 1 ? 'chamado pendente' : 'chamados pendentes'} de suporte`}
               description="Aguardando resposta"
               href="/admin/suporte"
             />
           )}
           {!temAlertas && (
-            <p className="text-xs text-slate-400 px-1">Nenhum alerta por agora.</p>
+            <p className="text-xs text-[#A39D8C] px-1">Nenhum alerta por agora.</p>
           )}
         </section>
 
-        <nav className="grid grid-cols-2 sm:grid-cols-3 gap-4 pb-20 pt-2">
-          {menuItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "group relative flex min-h-[92px] items-center gap-3 rounded-[1.75rem] px-4 py-4 shadow-md transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-300",
-                item.bg
-              )}
-            >
-              <div className="flex flex-col items-start gap-1.5 shrink-0">
-                <item.icon className="h-6 w-6 text-white" />
-                <ArrowUpRight className="h-3.5 w-3.5 text-white/60" />
-              </div>
-              <span className="text-sm font-bold text-white leading-tight">
-                {item.label}
-              </span>
-              {item.isAI && (
-                <span className="absolute top-3 right-3 h-2.5 w-2.5 rounded-full bg-white" />
-              )}
-            </Link>
-          ))}
-        </nav>
+        <section className="space-y-2 pb-20">
+          <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Menu</h2>
+          <nav className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {menuItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "group flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-lg p-4 text-center shadow-[0_8px_20px_-10px_rgba(38,36,32,0.35)] transition-transform duration-200 hover:-translate-y-0.5",
+                  item.bg
+                )}
+              >
+                <item.icon className="h-6 w-6 text-white/85" />
+                <div className="min-w-0">
+                  <p className="font-serif text-base font-semibold text-white leading-tight">{item.label}</p>
+                  <p className="text-[11px] text-white/70 mt-1 leading-snug opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-active:opacity-100 group-focus-visible:opacity-100">
+                    {item.description}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </nav>
+        </section>
+
+        <div className="flex justify-center pb-10 -mt-12">
+          <Link
+            href="/ajuda"
+            className="flex items-center gap-1.5 text-xs font-medium text-[#A39D8C] hover:text-[#0E4A44] transition-colors"
+          >
+            <HelpCircle className="h-3.5 w-3.5" /> Central de Ajuda
+          </Link>
+        </div>
       </div>
     </div>
   )

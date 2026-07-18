@@ -2,8 +2,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useFirestore } from '@/firebase';
-import { 
+import { db } from '@/lib/firebase';
+import {
   collection, 
   onSnapshot, 
   doc, 
@@ -48,7 +48,6 @@ const LOCAL_STORAGE_KEY = 'fiscal_x_messages_geral_v3';
 const LOCAL_STORAGE_COMMENTS_PREFIX = 'fiscal_x_comments_';
 
 export function useMessages() {
-  const db = useFirestore();
   const { profile, configError } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(true);
@@ -233,7 +232,6 @@ export function useMessages() {
 }
 
 export function useComments(messageId: string | null) {
-  const db = useFirestore();
   const { profile, configError } = useAuth();
   const [comments, setComments] = useState<Comment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);

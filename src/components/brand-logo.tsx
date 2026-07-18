@@ -6,7 +6,7 @@ import { useState, useEffect } from "react"
 import { useAppConfig } from "@/hooks/use-app-config"
 
 /**
- * Mascot do Sistema vigilanT
+ * Mascot do Sistema Fiscal-X
  * Detecta automaticamente o logo personalizado (ROOT) ou usa o SVG padrão.
  */
 export function SentinelaMascot({ className, width = 280, height = 280, simplified = false }: { className?: string, width?: number, height?: number, simplified?: boolean }) {
@@ -35,7 +35,7 @@ export function SentinelaMascot({ className, width = 280, height = 280, simplifi
       <div className={containerClasses} style={containerStyle}>
         <img 
           src={systemLogo} 
-          alt="vigilanT"
+          alt="Fiscal-X"
           className="object-cover w-full h-full"
           style={{ width: '100%', height: '100%' }}
           onError={() => {
@@ -52,7 +52,7 @@ export function SentinelaMascot({ className, width = 280, height = 280, simplifi
     <div className={containerClasses} style={containerStyle}>
       <img
         src={fallbackSrc}
-        alt="vigilanT"
+        alt="Fiscal-X"
         className="object-cover w-full h-full"
         style={{ width: '100%', height: '100%' }}
       />
@@ -60,12 +60,12 @@ export function SentinelaMascot({ className, width = 280, height = 280, simplifi
   );
 }
 
-export function VigilantTextLogo({ className, width = 300 }: { className?: string, width?: number }) {
+export function FiscalXTextLogo({ className, width = 300 }: { className?: string, width?: number }) {
   return (
     <div className={cn("flex flex-col items-center justify-center font-sans select-none", className)} style={{ width: `${width}px` }}>
       <div className="flex items-center">
-        <span className="text-[#0f172a] text-5xl md:text-6xl font-black tracking-tighter italic">vigilan</span>
-        <span className="text-[#00a99d] text-5xl md:text-6xl font-black uppercase tracking-tighter ml-1 italic">T</span>
+        <span className="text-[#0f172a] text-5xl md:text-6xl font-black tracking-tighter italic">Fiscal</span>
+        <span className="text-[#00a99d] text-5xl md:text-6xl font-black uppercase tracking-tighter ml-1 italic">-X</span>
       </div>
     </div>
   );

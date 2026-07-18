@@ -1,16 +1,16 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Inspecao } from '@/lib/types';
 import { db } from '@/lib/firebase'; // Importe a instância 'db' diretamente
-import { 
-  collection, 
-  onSnapshot, 
-  doc, 
-  setDoc, 
-  addDoc, 
-  deleteDoc, 
+import {
+  collection,
+  onSnapshot,
+  doc,
+  setDoc,
+  addDoc,
+  deleteDoc,
   orderBy,
   Timestamp,
   query,
@@ -20,6 +20,21 @@ import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
 
 const LOCAL_STORAGE_KEY = 'fiscal_x_inspecoes';
+const PENDING_SYNC_KEY = 'fiscal_x_inspecoes_pending_sync';
+
+type PendingWrite = { id: string; fbData: any };
+
+function loadPendingWrites(): Record<string, PendingWrite> {
+  try {
+    return JSON.parse(localStorage.getItem(PENDING_SYNC_KEY) || '{}');
+  } catch (e) {
+    return {};
+  }
+}
+
+function savePendingWrites(pending: Record<string, PendingWrite>) {
+  localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(pending));
+}
 
 export function useInspecoes(options?: { municipioIdOverride?: string }) {
   const { user, profile, configError } = useAuth();
@@ -27,16 +42,42 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
   const [needsMunicipioSelection, setNeedsMunicipioSelection] = useState(false);
+  const [pendingSyncIds, setPendingSyncIds] = useState<string[]>(() => Object.keys(loadPendingWrites()));
+  const pendingWritesRef = useRef<Record<string, PendingWrite>>(loadPendingWrites());
+
+  const tentarReenviarPendentes = useCallback(async () => {
+    if (!db) return;
+    const pending = pendingWritesRef.current;
+    const ids = Object.keys(pending);
+    if (ids.length === 0) return;
+
+    for (const id of ids) {
+      try {
+        await setDoc(doc(db, "inspecoes", id), pending[id].fbData, { merge: true });
+        delete pendingWritesRef.current[id];
+      } catch (e) {
+        // Continua offline/com erro — mantém na fila pra tentar de novo depois.
+      }
+    }
+    savePendingWrites(pendingWritesRef.current);
+    setPendingSyncIds(Object.keys(pendingWritesRef.current));
+  }, []);
 
   useEffect(() => {
-    const updateOnlineStatus = () => setIsOnline(navigator.onLine);
+    const updateOnlineStatus = () => {
+      const online = navigator.onLine;
+      setIsOnline(online);
+      if (online) tentarReenviarPendentes();
+    };
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
+    // Tenta reenviar o que ficou pendente de uma sessão anterior assim que o app abre.
+    if (navigator.onLine) tentarReenviarPendentes();
     return () => {
       window.removeEventListener('online', updateOnlineStatus);
       window.removeEventListener('offline', updateOnlineStatus);
     };
-  }, []);
+  }, [tentarReenviarPendentes]);
 
   useEffect(() => {
     if (!user || !profile?.municipioId) {
@@ -87,8 +128,33 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
           } as Inspecao;
         });
 
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
-        setInspecoes(items);
+        // Itens que ainda não confirmaram gravação na nuvem não aparecem no
+        // snapshot do servidor — reaplica eles por cima pra não sumirem da
+        // tela enquanto a sincronização não termina.
+        const pending = pendingWritesRef.current;
+        const pendingIds = Object.keys(pending);
+        const merged = pendingIds.length === 0
+          ? items
+          : [
+              ...items,
+              ...pendingIds
+                .filter(id => !items.some(i => i.id === id))
+                .map(id => {
+                  const raw = pending[id].fbData;
+                  return {
+                    ...raw,
+                    id,
+                    data: raw.data instanceof Timestamp ? raw.data.toDate() : new Date(raw.data),
+                  } as Inspecao;
+                }),
+            ];
+
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(merged));
+        } catch (e) {
+          console.warn("Falha ao salvar cache local de inspeções (cota excedida?):", e);
+        }
+        setInspecoes(merged);
         setLoading(false);
       }, (err) => {
         setLoading(false)
@@ -121,41 +187,72 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
         const existing = prev.find(i => i.id === targetId);
         const newItem = { ...existing, ...docData, data: inspectionDate } as Inspecao;
         const updated = id ? prev.map(i => i.id === id ? newItem : i) : [...prev, newItem];
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+        } catch (e) {
+          // Cota do localStorage estourada (comum com muitas fotos em
+          // base64 acumuladas) — sem este try/catch, isso quebrava a
+          // atualização do estado local inteiro, silenciosamente.
+          console.warn("Falha ao salvar cache local de inspeções (cota excedida?):", e);
+        }
         return updated;
     });
 
     // 2. ATUALIZA NUVEM (FIREBASE COMO FONTE PRINCIPAL)
-    if (db && !configError) {
-      const fbData = { 
-        ...docData, 
-        data: Timestamp.fromDate(inspectionDate), 
-        updatedAt: Timestamp.now() 
-      };
-      
+    const fbData = {
+      ...docData,
+      data: Timestamp.fromDate(inspectionDate),
+      updatedAt: Timestamp.now()
+    };
+
+    let synced = false;
+    if (db && !configError && navigator.onLine) {
       try {
         await setDoc(doc(db, "inspecoes", targetId), fbData, { merge: true });
+        synced = true;
       } catch (e) {
         console.warn("Falha ao persistir inspeção no Firebase:", e);
       }
     }
 
-    return { id: targetId };
+    if (!synced) {
+      // Guarda pra reenviar assim que a conexão voltar — sem isso, o
+      // agendamento ficaria só neste aparelho e sumiria no próximo snapshot.
+      pendingWritesRef.current[targetId] = { id: targetId, fbData };
+      savePendingWrites(pendingWritesRef.current);
+      setPendingSyncIds(Object.keys(pendingWritesRef.current));
+    } else if (pendingWritesRef.current[targetId]) {
+      delete pendingWritesRef.current[targetId];
+      savePendingWrites(pendingWritesRef.current);
+      setPendingSyncIds(Object.keys(pendingWritesRef.current));
+    }
+
+    return { id: targetId, synced };
   }, [db, user, profile, configError]);
 
   const deleteInspecao = useCallback(async (id: string) => {
     if (!id) return;
-    
+
     setInspecoes(prev => {
         const updated = prev.filter(i => i.id !== id);
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+        } catch (e) {
+          console.warn("Falha ao salvar cache local de inspeções (cota excedida?):", e);
+        }
         return updated;
     });
-    
+
+    if (pendingWritesRef.current[id]) {
+      delete pendingWritesRef.current[id];
+      savePendingWrites(pendingWritesRef.current);
+      setPendingSyncIds(Object.keys(pendingWritesRef.current));
+    }
+
     if (db && !configError) {
         await deleteDoc(doc(db, "inspecoes", id)).catch(() => {});
     }
   }, [db, configError]);
 
-  return { inspecoes, saveInspecao, deleteInspecao, loading, isOnline, needsMunicipioSelection };
+  return { inspecoes, saveInspecao, deleteInspecao, loading, isOnline, needsMunicipioSelection, pendingSyncCount: pendingSyncIds.length };
 }

@@ -140,6 +140,29 @@
       border: 1px solid rgba(255,255,255,0.1);
     }
 
+    /* DOCFACIL EDITOR — o timbre oficial (brasão + prefeitura) e o corpo do
+       texto (SunEditor) ficam dentro da mesma "folha" branca; sem isso, a
+       barra de ferramentas do editor vem com seu próprio fundo/borda e
+       quebra a ilusão de página única. */
+    .docfacil-paper .sun-editor {
+      border: none !important;
+      border-radius: 0 !important;
+      background-color: #ffffff !important;
+    }
+    .docfacil-paper .sun-editor .se-toolbar {
+      background-color: #ffffff !important;
+      border: none !important;
+      border-bottom: 1px solid #f4f4f5 !important;
+      box-shadow: none !important;
+      outline: none !important;
+    }
+    .docfacil-paper .sun-editor .se-wrapper {
+      background-color: #ffffff !important;
+    }
+    .docfacil-paper .sun-editor .se-resizing-bar {
+      display: none !important;
+    }
+
     /* DOCUMENT OFFICIAL STYLES (PDF/A4) */
     .document-container {
       display: flex;

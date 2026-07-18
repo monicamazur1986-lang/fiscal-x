@@ -1,8 +1,8 @@
 "use client"
 
 import {
-  LogOut, Users, ShieldCheck,
-  UserCircle, Sparkles, Settings, Inbox
+  LogOut, Users,
+  UserCircle, Sparkles, Settings, Inbox, ArrowLeft
 } from "lucide-react"
 import { SentinelaMascot } from "./brand-logo"
 import { Button } from "@/components/ui/button"
@@ -17,6 +17,7 @@ import {
 import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
+import { usePendingAlerts } from "@/hooks/use-pending-alerts"
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
 import { useCallback, useState } from "react"
 import { ProfileEditDialog } from "./profile-edit-dialog"
@@ -103,6 +104,7 @@ export function AppHeader() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, profile, logout } = useAuth()
+  const { pendingUsersCount, pendingChamadosCount } = usePendingAlerts()
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [isPasswordOpen, setIsPasswordOpen] = useState(false)
 
@@ -124,9 +126,17 @@ export function AppHeader() {
     <>
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-14 items-center justify-between">
-          <Link href="/dashboard" className="flex items-center">
-            <SentinelaMascot className="rounded-lg border-none shadow-none" width={36} height={36} simplified />
-          </Link>
+          <div className="flex items-center gap-4">
+            {pathname !== "/dashboard" && (
+              <Link href="/dashboard" className="flex items-center gap-1.5 text-sm font-medium text-zinc-500 hover:text-zinc-900 transition-colors shrink-0">
+                <ArrowLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Início</span>
+              </Link>
+            )}
+            <Link href="/dashboard" className="flex items-center">
+              <SentinelaMascot className="rounded-lg border-none shadow-none" width={36} height={36} simplified />
+            </Link>
+          </div>
           <div className="flex items-center space-x-4">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -159,7 +169,10 @@ export function AppHeader() {
                 {(isAdmin || isRoot) && (
                   <DropdownMenuItem onClick={() => router.push("/admin/usuarios")}>
                     <Users className="mr-2 h-4 w-4" />
-                    <span>Equipe</span>
+                    <span className="flex-1">Equipe</span>
+                    {pendingUsersCount > 0 && (
+                      <span className="ml-2 rounded-full bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.5 leading-none">{pendingUsersCount}</span>
+                    )}
                   </DropdownMenuItem>
                 )}
                 {(isAdmin || isRoot) && (
@@ -168,16 +181,13 @@ export function AppHeader() {
                     <span>Configurações</span>
                   </DropdownMenuItem>
                 )}
-                {isRoot && (
-                  <DropdownMenuItem onClick={() => router.push("/admin/solicitacoes")}>
-                    <ShieldCheck className="mr-2 h-4 w-4" />
-                    <span>Solicitações</span>
-                  </DropdownMenuItem>
-                )}
                 {(isAdmin || isRoot) && (
                   <DropdownMenuItem onClick={() => router.push("/admin/suporte")}>
                     <Inbox className="mr-2 h-4 w-4" />
-                    <span>Gestão de Suporte</span>
+                    <span className="flex-1">Gestão de Suporte</span>
+                    {pendingChamadosCount > 0 && (
+                      <span className="ml-2 rounded-full bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.5 leading-none">{pendingChamadosCount}</span>
+                    )}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />

@@ -34,12 +34,6 @@ export function useChamados(options?: { municipioIdOverride?: string }) {
       return;
     }
 
-    if (profile.role === 'root' && !options?.municipioIdOverride) {
-      setChamados([]);
-      setNeedsMunicipioSelection(true);
-      setLoading(false);
-      return;
-    }
     setNeedsMunicipioSelection(false);
 
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -52,12 +46,17 @@ export function useChamados(options?: { municipioIdOverride?: string }) {
     }
 
     if (db && !configError) {
+      // Root sem cidade escolhida vê todos os chamados, de qualquer município
+      // (mesmo padrão já usado pra usuários em admin/usuarios/page.tsx) — só
+      // filtra por município quando root escolhe uma cidade, ou sempre pro gestor.
       const targetMunicipioId = profile.role === 'root'
-        ? normalizeId(options!.municipioIdOverride!)
+        ? (options?.municipioIdOverride ? normalizeId(options.municipioIdOverride) : undefined)
         : profile.municipioId;
 
       // Fiscal comum só vê os próprios chamados; admin/root vê todos do município.
-      const q = isGestor
+      const q = profile.role === 'root' && !targetMunicipioId
+        ? query(collection(db, "chamados"), orderBy("createdAt", "desc"))
+        : isGestor
         ? query(collection(db, "chamados"), where("municipioId", "==", targetMunicipioId), orderBy("createdAt", "desc"))
         : query(collection(db, "chamados"), where("municipioId", "==", targetMunicipioId), where("createdBy", "==", user.uid), orderBy("createdAt", "desc"));
 

@@ -1,7 +1,7 @@
 
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
-import { Inter } from 'next/font/google';
+import { Inter, Source_Serif_4 } from 'next/font/google';
 import { Toaster } from "@/components/ui/toaster"
 import { cn } from '@/lib/utils';
 import { AppHeader } from '@/components/app-header';
@@ -12,15 +12,16 @@ import { AgendamentoAlarmListener } from '@/components/agendamento-alarm-listene
 import { PwaInstallListener } from '@/components/pwa-install-listener';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
+const sourceSerif = Source_Serif_4({ subsets: ['latin'], variable: '--font-serif' });
 
 export const metadata: Metadata = {
-  title: 'vigilanT | Inspect. Protect. Empower.',
+  title: 'Fiscal-X | Inspect. Protect. Empower.',
   description: 'Sistema inteligente para gestão de fiscalização sanitária.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'vigilanT',
+    title: 'Fiscal-X',
   },
   icons: {
     icon: [
@@ -52,7 +53,8 @@ export default function RootLayout({
       <body
         className={cn(
           "min-h-screen font-sans antialiased selection:bg-primary/10",
-          inter.variable
+          inter.variable,
+          sourceSerif.variable
         )}
       >
         <ThemeProvider

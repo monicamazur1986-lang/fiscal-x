@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useAuth } from "@/hooks/use-auth"
 import { useMessages, useComments } from "@/hooks/use-messages"
-import { useStorage } from "@/firebase"
+import { storage } from "@/lib/firebase"
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
 import { 
   Plus, 
@@ -40,7 +40,6 @@ import { useToast } from "@/hooks/use-toast"
 
 export default function RecadosPage() {
   const { profile } = useAuth()
-  const storage = useStorage()
   const { toast } = useToast()
   
   const { messages, loadingMessages, sendMessage, deleteMessage, toggleLike } = useMessages()

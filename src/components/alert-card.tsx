@@ -12,14 +12,14 @@ interface AlertCardProps {
   href: string;
 }
 
-const TONE_STYLES: Record<AlertCardProps["tone"], { card: string; icon: string }> = {
+const TONE_STYLES: Record<AlertCardProps["tone"], { bar: string; icon: string }> = {
   urgent: {
-    card: "border-rose-100 bg-rose-50/80 hover:bg-rose-50",
-    icon: "bg-rose-500 text-white",
+    bar: "bg-rose-500",
+    icon: "bg-rose-50 text-rose-600",
   },
   warning: {
-    card: "border-amber-100 bg-amber-50/80 hover:bg-amber-50",
-    icon: "bg-amber-500 text-white",
+    bar: "bg-amber-500",
+    icon: "bg-amber-50 text-amber-600",
   },
 };
 
@@ -29,19 +29,17 @@ export function AlertCard({ icon: Icon, tone, title, description, href }: AlertC
   return (
     <Link
       href={href}
-      className={cn(
-        "group flex items-center gap-4 rounded-2xl border p-4 shadow-sm transition-colors",
-        styles.card
-      )}
+      className="group relative flex items-center gap-4 overflow-hidden rounded-lg border border-[#E4DFD1] bg-white pl-5 pr-4 py-3.5 shadow-[0_1px_2px_rgba(38,36,32,0.04)] transition-colors hover:bg-[#FAF8F3]"
     >
-      <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl", styles.icon)}>
+      <span className={cn("absolute left-0 top-0 bottom-0 w-[3px]", styles.bar)} />
+      <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full", styles.icon)}>
         <Icon className="h-5 w-5" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold text-slate-900 truncate">{title}</p>
-        {description && <p className="text-xs text-slate-500 truncate">{description}</p>}
+        <p className="font-serif text-sm text-[#262420] truncate">{title}</p>
+        {description && <p className="text-xs text-[#A39D8C] truncate mt-0.5">{description}</p>}
       </div>
-      <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5" />
+      <ChevronRight className="h-4 w-4 shrink-0 text-[#C9C2AC] transition-transform group-hover:translate-x-0.5" />
     </Link>
   );
 }

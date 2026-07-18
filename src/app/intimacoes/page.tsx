@@ -36,6 +36,7 @@ import {
   Save
 } from "lucide-react"
 
+import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -63,8 +64,9 @@ import {
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { format, addDays, isWeekend, startOfDay, differenceInDays } from "date-fns"
+import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { calculateDeadline } from "@/lib/prazo"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -102,21 +104,6 @@ interface RelatorioMunicipal {
   };
 }
 
-/**
- * Função para calcular a data final pulando finais de semana (Dias Úteis)
- */
-function addBusinessDays(startDate: Date, days: number): Date {
-  let date = new Date(startDate);
-  let addedDays = 0;
-  while (addedDays < days) {
-    date = addDays(date, 1);
-    if (!isWeekend(date)) {
-      addedDays++;
-    }
-  }
-  return date;
-}
-
 export default function DocumentosPage() {
   const { profile } = useAuth();
   const { config } = useAppConfig();
@@ -129,7 +116,7 @@ export default function DocumentosPage() {
   const { intimacoes, bulkMoveToFolder, bulkDelete, permanentDelete, saveIntimacao, loading: loadingInt, isOnline, needsMunicipioSelection } = useIntimacoes(
     isRoot ? { municipioIdOverride: selectedMunicipioForRoot || undefined } : undefined
   );
-  const { folders, createFolder, loading: loadingFold } = useFolders();
+  const { folders, createFolder, loading: loadingFold } = useFolders('intimacoes');
 
   const filteredMunicipiosPicker = useMemo(() => {
     const term = normalizeId(municipioSearchTerm);
@@ -172,22 +159,6 @@ export default function DocumentosPage() {
     });
     return Array.from(fiscais.entries()).map(([id, nome]) => ({ id, nome }));
   }, [intimacoes]);
-
-  const calculateDeadline = (doc: any) => {
-    if (doc.status !== 'finalizado') return null;
-    const baseDate = doc.dataIntimacao ? new Date(doc.dataIntimacao) : new Date();
-    const daysAllowed = doc.prazoDias || 15;
-    
-    const deadlineDate = addBusinessDays(baseDate, daysAllowed);
-    const today = startOfDay(new Date());
-    const remaining = differenceInDays(deadlineDate, today);
-    
-    return {
-      remaining,
-      date: format(deadlineDate, "dd/MM/yyyy"),
-      status: remaining < 0 ? 'vencido' : remaining <= 3 ? 'alerta' : 'normal'
-    };
-  };
 
   const stats = useMemo(() => {
     const total = intimacoes.filter(i => !i.deleted).length;
@@ -441,135 +412,136 @@ export default function DocumentosPage() {
 
   if (loadingInt || loadingFold) {
     return (
-      <div className="flex h-[80vh] w-full flex-col items-center justify-center gap-4">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Sincronizando Arquivo Municipal...</p>
+      <div className="flex h-[80vh] w-full flex-col items-center justify-center gap-4 bg-[#F5F2EA]">
+        <Loader2 className="h-8 w-8 animate-spin text-[#0E4A44]" />
+        <p className="text-xs font-medium text-[#A39D8C] uppercase tracking-widest">Sincronizando Arquivo Municipal...</p>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-8 font-sans">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        <aside className="lg:col-span-3 space-y-6">
-          <div className="space-y-1 px-4">
-            <h2 className="text-2xl font-black uppercase tracking-tighter text-zinc-900 italic">Arquivos</h2>
-            {isRoot ? (
-              <Popover open={municipioPickerOpen} onOpenChange={setMunicipioPickerOpen}>
-                <PopoverTrigger asChild>
-                  <button className="flex items-center gap-1.5 text-[8px] font-black text-primary uppercase tracking-widest hover:opacity-70 transition-opacity">
-                    <Building2 className="h-3 w-3" />
-                    {selectedMunicipioForRoot ? selectedMunicipioForRoot.toUpperCase() : "SELECIONAR MUNICÍPIO"}
-                    <ChevronsUpDown className="h-3 w-3 opacity-50" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[280px] p-0 bg-white border-slate-200 rounded-2xl shadow-2xl">
-                  <Command className="bg-transparent" shouldFilter={false}>
-                    <CommandInput
-                      placeholder="Pesquisar município..."
-                      value={municipioSearchTerm}
-                      onValueChange={setMunicipioSearchTerm}
-                      className="h-11 border-none focus:ring-0"
-                    />
-                    <CommandList className="max-h-[300px] overflow-y-auto">
-                      {filteredMunicipiosPicker.length === 0 && (
-                        <CommandEmpty className="p-4 text-center text-[10px] text-slate-400 uppercase font-bold">Não encontrado.</CommandEmpty>
-                      )}
-                      <CommandGroup>
-                        {filteredMunicipiosPicker.map((m) => (
-                          <div
-                            key={m}
-                            onClick={() => { setSelectedMunicipioForRoot(m); setMunicipioPickerOpen(false); setMunicipioSearchTerm(""); }}
-                            className="hover:bg-blue-50 cursor-pointer py-3 px-4 transition-colors font-bold uppercase text-[11px] border-b border-slate-50 last:border-0"
-                          >
-                            {m}
-                          </div>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            ) : (
-              <p className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">{profile?.municipioNome || "SISTEMA"}</p>
-            )}
-          </div>
+    <div className="min-h-screen bg-[#F5F2EA]">
+      <DocfacilTopbar
+        backHref="/dashboard"
+        title="Documentos"
+        subtitle={isRoot ? (selectedMunicipioForRoot || "Selecione um município") : (profile?.municipioNome || "Arquivo municipal de autuações")}
+        actions={isRoot ? (
+          <Popover open={municipioPickerOpen} onOpenChange={setMunicipioPickerOpen}>
+            <PopoverTrigger asChild>
+              <button className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-900 transition-colors">
+                <Building2 className="h-3.5 w-3.5" />
+                {selectedMunicipioForRoot ? selectedMunicipioForRoot : "Selecionar município"}
+                <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[280px] p-0 bg-white border-[#E4DFD1] rounded-lg shadow-lg">
+              <Command className="bg-transparent" shouldFilter={false}>
+                <CommandInput
+                  placeholder="Pesquisar município..."
+                  value={municipioSearchTerm}
+                  onValueChange={setMunicipioSearchTerm}
+                  className="h-10 border-none focus:ring-0 text-sm"
+                />
+                <CommandList className="max-h-[300px] overflow-y-auto">
+                  {filteredMunicipiosPicker.length === 0 && (
+                    <CommandEmpty className="p-4 text-center text-xs text-[#A39D8C] font-medium">Não encontrado.</CommandEmpty>
+                  )}
+                  <CommandGroup>
+                    {filteredMunicipiosPicker.map((m) => (
+                      <div
+                        key={m}
+                        onClick={() => { setSelectedMunicipioForRoot(m); setMunicipioPickerOpen(false); setMunicipioSearchTerm(""); }}
+                        className="hover:bg-[#E4EEEC] cursor-pointer py-2.5 px-4 transition-colors font-medium text-sm border-b border-[#F1EEE4] last:border-0"
+                      >
+                        {m}
+                      </div>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        ) : undefined}
+      />
 
+      <div className="max-w-7xl mx-auto w-full p-4 sm:p-8 pb-40">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+        <aside className="lg:col-span-3 space-y-6">
           <div className="flex flex-col gap-1">
-            <button 
+            <button
               onClick={() => { setActiveFolderId("all"); setFilterByFiscal(null); setSelectedIds([]); }}
               className={cn(
-                "flex items-center justify-between px-5 py-4 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest group",
-                (activeFolderId === "all" && !filterByFiscal) ? "bg-primary text-white shadow-xl shadow-primary/20" : "text-zinc-500 hover:bg-white"
+                "flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm font-medium",
+                (activeFolderId === "all" && !filterByFiscal) ? "bg-[#E4EEEC] text-[#0E4A44]" : "text-[#6B6659] hover:bg-white"
               )}
             >
-              <div className="flex items-center gap-3">
-                <Archive className={cn("h-4 w-4", (activeFolderId === "all" && !filterByFiscal) ? "text-white" : "text-zinc-400")} /> 
+              <div className="flex items-center gap-2.5">
+                <Archive className="h-4 w-4 text-[#A39D8C]" />
                 Visão Geral
               </div>
-              <Badge className={cn("text-[9px] border-none", (activeFolderId === "all" && !filterByFiscal) ? "bg-white/20 text-white" : "bg-zinc-100 text-zinc-500")}>
+              <span className="text-xs text-[#A39D8C] tabular-nums">
                 {intimacoes.filter(i => !i.deleted).length}
-              </Badge>
+              </span>
             </button>
 
             {isGestor && equipeFiscais.length > 0 && (
               <div className="mt-4 space-y-1">
-                <div className="flex items-center gap-2 px-5 mb-2">
-                  <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Equipe de Fiscalização</span>
+                <div className="flex items-center gap-2 px-3 mb-1">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Equipe de Fiscalização</span>
                 </div>
                 {equipeFiscais.map(fiscal => (
-                  <button 
+                  <button
                     key={fiscal.id}
                     onClick={() => { setFilterByFiscal(fiscal.id); setActiveFolderId("all"); setSelectedIds([]); }}
                     className={cn(
-                      "flex items-center justify-between px-5 py-3 rounded-xl transition-all font-bold text-[9px] uppercase tracking-widest w-full text-left",
-                      filterByFiscal === fiscal.id ? "bg-slate-900 text-white shadow-lg" : "text-zinc-500 hover:bg-slate-50"
+                      "flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm font-medium w-full text-left",
+                      filterByFiscal === fiscal.id ? "bg-[#E4EEEC] text-[#0E4A44]" : "text-[#6B6659] hover:bg-white"
                     )}
                   >
-                    <div className="flex items-center gap-3 truncate">
-                      <User className={cn("h-3.5 w-3.5 shrink-0", filterByFiscal === fiscal.id ? "text-primary" : "text-zinc-300")} />
+                    <div className="flex items-center gap-2.5 truncate">
+                      <User className="h-3.5 w-3.5 shrink-0 text-[#A39D8C]" />
                       <span className="truncate">{fiscal.nome}</span>
                     </div>
-                    <Badge className={cn("text-[8px] h-4 border-none", filterByFiscal === fiscal.id ? "bg-white/10 text-white" : "bg-zinc-50 text-zinc-400")}>
+                    <span className="text-xs text-[#A39D8C] tabular-nums shrink-0">
                       {intimacoes.filter(i => !i.deleted && i.createdBy === fiscal.id).length}
-                    </Badge>
+                    </span>
                   </button>
                 ))}
               </div>
             )}
 
-            <div className="h-px bg-zinc-100 my-4 mx-4" />
+            <div className="h-px bg-[#E4DFD1] my-3" />
 
-            <div className="flex items-center justify-between px-5 mb-2">
-              <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Pastas de Trabalho</span>
-              <button onClick={() => setIsFolderDialogOpen(true)} className="text-primary hover:scale-110 transition-transform"><FolderPlus className="h-4 w-4" /></button>
+            <div className="flex items-center justify-between px-3 mb-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Pastas de Trabalho</span>
+              <button onClick={() => setIsFolderDialogOpen(true)} className="text-[#A39D8C] hover:text-[#0E4A44] transition-colors"><FolderPlus className="h-4 w-4" /></button>
             </div>
 
             {folders.map(folder => (
-              <button 
+              <button
                 key={folder.id}
                 onClick={() => { setActiveFolderId(folder.id); setFilterByFiscal(null); setSelectedIds([]); }}
                 className={cn(
-                  "flex items-center justify-between px-5 py-4 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest",
-                  activeFolderId === folder.id ? "bg-amber-500 text-white shadow-xl shadow-amber-500/20" : "text-zinc-500 hover:bg-white"
+                  "flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm font-medium",
+                  activeFolderId === folder.id ? "bg-[#E4EEEC] text-[#0E4A44]" : "text-[#6B6659] hover:bg-white"
                 )}
               >
-                <div className="flex items-center gap-3">
-                  <Folder className={cn("h-4 w-4", activeFolderId === folder.id ? "text-white" : "text-amber-500")} /> {folder.name}
+                <div className="flex items-center gap-2.5">
+                  <Folder className="h-4 w-4 text-[#9C7A3C]" /> {folder.name}
                 </div>
               </button>
             ))}
 
-            <button 
+            <button
               onClick={() => { setActiveFolderId("trash"); setFilterByFiscal(null); setSelectedIds([]); }}
               className={cn(
-                "flex items-center justify-between px-5 py-4 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest mt-4",
-                activeFolderId === "trash" ? "bg-rose-600 text-white shadow-xl shadow-rose-600/20" : "text-zinc-500 hover:bg-rose-50 hover:text-rose-600"
+                "flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm font-medium mt-2",
+                activeFolderId === "trash" ? "bg-rose-50 text-rose-700" : "text-[#6B6659] hover:bg-white"
               )}
             >
-              <div className="flex items-center gap-3">
-                <Trash2 className={cn("h-4 w-4", activeFolderId === "trash" ? "text-white" : "text-rose-400")} /> 
+              <div className="flex items-center gap-2.5">
+                <Trash2 className={cn("h-4 w-4", activeFolderId === "trash" ? "text-rose-500" : "text-[#A39D8C]")} />
                 Lixeira
               </div>
             </button>
@@ -578,33 +550,33 @@ export default function DocumentosPage() {
 
         <main className="lg:col-span-9 space-y-6">
           {isRoot && needsMunicipioSelection ? (
-            <div className="py-32 flex flex-col items-center justify-center gap-4 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[3rem] text-center">
-              <Building2 className="h-12 w-12 text-slate-300" />
-              <p className="text-sm font-black uppercase tracking-widest text-slate-400">Selecione um município para visualizar os documentos</p>
-              <p className="text-[10px] font-bold text-slate-300 uppercase max-w-sm">Use o seletor no topo do menu lateral para escolher qual cidade cliente você quer inspecionar.</p>
+            <div className="py-32 flex flex-col items-center justify-center gap-3 bg-white border border-dashed border-[#E4DFD1] rounded-lg text-center">
+              <Building2 className="h-8 w-8 text-[#C9C2AC]" />
+              <p className="text-sm font-medium text-[#6B6659]">Selecione um município para visualizar os documentos</p>
+              <p className="text-xs text-[#A39D8C] max-w-sm">Use o seletor no topo da página para escolher qual cidade cliente você quer inspecionar.</p>
             </div>
           ) : (
           <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white border border-slate-200 p-6 rounded-[2.5rem] shadow-sm flex items-center gap-5">
-              <div className="h-12 w-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary"><BarChart3 className="h-6 w-6" /></div>
-              <div><p className="text-[8px] font-black uppercase text-zinc-400 tracking-widest">Total Visão</p><h4 className="text-xl font-black italic">{filteredIntimacoes.length} <span className="text-[10px] font-bold text-zinc-400 uppercase">DOCS</span></h4></div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-white border border-[#E4DFD1] rounded-lg p-4 flex items-center gap-3">
+              <BarChart3 className="h-4 w-4 text-[#9C7A3C] shrink-0" />
+              <div><p className="text-xs text-[#A39D8C]">Total na visão</p><p className="font-serif text-xl text-[#262420]">{filteredIntimacoes.length}</p></div>
             </div>
-            <div className="bg-white border border-slate-200 p-6 rounded-[2.5rem] shadow-sm flex items-center gap-5">
-              <div className={cn("h-12 w-12 rounded-2xl flex items-center justify-center", stats.alertas > 0 ? "bg-amber-100 text-amber-600 animate-pulse" : "bg-slate-50 text-slate-300")}><Timer className="h-6 w-6" /></div>
-              <div><p className="text-[8px] font-black uppercase text-zinc-400 tracking-widest">Prazos em Alerta</p><h4 className="text-xl font-black italic">{stats.alertas} <span className="text-[10px] font-bold text-zinc-400">72H ÚTEIS</span></h4></div>
+            <div className="bg-white border border-[#E4DFD1] rounded-lg p-4 flex items-center gap-3">
+              <Timer className={cn("h-4 w-4 shrink-0", stats.alertas > 0 ? "text-amber-500" : "text-[#C9C2AC]")} />
+              <div><p className="text-xs text-[#A39D8C]">Prazos em alerta (72h úteis)</p><p className="font-serif text-xl text-[#262420]">{stats.alertas}</p></div>
             </div>
-            <div className="bg-white border border-slate-200 p-6 rounded-[2.5rem] shadow-sm flex items-center gap-5">
-              <div className={cn("h-12 w-12 rounded-2xl flex items-center justify-center", stats.vencidos > 0 ? "bg-rose-100 text-rose-600" : "bg-slate-50 text-slate-300")}><AlertTriangle className="h-6 w-6" /></div>
-              <div><p className="text-[8px] font-black uppercase text-zinc-400 tracking-widest">Vencidos</p><h4 className="text-xl font-black italic text-rose-600">{stats.vencidos} <span className="text-[10px] font-bold text-zinc-400 uppercase">EXPIRADAS</span></h4></div>
+            <div className="bg-white border border-[#E4DFD1] rounded-lg p-4 flex items-center gap-3">
+              <AlertTriangle className={cn("h-4 w-4 shrink-0", stats.vencidos > 0 ? "text-rose-500" : "text-[#C9C2AC]")} />
+              <div><p className="text-xs text-[#A39D8C]">Vencidos</p><p className={cn("font-serif text-xl", stats.vencidos > 0 ? "text-rose-600" : "text-[#262420]")}>{stats.vencidos}</p></div>
             </div>
           </div>
 
           {minhasIntimacoes.length >= AVISO_A_PARTIR_DE && !dismissedZipBanner && (
-            <div className="bg-amber-50 border border-amber-200 p-5 rounded-[2rem] flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="h-11 w-11 shrink-0 bg-amber-100 rounded-2xl flex items-center justify-center text-amber-600"><Archive className="h-5 w-5" /></div>
-                <p className="text-xs font-bold text-amber-800">
+            <div className="bg-amber-50 border border-amber-200 p-3 rounded-md flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Archive className="h-4 w-4 shrink-0 text-amber-600" />
+                <p className="text-xs text-amber-800">
                   Você está com <strong>{minhasIntimacoes.length} de {LIMITE_DOCUMENTOS}</strong> documentos salvos. Baixe tudo em um único ZIP para liberar espaço.
                 </p>
               </div>
@@ -612,161 +584,153 @@ export default function DocumentosPage() {
                 <Button
                   size="sm"
                   onClick={() => setSelectedIds(minhasIntimacoes.map(i => i.id))}
-                  className="h-10 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-black uppercase tracking-widest gap-2"
+                  className="h-8 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium gap-1.5"
                 >
-                  <CheckSquare className="h-3.5 w-3.5" /> Selecionar Meus Documentos
+                  <CheckSquare className="h-3.5 w-3.5" /> Selecionar meus documentos
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setDismissedZipBanner(true)} className="h-10 rounded-xl text-amber-700 text-[9px] font-black uppercase tracking-widest">
+                <Button size="sm" variant="ghost" onClick={() => setDismissedZipBanner(true)} className="h-8 rounded-md text-amber-700 text-xs font-medium">
                   Dispensar
                 </Button>
               </div>
             </div>
           )}
 
-          <div className="bg-white p-4 rounded-[2rem] border border-zinc-200 shadow-sm flex flex-col sm:flex-row gap-4 items-center">
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-              <Input 
-                placeholder="Pesquisar registros..." 
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A39D8C]" />
+              <Input
+                placeholder="Pesquisar registros..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-11 h-12 rounded-2xl bg-zinc-50 border-none shadow-inner text-sm font-bold"
+                className="pl-9 h-10 rounded-md border-[#E4DFD1] bg-white text-sm"
               />
             </div>
             <div className="flex gap-2">
-                <Button onClick={handleOpenReport} variant="ghost" className="h-12 rounded-2xl gap-2 font-black text-[9px] uppercase tracking-widest text-primary">
+                <Button onClick={handleOpenReport} variant="outline" size="sm" className="h-10 rounded-md gap-1.5 text-xs font-medium border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC]">
                     <BarChart3 className="h-4 w-4" /> Relatório Municipal
                 </Button>
-                <Button onClick={toggleSelectAll} variant="ghost" className="h-12 rounded-2xl gap-2 font-black text-[9px] uppercase tracking-widest text-zinc-500">
-                    {selectedIds.length > 0 && selectedIds.length === filteredIntimacoes.length ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4" />}
-                    {selectedIds.length > 0 ? `${selectedIds.length} Selecionados` : "Selecionar Tudo"}
+                <Button onClick={toggleSelectAll} variant="outline" size="sm" className="h-10 rounded-md gap-1.5 text-xs font-medium border-[#E4DFD1] bg-white text-[#6B6659] hover:bg-[#F5F2EA]">
+                    {selectedIds.length > 0 && selectedIds.length === filteredIntimacoes.length ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                    {selectedIds.length > 0 ? `${selectedIds.length} selecionados` : "Selecionar tudo"}
                 </Button>
             </div>
           </div>
 
           {selectedIds.length > 0 && (
-            <div className="bg-slate-900 text-white p-4 rounded-[1.5rem] flex items-center justify-between animate-in slide-in-from-top-2 shadow-2xl">
-              <div className="flex items-center gap-4 ml-2">
+            <div className="bg-[#0E4A44] text-white p-3 rounded-md flex items-center justify-between animate-in slide-in-from-top-2">
+              <div className="flex items-center gap-3 ml-1">
                 <button onClick={() => setSelectedIds([])} className="text-zinc-400 hover:text-white"><X className="h-4 w-4" /></button>
-                <span className="text-[10px] font-black uppercase tracking-widest">{selectedIds.length} Itens Selecionados</span>
+                <span className="text-xs font-medium">{selectedIds.length} itens selecionados</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Button onClick={handleTriggerAutomation} disabled={isTriggeringAutomation} size="sm" variant="ghost" className="text-[9px] font-black uppercase tracking-widest gap-2 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10">
+              <div className="flex items-center gap-1">
+                <Button onClick={handleTriggerAutomation} disabled={isTriggeringAutomation} size="sm" variant="ghost" className="h-8 rounded-md text-xs font-medium gap-1.5 text-amber-400 hover:text-amber-300 hover:bg-white/10">
                   {isTriggeringAutomation ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
                   {isTriggeringAutomation ? "Automação n8n..." : "n8n Automatizar"}
                 </Button>
                 {activeFolderId === 'trash' ? (
-                    <Button size="sm" variant="ghost" onClick={handleBulkRestore} className="text-[9px] font-black uppercase tracking-widest gap-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10">
+                    <Button size="sm" variant="ghost" onClick={handleBulkRestore} className="h-8 rounded-md text-xs font-medium gap-1.5 text-emerald-400 hover:text-emerald-300 hover:bg-white/10">
                         <RotateCcw className="h-4 w-4" /> Restaurar
                     </Button>
                 ) : (
                     <>
-                        <Button size="sm" variant="ghost" onClick={() => setIsMoveDialogOpen(true)} className="text-[9px] font-black uppercase tracking-widest gap-2 hover:bg-white/10">
-                            <MoveHorizontal className="h-4 w-4" /> Mover Pasta
+                        <Button size="sm" variant="ghost" onClick={() => setIsMoveDialogOpen(true)} className="h-8 rounded-md text-xs font-medium gap-1.5 hover:bg-white/10">
+                            <MoveHorizontal className="h-4 w-4" /> Mover pasta
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={handleBulkDownloadZip} disabled={isZipping} className="text-[9px] font-black uppercase tracking-widest gap-2 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10">
+                        <Button size="sm" variant="ghost" onClick={handleBulkDownloadZip} disabled={isZipping} className="h-8 rounded-md text-xs font-medium gap-1.5 text-cyan-400 hover:text-cyan-300 hover:bg-white/10">
                             {isZipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
                             {isZipping ? `Gerando ${zipProgress.current}/${zipProgress.total}...` : "Baixar ZIP"}
                         </Button>
                     </>
                 )}
-                <Button size="sm" variant="ghost" onClick={handleBulkDelete} className="text-[9px] font-black uppercase tracking-widest gap-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10">
-                  <Trash2 className="h-4 w-4" /> {activeFolderId === 'trash' ? 'Excluir Definitivo' : 'Lixeira'}
+                <Button size="sm" variant="ghost" onClick={handleBulkDelete} className="h-8 rounded-md text-xs font-medium gap-1.5 text-rose-400 hover:text-rose-300 hover:bg-white/10">
+                  <Trash2 className="h-4 w-4" /> {activeFolderId === 'trash' ? 'Excluir definitivo' : 'Lixeira'}
                 </Button>
               </div>
             </div>
           )}
 
-          <div className="space-y-1.5 pb-20">
+          <div className="bg-white border border-[#E4DFD1] rounded-lg divide-y divide-[#F1EEE4] overflow-hidden shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
             {filteredIntimacoes.length > 0 ? (
               filteredIntimacoes.map(item => {
                 const deadline = calculateDeadline(item);
                 const isFinal = item.status === 'finalizado';
                 const itemId = String(item.id);
-                
+
                 return (
                   <div key={itemId} className={cn(
-                    "flex flex-col sm:flex-row items-center gap-4 p-5 rounded-2xl transition-all border group",
-                    selectedIds.includes(itemId) 
-                      ? "bg-primary/[0.03] border-primary/20 shadow-md" 
-                      : "bg-white border-zinc-100 hover:border-zinc-300 hover:shadow-lg"
+                    "relative flex flex-col sm:flex-row sm:items-center gap-3 pl-5 pr-4 py-3 transition-colors",
+                    selectedIds.includes(itemId) ? "bg-[#F5F2EA]" : "hover:bg-[#FAF8F3]"
                   )}>
-                    <div className="flex items-center gap-4 w-full sm:w-auto">
-                        <Checkbox 
-                        checked={selectedIds.includes(itemId)} 
+                    <span className={cn("absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-sm", isFinal ? "bg-[#1F7A5C]" : "bg-amber-500")} />
+                    <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
+                        <Checkbox
+                        checked={selectedIds.includes(itemId)}
                         onCheckedChange={() => toggleSelect(itemId)}
-                        className="rounded-lg h-5 w-5 border-zinc-300 data-[state=checked]:bg-primary"
+                        className="h-4 w-4 rounded border-[#C9C2AC] data-[state=checked]:bg-[#0E4A44] data-[state=checked]:border-[#0E4A44]"
                         />
-                        <div className={cn(
-                        "h-12 w-12 rounded-xl flex items-center justify-center shrink-0 shadow-sm",
-                        isFinal ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-zinc-50 text-zinc-400 border border-zinc-100"
+                        <span className={cn(
+                          "h-7 w-7 rounded-full border flex items-center justify-center font-serif text-[13px] shrink-0",
+                          isFinal ? "border-[#1F7A5C] text-[#1F7A5C]" : "border-[#E4DFD1] text-[#A39D8C]"
                         )}>
-                        {isFinal ? <CheckCircle2 className="h-6 w-6" /> : <Clock className="h-6 w-6" />}
-                        </div>
+                          {isFinal ? "✓" : "✎"}
+                        </span>
                     </div>
 
-                    <div className="flex-1 min-w-0 grid grid-cols-1 lg:grid-cols-12 gap-4 items-center w-full">
+                    <div className="flex-1 min-w-0 grid grid-cols-1 lg:grid-cols-12 gap-2 lg:gap-4 items-center w-full">
                         <div className="lg:col-span-4 min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
-                                <span className="font-black text-sm uppercase tracking-tight text-slate-900">{item.numeroProcesso || "---"}</span>
-                                <Badge variant="outline" className={cn("text-[7px] font-black uppercase h-4 px-1.5 border-none", isFinal ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
-                                    {isFinal ? 'FINAL' : 'RASCUNHO'}
+                            <div className="flex items-center gap-2">
+                                <span className="font-serif text-[15px] text-[#262420] truncate">{item.numeroProcesso || "---"}</span>
+                                <Badge variant="outline" className={cn("text-[10px] font-medium h-4 px-1.5 border-none", isFinal ? "bg-[#E3F1EA] text-[#1F7A5C]" : "bg-amber-50 text-amber-700")}>
+                                    {isFinal ? 'Final' : 'Rascunho'}
                                 </Badge>
                             </div>
-                            <p className="text-[10px] font-black text-zinc-600 uppercase truncate">
-                                {item.autor || "ESTABELECIMENTO NÃO INFORMADO"}
+                            <p className="text-xs text-[#A39D8C] truncate">
+                                {item.autor || "Estabelecimento não informado"}
                             </p>
                         </div>
 
-                        <div className="lg:col-span-3 flex flex-col justify-center">
-                            <div className="flex items-center gap-2">
-                                <User className="h-3 w-3 text-primary" />
-                                <span className="text-[9px] font-black uppercase text-slate-900 truncate max-w-[120px]">{item.createdByName || "---"}</span>
+                        <div className="lg:col-span-3 flex flex-col justify-center gap-0.5">
+                            <div className="flex items-center gap-1.5 text-xs text-[#6B6659]">
+                                <User className="h-3 w-3 text-[#C9C2AC]" />
+                                <span className="truncate max-w-[140px]">{item.createdByName || "---"}</span>
                             </div>
-                            <div className="flex items-center gap-2 mt-1">
-                                <CalendarDays className="h-3 w-3 text-zinc-400" />
-                                <span className="text-[9px] font-bold text-zinc-400">{item.dataIntimacao ? format(new Date(item.dataIntimacao), "dd MMM yyyy", { locale: ptBR }) : "---"}</span>
+                            <div className="flex items-center gap-1.5 text-xs text-[#A39D8C]">
+                                <CalendarDays className="h-3 w-3 text-[#C9C2AC]" />
+                                <span>{item.dataIntimacao ? format(new Date(item.dataIntimacao), "dd MMM yyyy", { locale: ptBR }) : "---"}</span>
                             </div>
                         </div>
 
                         <div className="lg:col-span-3 flex flex-col justify-center">
                             {isFinal && deadline ? (
                                 <div className={cn(
-                                    "flex flex-col px-4 py-2 rounded-xl border border-dashed",
-                                    deadline.status === 'vencido' ? "bg-rose-50 border-rose-200 text-rose-700" :
-                                    deadline.status === 'alerta' ? "bg-amber-50 border-amber-200 text-amber-700 animate-pulse" :
-                                    "bg-blue-50 border-blue-200 text-blue-700"
+                                    "flex items-center gap-1.5 text-xs font-medium w-fit px-2 py-1 rounded",
+                                    deadline.status === 'vencido' ? "bg-rose-50 text-rose-700" :
+                                    deadline.status === 'alerta' ? "bg-amber-50 text-amber-700" :
+                                    "bg-[#E4EEEC] text-[#0E4A44]"
                                 )}>
-                                    <div className="flex items-center gap-2">
-                                        <Timer className="h-3 w-3" />
-                                        <span className="text-[8px] font-black uppercase tracking-widest">
-                                            {deadline.status === 'vencido' ? 'VENCIDO' : 'PRAZO ÚTIL'}
-                                        </span>
-                                    </div>
-                                    <p className="text-[10px] font-black mt-0.5 uppercase italic">
-                                        {deadline.remaining < 0 
-                                            ? `EXPIRADO HÁ ${Math.abs(deadline.remaining)} DIAS` 
-                                            : `RESTA(M) ${deadline.remaining} DIAS`
-                                        }
-                                    </p>
+                                    <Timer className="h-3 w-3" />
+                                    {deadline.remaining < 0
+                                        ? `Expirado há ${Math.abs(deadline.remaining)} dias`
+                                        : `Resta(m) ${deadline.remaining} dias`
+                                    }
                                 </div>
                             ) : (
-                                <div className="text-[8px] font-black text-zinc-300 uppercase italic">Aguardando Finalização</div>
+                                <span className="text-xs text-[#C9C2AC]">Aguardando finalização</span>
                             )}
                         </div>
 
                         <div className="lg:col-span-2 flex justify-end items-center gap-1">
-                            <Button asChild variant="ghost" size="sm" className="h-10 w-10 rounded-xl text-primary hover:bg-primary/10 transition-all">
-                                <Link href={`/intimacoes/${itemId}`}><ArrowUpRight className="h-5 w-5" /></Link>
+                            <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-md text-[#6B6659] hover:text-[#0E4A44] hover:bg-[#E4EEEC]">
+                                <Link href={`/intimacoes/${itemId}`}><ArrowUpRight className="h-4 w-4" /></Link>
                             </Button>
 
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="sm" className="h-10 w-10 rounded-xl text-zinc-400"><MoreVertical className="h-5 w-5" /></Button>
+                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-md text-[#A39D8C] hover:bg-[#F5F2EA]"><MoreVertical className="h-4 w-4" /></Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="rounded-[1.5rem] w-64 p-2 shadow-2xl">
-                                    <DropdownMenuItem onClick={() => handleOpenAdjustment(itemId)} className="rounded-xl text-[10px] font-black uppercase h-11 px-4 cursor-pointer gap-2"><Scale className="h-3.5 w-3.5" /> Ajustar Prazo</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => { bulkDelete([itemId], true); toast({ title: "Movido para lixeira" }); }} className="rounded-xl text-rose-600 text-[10px] font-black uppercase h-11 px-4 cursor-pointer"><Trash2 className="mr-2 h-4 w-4" /> Mover Lixeira</DropdownMenuItem>
+                                <DropdownMenuContent align="end" className="rounded-md w-56 p-1 shadow-lg">
+                                    <DropdownMenuItem onClick={() => handleOpenAdjustment(itemId)} className="rounded text-xs font-medium h-9 px-3 cursor-pointer gap-2"><Scale className="h-3.5 w-3.5" /> Ajustar prazo</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => { bulkDelete([itemId], true); toast({ title: "Movido para lixeira" }); }} className="rounded text-rose-600 text-xs font-medium h-9 px-3 cursor-pointer"><Trash2 className="mr-2 h-3.5 w-3.5" /> Mover pra lixeira</DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
@@ -775,9 +739,9 @@ export default function DocumentosPage() {
                 )
               })
             ) : (
-              <div className="flex flex-col items-center justify-center py-40 bg-zinc-50 border-2 border-dashed border-zinc-200 rounded-[3rem]">
-                <Archive className="h-16 w-16 text-zinc-200 mb-4" />
-                <p className="text-[10px] font-black uppercase text-zinc-400 tracking-[0.3em]">Nenhum registro encontrado</p>
+              <div className="flex flex-col items-center justify-center py-24 gap-2">
+                <Archive className="h-8 w-8 text-[#D8D2C0]" />
+                <p className="text-xs text-[#A39D8C]">Nenhum registro encontrado</p>
               </div>
             )}
           </div>
@@ -785,35 +749,36 @@ export default function DocumentosPage() {
           )}
         </main>
       </div>
+      </div>
 
       <Dialog open={isFolderDialogOpen} onOpenChange={setIsFolderDialogOpen}>
-        <DialogContent className="rounded-[2.5rem] sm:max-w-md">
+        <DialogContent className="rounded-lg sm:max-w-md bg-[#FCFAF5]">
             <DialogHeader>
-                <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Nova Pasta</DialogTitle>
-                <DialogDescription className="text-[10px] font-bold uppercase tracking-widest">Organize seus documentos municipais</DialogDescription>
+                <DialogTitle className="font-serif text-lg text-[#262420]">Nova Pasta</DialogTitle>
+                <DialogDescription className="text-xs text-[#A39D8C]">Organize seus documentos municipais</DialogDescription>
             </DialogHeader>
-            <div className="py-6 space-y-4">
+            <div className="py-4 space-y-3">
                 <div className="space-y-1.5">
-                    <Label className="text-[9px] font-black uppercase text-zinc-400 ml-1">Nome da Pasta</Label>
-                    <Input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="EX: VISTORIAS 2024" className="h-12 rounded-xl bg-slate-50 border-none font-bold uppercase text-xs" />
+                    <Label className="text-xs font-medium text-[#6B6659]">Nome da Pasta</Label>
+                    <Input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Ex: Vistorias 2024" className="h-10 rounded-md border-[#E4DFD1] bg-white text-sm" />
                 </div>
             </div>
             <DialogFooter>
-                <Button onClick={handleCreateFolder} className="w-full h-12 rounded-xl font-black uppercase text-[10px]">Criar Pasta</Button>
+                <Button onClick={handleCreateFolder} size="sm" className="w-full h-9 rounded-md text-xs font-medium bg-[#0E4A44] hover:bg-[#0B3A35]">Criar Pasta</Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isMoveDialogOpen} onOpenChange={setIsMoveDialogOpen}>
-        <DialogContent className="rounded-[2.5rem] sm:max-w-md">
+        <DialogContent className="rounded-lg sm:max-w-md bg-[#FCFAF5]">
             <DialogHeader>
-                <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Mover Selecionados</DialogTitle>
-                <DialogDescription className="text-[10px] font-bold uppercase tracking-widest">Selecione o destino para {selectedIds.length} itens</DialogDescription>
+                <DialogTitle className="font-serif text-lg text-[#262420]">Mover Selecionados</DialogTitle>
+                <DialogDescription className="text-xs text-[#A39D8C]">Selecione o destino para {selectedIds.length} itens</DialogDescription>
             </DialogHeader>
-            <div className="py-6 space-y-2">
-                <button onClick={() => handleMoveToFolder(null)} className="w-full text-left p-4 rounded-xl hover:bg-slate-50 font-black text-[10px] uppercase text-zinc-400 border border-zinc-100 transition-all">VISÃO GERAL (RAIZ)</button>
+            <div className="py-4 space-y-1">
+                <button onClick={() => handleMoveToFolder(null)} className="w-full text-left px-3 py-2.5 rounded-md hover:bg-[#E4EEEC] text-sm font-medium text-[#6B6659] border border-[#E4DFD1] bg-white transition-colors">Visão geral (raiz)</button>
                 {folders.map(f => (
-                    <button key={f.id} onClick={() => handleMoveToFolder(f.id)} className="w-full text-left p-4 rounded-xl hover:bg-amber-50 hover:border-amber-200 font-black text-[10px] uppercase text-amber-600 border border-zinc-100 transition-all flex items-center gap-3">
+                    <button key={f.id} onClick={() => handleMoveToFolder(f.id)} className="w-full text-left px-3 py-2.5 rounded-md hover:bg-[#F1E9D6] hover:border-[#9C7A3C] text-sm font-medium text-[#9C7A3C] border border-[#E4DFD1] bg-white transition-colors flex items-center gap-2.5">
                         <Folder className="h-4 w-4" /> {f.name}
                     </button>
                 ))}
@@ -822,37 +787,37 @@ export default function DocumentosPage() {
       </Dialog>
 
       <Dialog open={isAdjustmentDialogOpen} onOpenChange={setIsAdjustmentDialogOpen}>
-        <DialogContent className="rounded-[2.5rem] sm:max-w-md">
+        <DialogContent className="rounded-lg sm:max-w-md bg-[#FCFAF5]">
             <DialogHeader>
-                <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Ajuste de Prazo Legal</DialogTitle>
-                <DialogDescription className="text-[10px] font-bold uppercase tracking-widest">Personalização de vencimento útil</DialogDescription>
+                <DialogTitle className="font-serif text-lg text-[#262420]">Ajuste de Prazo Legal</DialogTitle>
+                <DialogDescription className="text-xs text-[#A39D8C]">Personalização de vencimento útil</DialogDescription>
             </DialogHeader>
-            <div className="py-6 space-y-6">
+            <div className="py-4 space-y-4">
                 <div className="space-y-1.5">
-                    <Label className="text-[9px] font-black uppercase text-zinc-400 ml-1">Dias Úteis para Defesa</Label>
-                    <Input type="number" value={customDays} onChange={e => setCustomDays(e.target.value)} className="h-12 rounded-xl bg-slate-50 border-none font-bold text-xs" />
+                    <Label className="text-xs font-medium text-[#6B6659]">Dias Úteis para Defesa</Label>
+                    <Input type="number" value={customDays} onChange={e => setCustomDays(e.target.value)} className="h-10 rounded-md border-[#E4DFD1] bg-white text-sm" />
                 </div>
                 <div className="space-y-1.5">
-                    <Label className="text-[9px] font-black uppercase text-zinc-400 ml-1">Justificativa do Ajuste</Label>
-                    <Textarea value={adjustmentReason} onChange={e => setAdjustmentJustification(e.target.value)} placeholder="Opcional: Motivo da alteração do prazo padrão..." className="min-h-[100px] rounded-xl bg-slate-50 border-none font-medium text-xs uppercase" />
+                    <Label className="text-xs font-medium text-[#6B6659]">Justificativa do Ajuste</Label>
+                    <Textarea value={adjustmentReason} onChange={e => setAdjustmentJustification(e.target.value)} placeholder="Opcional: motivo da alteração do prazo padrão..." className="min-h-[100px] rounded-md border-[#E4DFD1] bg-white text-sm" />
                 </div>
             </div>
             <DialogFooter>
-                <Button onClick={handleApplyAdjustment} className="w-full h-12 rounded-xl font-black uppercase text-[10px]">Recalcular Prazo</Button>
+                <Button onClick={handleApplyAdjustment} size="sm" className="w-full h-9 rounded-md text-xs font-medium bg-[#0E4A44] hover:bg-[#0B3A35]">Recalcular Prazo</Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
-        <DialogContent className="rounded-[2.5rem] sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="rounded-lg sm:max-w-2xl max-h-[85vh] overflow-y-auto bg-[#FCFAF5]">
           <DialogHeader>
-            <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Relatório Municipal</DialogTitle>
-            <DialogDescription className="text-[10px] font-bold uppercase tracking-widest">Autuações aplicadas no ano — visível a todos os usuários do município</DialogDescription>
+            <DialogTitle className="font-serif text-lg text-[#262420]">Relatório Municipal</DialogTitle>
+            <DialogDescription className="text-xs text-[#A39D8C]">Autuações aplicadas no ano — visível a todos os usuários do município</DialogDescription>
           </DialogHeader>
 
           <div className="flex items-center justify-between gap-3 py-2">
             <Select value={String(reportYear)} onValueChange={(v) => handleChangeReportYear(Number(v))}>
-              <SelectTrigger className="w-32 h-11 rounded-xl bg-slate-50 border-none font-bold text-xs">
+              <SelectTrigger className="w-32 h-9 rounded-md border-[#E4DFD1] bg-white text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -861,78 +826,78 @@ export default function DocumentosPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button onClick={handleExportReportCsv} disabled={!reportData} variant="outline" size="sm" className="h-11 rounded-xl gap-2 font-black text-[9px] uppercase tracking-widest">
+            <Button onClick={handleExportReportCsv} disabled={!reportData} variant="outline" size="sm" className="h-9 rounded-md gap-1.5 text-xs font-medium border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC]">
               <ArrowUpRight className="h-3.5 w-3.5" /> Exportar CSV
             </Button>
           </div>
 
           {isLoadingReport ? (
-            <div className="py-16 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+            <div className="py-16 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-[#C9C2AC]" /></div>
           ) : reportData ? (
             <div className="space-y-6 pb-2">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-slate-50 p-4 rounded-2xl text-center">
-                  <p className="text-2xl font-black italic">{reportData.totalNoAno}</p>
-                  <p className="text-[8px] font-black uppercase text-zinc-400 tracking-widest mt-1">Total no Ano</p>
+                <div className="bg-white border border-[#E4DFD1] p-3 rounded-lg text-center">
+                  <p className="font-serif text-xl text-[#262420]">{reportData.totalNoAno}</p>
+                  <p className="text-xs text-[#A39D8C] mt-0.5">Total no ano</p>
                 </div>
-                <div className="bg-emerald-50 p-4 rounded-2xl text-center">
-                  <p className="text-2xl font-black italic text-emerald-600">{reportData.porStatus['finalizado'] || 0}</p>
-                  <p className="text-[8px] font-black uppercase text-zinc-400 tracking-widest mt-1">Finalizados</p>
+                <div className="bg-white border border-[#E4DFD1] p-3 rounded-lg text-center">
+                  <p className="font-serif text-xl text-[#1F7A5C]">{reportData.porStatus['finalizado'] || 0}</p>
+                  <p className="text-xs text-[#A39D8C] mt-0.5">Finalizados</p>
                 </div>
-                <div className="bg-amber-50 p-4 rounded-2xl text-center">
-                  <p className="text-2xl font-black italic text-amber-600">{reportData.porStatus['rascunho'] || 0}</p>
-                  <p className="text-[8px] font-black uppercase text-zinc-400 tracking-widest mt-1">Rascunhos</p>
+                <div className="bg-white border border-[#E4DFD1] p-3 rounded-lg text-center">
+                  <p className="font-serif text-xl text-amber-600">{reportData.porStatus['rascunho'] || 0}</p>
+                  <p className="text-xs text-[#A39D8C] mt-0.5">Rascunhos</p>
                 </div>
-                <div className={cn("p-4 rounded-2xl text-center", (reportData.numeracao.duplicados.length > 0 || reportData.numeracao.acimaDoContador) ? "bg-rose-50" : "bg-cyan-50")}>
-                  <p className={cn("text-2xl font-black italic", (reportData.numeracao.duplicados.length > 0 || reportData.numeracao.acimaDoContador) ? "text-rose-600" : "text-cyan-600")}>{reportData.numeracao.duplicados.length}</p>
-                  <p className="text-[8px] font-black uppercase text-zinc-400 tracking-widest mt-1">Números Duplicados</p>
+                <div className="bg-white border border-[#E4DFD1] p-3 rounded-lg text-center">
+                  <p className={cn("font-serif text-xl", (reportData.numeracao.duplicados.length > 0 || reportData.numeracao.acimaDoContador) ? "text-rose-600" : "text-[#262420]")}>{reportData.numeracao.duplicados.length}</p>
+                  <p className="text-xs text-[#A39D8C] mt-0.5">Números duplicados</p>
                 </div>
               </div>
 
               <div>
-                <p className="text-[9px] font-black uppercase text-zinc-400 tracking-widest mb-2">Por Tipo de Documento</p>
-                <div className="space-y-1.5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C] mb-2">Por Tipo de Documento</p>
+                <div className="space-y-1">
                   {Object.entries(reportData.porTipo).map(([tipo, total]) => (
-                    <div key={tipo} className="flex items-center justify-between bg-slate-50 px-4 py-2.5 rounded-xl text-xs font-bold">
-                      <span className="uppercase text-zinc-600">{tipo}</span>
-                      <span className="text-primary">{total}</span>
+                    <div key={tipo} className="flex items-center justify-between border border-[#F1EEE4] bg-white px-3 py-2 rounded-md text-sm">
+                      <span className="text-[#6B6659]">{tipo}</span>
+                      <span className="font-medium text-[#262420]">{total}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
               <div>
-                <p className="text-[9px] font-black uppercase text-zinc-400 tracking-widest mb-2">Por Fiscal</p>
-                <div className="space-y-1.5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C] mb-2">Por Fiscal</p>
+                <div className="space-y-1">
                   {reportData.porFiscal.map(f => (
-                    <div key={f.nome} className="flex items-center justify-between bg-slate-50 px-4 py-2.5 rounded-xl text-xs font-bold">
-                      <span className="uppercase text-zinc-600">{f.nome}</span>
-                      <span className="text-primary">{f.total}</span>
+                    <div key={f.nome} className="flex items-center justify-between border border-[#F1EEE4] bg-white px-3 py-2 rounded-md text-sm">
+                      <span className="text-[#6B6659]">{f.nome}</span>
+                      <span className="font-medium text-[#262420]">{f.total}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
               <div>
-                <p className="text-[9px] font-black uppercase text-zinc-400 tracking-widest mb-2">Conferência de Numeração</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C] mb-2">Conferência de Numeração</p>
                 {reportData.numeracao.duplicados.length === 0 && reportData.numeracao.gapsInternos.length === 0 && !reportData.numeracao.acimaDoContador ? (
-                  <div className="flex items-center gap-3 bg-emerald-50 text-emerald-700 p-4 rounded-xl text-xs font-bold">
+                  <div className="flex items-center gap-2.5 bg-emerald-50 text-emerald-700 p-3 rounded-md text-sm">
                     <CheckCircle2 className="h-4 w-4 shrink-0" /> Nenhuma inconsistência encontrada na numeração deste ano.
                   </div>
                 ) : (
                   <div className="space-y-2">
                     {reportData.numeracao.duplicados.length > 0 && (
-                      <div className="bg-rose-50 text-rose-700 p-4 rounded-xl text-xs font-bold">
+                      <div className="bg-rose-50 text-rose-700 p-3 rounded-md text-sm">
                         Números duplicados: {reportData.numeracao.duplicados.join(', ')}
                       </div>
                     )}
                     {reportData.numeracao.gapsInternos.length > 0 && (
-                      <div className="bg-amber-50 text-amber-700 p-4 rounded-xl text-xs font-bold">
+                      <div className="bg-amber-50 text-amber-700 p-3 rounded-md text-sm">
                         Números pulados na sequência: {reportData.numeracao.gapsInternos.join(', ')}
                       </div>
                     )}
                     {reportData.numeracao.acimaDoContador && (
-                      <div className="bg-rose-50 text-rose-700 p-4 rounded-xl text-xs font-bold">
+                      <div className="bg-rose-50 text-rose-700 p-3 rounded-md text-sm">
                         Existe documento com número ({reportData.numeracao.maiorSequencialUsado}) maior que o contador oficial ({reportData.numeracao.valorContador}) — possível edição manual indevida do campo Nº.
                       </div>
                     )}
@@ -941,7 +906,7 @@ export default function DocumentosPage() {
               </div>
             </div>
           ) : (
-            <div className="py-16 text-center text-xs font-bold text-zinc-400 uppercase">Nenhum dado encontrado para este ano.</div>
+            <div className="py-16 text-center text-sm text-zinc-400">Nenhum dado encontrado para este ano.</div>
           )}
         </DialogContent>
       </Dialog>

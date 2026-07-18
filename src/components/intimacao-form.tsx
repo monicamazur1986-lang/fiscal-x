@@ -14,6 +14,8 @@ import {
   FileCheck2,
   FileText,
   Maximize2,
+  Download,
+  Share2,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
@@ -129,6 +131,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
     const [isSavingDraft, setIsSavingDraft] = useState(false);
     const [lastAutoSavedAt, setLastAutoSavedAt] = useState<Date | null>(null);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    const [isSharingPdf, setIsSharingPdf] = useState(false);
     const [signatureTarget, setSignatureTarget] = useState<SignatureTarget | null>(null);
     const [editingFiscal, setEditingFiscal] = useState<EditingFiscal | null>(null);
     const [isSearchingCnpj, setIsSearchingCnpj] = useState(false);
@@ -396,11 +399,10 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             setValue('status', 'finalizado');
             if (hasAnexo) anexoMethods.setValue('status', 'finalizado');
             if (result.mainCloudSaved) {
-                toast({ title: "Documento Finalizado" });
+                toast({ title: "Documento Finalizado", description: "Use \"Baixar PDF\" ou \"Compartilhar\" para exportar o documento." });
             } else {
                 toast({ variant: "destructive", title: "Finalizado só neste aparelho", description: "Sem conexão com a nuvem — assim que a internet voltar, abra este documento de novo para confirmar a sincronização." });
             }
-            setTimeout(() => generateAndDownloadPdf(), 1000);
         } catch (e) {
             toast({ variant: "destructive", title: "Falha na Finalização" });
         } finally {
@@ -412,9 +414,10 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
     // Gera o PDF página a página, repetindo o cabeçalho em cada uma (em vez de
     // cortar um único screenshot longo em pedaços de altura fixa). Quando há um
     // Auto de Infração vinculado, suas páginas são anexadas ao MESMO PDF, sem
-    // chamar pdf.save() entre os dois documentos.
-    const generateAndDownloadPdf = async () => {
-      if (!mainDocumentRef.current) return;
+    // chamar pdf.save() entre os dois documentos. Usado tanto por "Baixar PDF"
+    // quanto por "Compartilhar" — cada um decide o que fazer com o PDF pronto.
+    const buildPdf = async (): Promise<{ pdf: any; filename: string } | null> => {
+      if (!mainDocumentRef.current) return null;
       setIsGeneratingPdf(true);
       // Dá tempo do React remover os controles de edição (botões, linhas de quebra)
       // antes de clonarmos o DOM para captura.
@@ -444,12 +447,47 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
         const filename = hasAnexo
           ? `${tipo} + AUTO DE INFRAÇÃO - ${numero}.pdf`
           : `${tipo} - ${numero}.pdf`;
-        pdf.save(filename);
+        return { pdf, filename };
       } catch (e) {
           toast({ variant: "destructive", title: "Erro na geração do PDF." });
+          return null;
       } finally {
           if (stagingEl) document.body.removeChild(stagingEl);
           setIsGeneratingPdf(false);
+      }
+    };
+
+    const handleDownloadPdf = async () => {
+      const result = await buildPdf();
+      if (!result) return;
+      result.pdf.save(result.filename);
+    };
+
+    // Compartilhamento direto (WhatsApp, e-mail, etc.) só é possível de verdade
+    // com o arquivo anexado via Web Share API — links tipo wa.me/mailto: só
+    // pré-preenchem texto, nunca conseguem anexar um PDF. Onde o navegador não
+    // suportar (comum em desktop), cai pro download normal com um aviso.
+    const handleSharePdf = async () => {
+      setIsSharingPdf(true);
+      try {
+        const result = await buildPdf();
+        if (!result) return;
+        const blob = result.pdf.output('blob') as Blob;
+        const file = new File([blob], result.filename, { type: 'application/pdf' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({ files: [file], title: result.filename });
+            return;
+          } catch (e: any) {
+            if (e?.name === 'AbortError') return; // Usuário cancelou a folha de compartilhamento.
+          }
+        }
+
+        result.pdf.save(result.filename);
+        toast({ title: "PDF baixado", description: "Seu navegador não suporta compartilhamento direto de arquivo — anexe o PDF baixado manualmente." });
+      } finally {
+        setIsSharingPdf(false);
       }
     };
 
@@ -467,7 +505,12 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                 setValue("reu", data.responsavel_legal);
                 setValue("telefone", data.telefone || "");
                 setValue("cnae", data.cnae || "");
+            } else {
+                const errData = await res.json().catch(() => null);
+                toast({ variant: "destructive", title: "CNPJ não localizado", description: errData?.message });
             }
+        } catch (err) {
+            toast({ variant: "destructive", title: "Erro ao consultar CNPJ", description: "Verifique sua conexão e tente novamente." });
         } finally { setIsSearchingCnpj(false); }
     };
 
@@ -578,7 +621,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                     )}
                 </div>
 
-                {!isFinalized && (
+                {!isFinalized ? (
                     <div className="fixed bottom-3 right-3 z-[100] no-print flex items-center gap-2">
                         {lastAutoSavedAt && (
                             <span className="hidden sm:inline text-[9px] font-bold uppercase tracking-widest text-zinc-400 bg-white/90 px-3 py-1.5 rounded-full border border-zinc-200 shadow-sm">
@@ -594,6 +637,15 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                             </Button>
                         </div>
                     </div>
+                ) : (
+                    <div className="fixed bottom-3 right-3 z-[100] no-print flex items-center gap-2 bg-white/95 backdrop-blur-xl border border-zinc-200 rounded-2xl shadow-lg p-2">
+                        <Button type="button" onClick={handleDownloadPdf} disabled={isGeneratingPdf || isSharingPdf} variant="outline" size="sm" className="h-10 px-4 rounded-xl border-zinc-300 text-zinc-600 font-black uppercase text-[10px] tracking-widest gap-2">
+                            {isGeneratingPdf && !isSharingPdf ? <Loader2 className="animate-spin h-4 w-4" /> : <Download className="h-4 w-4" />} Baixar PDF
+                        </Button>
+                        <Button type="button" onClick={handleSharePdf} disabled={isGeneratingPdf || isSharingPdf} size="sm" className="h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white gap-2 rounded-xl font-black uppercase text-[10px] tracking-widest">
+                            {isSharingPdf ? <Loader2 className="animate-spin h-4 w-4" /> : <Share2 className="h-4 w-4" />} Compartilhar
+                        </Button>
+                    </div>
                 )}
             </div>
 
@@ -603,8 +655,8 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                         <AlertDialogTitle className="font-black uppercase tracking-tighter text-xl italic">Finalizar Documento?</AlertDialogTitle>
                         <AlertDialogDescription>
                             {hasAnexo
-                                ? "Isso trava a edição do Termo e do Auto de Infração vinculado, sincroniza os dois na nuvem e baixa o PDF único. Não será possível editar depois."
-                                : "Isso trava a edição do documento, sincroniza na nuvem e baixa o PDF oficial. Não será possível editar depois."}
+                                ? "Isso trava a edição do Termo e do Auto de Infração vinculado e sincroniza os dois na nuvem. Depois de finalizar, use \"Baixar PDF\" ou \"Compartilhar\" para exportar. Não será possível editar depois."
+                                : "Isso trava a edição do documento e sincroniza na nuvem. Depois de finalizar, use \"Baixar PDF\" ou \"Compartilhar\" para exportar. Não será possível editar depois."}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

@@ -130,6 +130,7 @@ export function useDocfacil() {
     destinatario: string;
     assunto: string;
     conteudo: string;
+    folderId?: string;
   }): Promise<DocfacilDocumento> => {
     if (!db || !municipioId || !profile) throw new Error('Sem conexão com a nuvem.');
     const year = new Date().getFullYear();
@@ -150,6 +151,11 @@ export function useDocfacil() {
     return novo;
   }, [db, municipioId, profile, nextCounter]);
 
+  const moverDocumento = useCallback(async (id: string, folderId: string | null) => {
+    if (!db) return;
+    await setDoc(doc(db, 'docfacilDocumentos', id), { folderId: folderId || "" }, { merge: true });
+  }, [db]);
+
   return {
     modelos,
     documentos,
@@ -157,6 +163,7 @@ export function useDocfacil() {
     salvarModelo,
     excluirModelo,
     salvarDocumento,
+    moverDocumento,
     getModeloById: (id: string) => modelos.find((m) => m.id === id) || null,
   };
 }

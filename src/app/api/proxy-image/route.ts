@@ -4,9 +4,24 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 /**
- * URL PERMANENTE DO SÍMBOLO MUNICIPAL DE PRUDENTÓPOLIS
+ * FALLBACK "EM BRANCO" — pixel transparente, não uma imagem/marca real.
+ * Este proxy só é chamado quando o cliente JÁ tem um brasão municipal
+ * configurado (config.logoUrl); se o Storage estiver indisponível e o
+ * download falhar, é melhor não mostrar nenhuma imagem do que mostrar uma
+ * marca errada (ex.: o mascote do sistema) no lugar do brasão do município.
  */
-const OFFICIAL_LOGO_URL = "https://firebasestorage.googleapis.com/v0/b/firebasestudio-1937074168.appspot.com/o/user-uploads%2F67b6653d9e6e872d80ef618e%2Flogo_horizontal_preto_transparente.jpg?alt=media";
+function fallbackImage() {
+  const transparentPixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+  return new NextResponse(transparentPixel, {
+    status: 200,
+    headers: {
+      'Content-Type': 'image/gif',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+    },
+  });
+}
 
 /**
  * PROXY DE DADOS BINÁRIOS COM SUPORTE A CORS
@@ -16,22 +31,27 @@ const OFFICIAL_LOGO_URL = "https://firebasestorage.googleapis.com/v0/b/firebases
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+    // searchParams.get() já decodifica o parâmetro uma vez — chamar
+    // decodeURIComponent() de novo aqui decodificava duas vezes, virando o
+    // %2F (barra codificada, parte legítima do caminho do arquivo no
+    // Storage, ex.: municipios%2Fprudentopolis%2Fshield_...) numa barra "/"
+    // de verdade e quebrando a URL de download da imagem.
     const rawUrl = searchParams.get('url');
-    
-    // Decodifica e limpa a URL do alvo
-    const targetUrl = (rawUrl && rawUrl !== 'undefined' && rawUrl !== 'null' && rawUrl !== '') 
-      ? decodeURIComponent(rawUrl).trim() 
-      : OFFICIAL_LOGO_URL;
+    const targetUrl = (rawUrl && rawUrl !== 'undefined' && rawUrl !== 'null' && rawUrl !== '')
+      ? rawUrl.trim()
+      : null;
 
     // Se for um Data URL (Base64), não precisamos de proxy, retorna erro para o cliente usar direto
-    if (targetUrl.startsWith('data:')) {
+    if (targetUrl?.startsWith('data:')) {
       return new NextResponse('Data URLs should be handled on client side', { status: 400 });
     }
+
+    if (!targetUrl) return fallbackImage();
 
     return await fetchImage(targetUrl);
   } catch (error) {
     console.error('Proxy Request Parsing Error:', error);
-    return fetchImage(OFFICIAL_LOGO_URL);
+    return fallbackImage();
   }
 }
 
@@ -49,7 +69,7 @@ async function fetchImage(url: string) {
 
     const arrayBuffer = await response.arrayBuffer();
     const contentType = response.headers.get('Content-Type') || 'image/jpeg';
-    
+
     return new NextResponse(arrayBuffer, {
       status: 200,
       headers: {
@@ -61,21 +81,6 @@ async function fetchImage(url: string) {
     });
   } catch (error) {
     console.error('Proxy Error for URL:', url, error);
-    
-    // Fallback recursivo seguro: Tenta o logo oficial se o URL do usuário falhar
-    if (url !== OFFICIAL_LOGO_URL) {
-      return fetchImage(OFFICIAL_LOGO_URL);
-    }
-    
-    // Se até o oficial falhar, retorna um pixel transparente em GIF
-    const transparentPixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
-    return new NextResponse(transparentPixel, {
-      status: 200,
-      headers: { 
-        'Content-Type': 'image/gif', 
-        'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'public, max-age=86400'
-      },
-    });
+    return fallbackImage();
   }
 }

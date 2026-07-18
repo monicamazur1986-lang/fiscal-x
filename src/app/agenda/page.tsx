@@ -58,7 +58,7 @@ type CategoryFilter = 'all' | 'pendente' | 'prazo' | 'concluido' | 'arquivado';
 
 export default function AgendaPage() {
   const { profile } = useAuth()
-  const { inspecoes, saveInspecao, deleteInspecao, loading } = useInspecoes()
+  const { inspecoes, saveInspecao, deleteInspecao, loading, pendingSyncCount } = useInspecoes()
   const { autoridades } = useAutoridades()
   
   const [mounted, setMounted] = useState(false)
@@ -85,7 +85,7 @@ export default function AgendaPage() {
     setMounted(true)
     setDataAgendamento(format(new Date(), "yyyy-MM-dd"))
     setSelectedFiscalId(profile?.uid || "")
-    setAlertasAtivos(window.localStorage.getItem('vigilant_alertas_ativados') === '1')
+    setAlertasAtivos(window.localStorage.getItem('fiscal_x_alertas_ativados') === '1')
   }, [profile])
 
   const handleAtivarAlertas = useCallback(async () => {
@@ -94,7 +94,7 @@ export default function AgendaPage() {
     try {
       const resultado = await ativarAlertasNesteDispositivo(profile.uid)
       if (resultado.ok) {
-        window.localStorage.setItem('vigilant_alertas_ativados', '1')
+        window.localStorage.setItem('fiscal_x_alertas_ativados', '1')
         setAlertasAtivos(true)
         toast({ title: "Alertas Ativados", description: "Você vai receber notificação mesmo com o app fechado." })
       } else {
@@ -181,7 +181,7 @@ export default function AgendaPage() {
       const dataCompleta = new Date(year, month - 1, day, h, m, 0, 0)
       const fiscal = autoridades.find(a => a.id === selectedFiscalId) || { nome: profile?.displayName || "Fiscal", id: profile?.uid || "" };
       
-      await saveInspecao({
+      const resultado = await saveInspecao({
         titulo,
         descricao,
         data: dataCompleta,
@@ -193,8 +193,15 @@ export default function AgendaPage() {
         // cujo alerta já tinha sido enviado).
         alertaEnviadoEm: '',
       }, editingInspecao?.id)
-      
-      toast({ title: editingInspecao ? "Registro Atualizado" : "Agendamento Salvo" })
+
+      if (resultado.synced) {
+        toast({ title: editingInspecao ? "Registro Atualizado" : "Agendamento Salvo" })
+      } else {
+        toast({
+          title: "Salvo neste aparelho",
+          description: "Sem conexão no momento — vai sincronizar automaticamente assim que a internet voltar."
+        })
+      }
       setIsDialogOpen(false)
       setEditingInspecao(null)
     } catch (error) {
@@ -255,6 +262,12 @@ export default function AgendaPage() {
               <CalendarIcon className="h-5 w-5" />
             </div>
             <h1 className="text-xl lg:text-2xl font-black italic tracking-tighter text-slate-900 uppercase">Gestão de Agenda</h1>
+            {pendingSyncCount > 0 && (
+              <span className="flex items-center gap-1.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-bold px-3 py-1">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                {pendingSyncCount === 1 ? '1 agendamento sincronizando...' : `${pendingSyncCount} agendamentos sincronizando...`}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-3 w-full lg:w-auto">

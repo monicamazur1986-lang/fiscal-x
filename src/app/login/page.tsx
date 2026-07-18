@@ -22,7 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Mail } from "lucide-react";
 
 export default function LoginPage() {
-  const { user, loginWithEmailPassword, resetPassword, isAuthorized, loading: authLoading } = useAuth();
+  const { user, profile, loginWithEmailPassword, resetPassword, isAuthorized, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -35,6 +35,7 @@ export default function LoginPage() {
   const [isResetOpen, setIsResetOpen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [isSendingReset, setIsSendingReset] = useState(false);
+  const [pendingLoginToast, setPendingLoginToast] = useState(false);
 
   useEffect(() => {
     setEmail(getLastUsedEmail());
@@ -46,6 +47,30 @@ export default function LoginPage() {
     }
   }, [user, isAuthorized, router]);
 
+  // Só mostra o toast de resultado do login depois que o perfil (status de
+  // aprovação) terminar de carregar — evita dizer "Acesso Autorizado" pra
+  // quem ainda está pendente só porque o login no Firebase Auth funcionou.
+  useEffect(() => {
+    if (!pendingLoginToast || authLoading) return;
+    setPendingLoginToast(false);
+    if (!user) return;
+
+    if (isAuthorized) {
+      toast({ title: "Acesso Autorizado", description: "Bem-vindo ao Fiscal-X." });
+    } else if (profile?.status === 'rejected') {
+      toast({
+        variant: "destructive",
+        title: "Acesso Negado",
+        description: profile.adminFeedback || "Seu cadastro foi recusado pelo gestor municipal."
+      });
+    } else {
+      toast({
+        title: "Login Realizado",
+        description: "Sua conta ainda está aguardando aprovação do gestor municipal."
+      });
+    }
+  }, [pendingLoginToast, authLoading, user, isAuthorized, profile, toast]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password || localLoading) return;
@@ -53,7 +78,7 @@ export default function LoginPage() {
     setLocalLoading(true);
     try {
       await loginWithEmailPassword(email, password, { keepConnected });
-      toast({ title: "Acesso Autorizado", description: "Bem-vindo ao vigilanT." });
+      setPendingLoginToast(true);
     } catch (error: any) {
       toast({
         variant: "destructive",

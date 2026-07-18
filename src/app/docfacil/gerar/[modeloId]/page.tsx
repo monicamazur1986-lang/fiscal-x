@@ -1,6 +1,7 @@
 "use client"
 
 import { use, useEffect, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { Download, FileText, Loader2 } from "lucide-react"
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
 import { Button } from "@/components/ui/button"
@@ -19,6 +20,8 @@ const TIPO_LABEL: Record<DocfacilTipo, string> = {
 
 export default function GerarDocumentoPage({ params }: { params: Promise<{ modeloId: string }> }) {
   const { modeloId } = use(params);
+  const searchParams = useSearchParams();
+  const folderId = searchParams.get("folderId") || undefined;
   const { toast } = useToast();
   const { modelos, loading, salvarDocumento } = useDocfacil();
   const reportRef = useRef<HTMLDivElement>(null);
@@ -52,6 +55,7 @@ export default function GerarDocumentoPage({ params }: { params: Promise<{ model
         destinatario: destinatario.trim(),
         assunto: assunto.trim(),
         conteudo,
+        folderId,
       });
       setDocumentoEmitido(novo);
       setView("relatorio");

@@ -4,7 +4,7 @@
 runConfig:
   # Increase this value if you'd like to automatically spin up
   # more instances in response to increased traffic.
-  maxInstances: 1
+  maxInstances: 5
 
 env:
   # Config pública do Firebase (não é segredo — já fica embutida no bundle do

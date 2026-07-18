@@ -58,6 +58,8 @@ export type Folder = {
   id: string;
   name: string;
   parentId?: string;
+  municipioId: string;
+  area: 'intimacoes' | 'docfacil';
   createdBy: string;
   createdAt: string;
   deleted?: boolean;
@@ -91,6 +93,10 @@ export type Inspecao = {
     answers: Record<string, 'SIM' | 'NAO' | 'ND'>;
     observations: Record<string, string>;
     itemPhotos: Record<string, any[]>;
+    /** Não conformidades incluídas manualmente pelo fiscal, fora do roteiro oficial. */
+    customItems?: { id: string; text: string; crit: 'I' | 'N' | 'R' }[];
+    /** Anexa o texto fixo de recomendações de CME (Central de Material Esterilizado) ao relatório final. */
+    incluirCME?: boolean;
     idData: any;
     roteiroId: string;
   };
@@ -197,7 +203,22 @@ export type DocfacilDocumento = {
   assunto: string;
   conteudo: string;
   municipioId: string;
+  folderId?: string;
   createdBy: string;
   createdByName?: string;
   createdAt: string;
+};
+
+/** Pergunta e resposta do Manual/Central de Ajuda — global, igual pra todos
+ * os municípios (não é conteúdo legal/municipal, é sobre o próprio sistema). */
+export type FaqItem = {
+  id: string;
+  category: string;
+  question: string;
+  answer: string;
+  order: number;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt?: string;
 };

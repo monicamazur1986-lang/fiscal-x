@@ -49,9 +49,9 @@ interface DocfacilEditorProps {
 export function DocfacilEditor({ defaultValue, onChange, placeholder, disable, showLetterhead = true }: DocfacilEditorProps) {
   return (
     <div className="bg-zinc-100 p-4 sm:p-10 overflow-x-auto">
-      <div className="mx-auto bg-white border border-zinc-200 shadow-sm" style={{ width: "210mm", minWidth: "210mm" }}>
+      <div className="docfacil-paper mx-auto bg-white border border-zinc-200 shadow-sm" style={{ width: "210mm", minWidth: "210mm" }}>
         {showLetterhead && (
-          <div className="px-[20mm] pt-[15mm] pb-4 border-b border-zinc-100">
+          <div className="px-[20mm] pt-[15mm] pb-4">
             <OfficialLetterhead />
           </div>
         )}

@@ -39,13 +39,12 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import municipiosPR from "@/lib/municipios-pr.json"
 import { cn, normalizeId } from "@/lib/utils"
-import { useStorage } from "@/firebase"
+import { storage } from "@/lib/firebase"
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 function SolicitarAcessoForm() {
   const { registerWithEmailPassword } = useAuth()
-  const storage = useStorage()
   const { toast } = useToast()
   const router = useRouter()
   const searchParams = useSearchParams()

@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from "react"
-import { Loader2, Search, Pencil, Trash2, Plus, X } from "lucide-react"
+import { Loader2, Search, Pencil, Trash2, Plus, X, Landmark } from "lucide-react"
 import { format } from "date-fns"
 import type { Control, UseFormWatch, UseFormSetValue, UseFormGetValues, FieldArrayWithId } from "react-hook-form"
 import type { z } from "zod"
@@ -21,7 +21,6 @@ export type IntimacaoFormValues = z.infer<typeof intimacaoSchema>
 export type SignatureTargetType = 'fiscal' | 'responsavel' | 'responsavelTecnico' | 'testemunha1' | 'testemunha2'
 
 const termoOptions = ["TERMO DE INTIMAÇÃO", "AUTO DE INFRAÇÃO", "TERMO DE APREENSÃO", "TERMO DE INTERDIÇÃO", "TERMO DE INUTILIZAÇÃO"];
-const DEFAULT_SYMBOL = "https://firebasestorage.googleapis.com/v0/b/firebasestudio-1937074168.appspot.com/o/user-uploads%2F67b6653d9e6e872d80ef618e%2Flogo_horizontal_preto_transparente.jpg?alt=media";
 
 interface DocumentoOficialBodyProps {
   control: Control<IntimacaoFormValues>;
@@ -85,28 +84,52 @@ export function DocumentoOficialBody({
     setMostrarResponsavelTecnico(false);
   };
 
-  const logoSource = config.logoUrl || DEFAULT_SYMBOL;
-  const isDataUrl = logoSource.startsWith('data:');
-  const displayLogoUrl = isDataUrl ? logoSource : `/api/proxy-image?url=${encodeURIComponent(logoSource)}`;
+  // Sem brasão municipal configurado, mostra um espaço neutro (ícone
+  // genérico) em vez de qualquer imagem específica — nunca a marca do
+  // sistema (mascote do login) nem qualquer outra logo que não seja a do
+  // próprio município.
+  const hasLogo = !!config.logoUrl;
+  const isDataUrl = hasLogo && config.logoUrl!.startsWith('data:');
+  const displayLogoUrl = hasLogo
+    ? (isDataUrl ? config.logoUrl! : `/api/proxy-image?url=${encodeURIComponent(config.logoUrl!)}`)
+    : undefined;
 
   return (
     <form ref={formRef} onSubmit={onSubmit ?? ((e) => e.preventDefault())}>
-      <header ref={headerRef} className="flex flex-row items-center justify-between gap-6 md:gap-8 mb-3 pb-3">
-        <div className="flex items-center justify-start shrink-0">
-          <img src={displayLogoUrl} className="max-w-[140px] md:max-w-[180px] max-h-[80px] md:max-h-[100px] w-auto h-auto object-contain block" alt="Brasão" crossOrigin={isDataUrl ? undefined : "anonymous"} />
-        </div>
-        <div className="flex-1 text-center">
-          {config.headerRichText ? (
-            <div style={{ fontFamily: "'Times New Roman', Times, serif" }} dangerouslySetInnerHTML={{ __html: config.headerRichText }} />
-          ) : (
-            <>
-              <p className="text-[9pt] md:text-[10pt] font-black uppercase text-black">PREFEITURA MUNICIPAL DE {config.municipioNome || "PRUDENTÓPOLIS"}</p>
-              <h2 className="text-[10pt] md:text-[12pt] font-black uppercase text-black leading-tight mt-1">{config.secretaria || "SECRETARIA MUNICIPAL DE SAÚDE"}</h2>
-              <h3 className="text-[8.5pt] md:text-[9.5pt] font-bold text-black uppercase mt-0.5">{config.departamento || "VIGILÂNCIA SANITÁRIA"}</h3>
-            </>
-          )}
-        </div>
-      </header>
+      {/* <table>/<thead> é a única estrutura HTML que os navegadores repetem
+          automaticamente a cada quebra de página na impressão nativa — por
+          isso o cabeçalho fica dentro de <thead> e todo o resto do documento
+          dentro de um único <tbody>, em vez de filhos soltos do <form> como
+          antes. renderDocumentIntoPdf (geração de PDF) já usa querySelector
+          pra achar o header, então continua funcionando sem mudança nele;
+          só a leitura dos filhos do corpo precisou ser ajustada lá. */}
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr><td style={{ padding: 0, border: 'none' }}>
+            <header ref={headerRef} className="flex flex-row items-center justify-between gap-6 md:gap-8 mb-3 pb-3">
+              <div className="flex items-center justify-start shrink-0 w-[80px] h-[80px] md:w-[100px] md:h-[100px]">
+                {hasLogo ? (
+                  <img src={displayLogoUrl} className="max-w-full max-h-full w-auto h-auto object-contain block" alt="Brasão" crossOrigin={isDataUrl ? undefined : "anonymous"} />
+                ) : (
+                  <Landmark className="w-full h-full text-zinc-300" strokeWidth={1} />
+                )}
+              </div>
+              <div className="flex-1 text-center">
+                {config.headerRichText ? (
+                  <div style={{ fontFamily: "'Times New Roman', Times, serif" }} dangerouslySetInnerHTML={{ __html: config.headerRichText }} />
+                ) : (
+                  <>
+                    <p className="text-[9pt] md:text-[10pt] font-black uppercase text-black">PREFEITURA MUNICIPAL DE {config.municipioNome || "PRUDENTÓPOLIS"}</p>
+                    <h2 className="text-[10pt] md:text-[12pt] font-black uppercase text-black leading-tight mt-1">{config.secretaria || "SECRETARIA MUNICIPAL DE SAÚDE"}</h2>
+                    <h3 className="text-[8.5pt] md:text-[9.5pt] font-bold text-black uppercase mt-0.5">{config.departamento || "VIGILÂNCIA SANITÁRIA"}</h3>
+                  </>
+                )}
+              </div>
+            </header>
+          </td></tr>
+        </thead>
+        <tbody>
+          <tr><td style={{ padding: 0, border: 'none' }}>
 
       <div className="section-box flex flex-row overflow-visible min-h-[30pt] mb-4" style={{ border: '1pt solid #94a3b8' }}>
         <div className="flex-1 border-r border-[#94a3b8] p-2 flex items-center justify-center text-center">
@@ -342,6 +365,24 @@ export function DocumentoOficialBody({
           )}
         </div>
       </div>
+
+          </td></tr>
+        </tbody>
+        {config.footerRichText && (
+          // <tfoot> repete no rodapé de cada página impressa, mesmo truque já
+          // usado no <thead> pro cabeçalho — opcional, só aparece se o gestor
+          // configurar um texto de rodapé em Identidade Municipal.
+          <tfoot>
+            <tr><td style={{ padding: 0, border: 'none' }}>
+              <footer
+                className="pt-2 mt-3 border-t border-black/20 text-center text-black"
+                style={{ fontFamily: "'Times New Roman', Times, serif" }}
+                dangerouslySetInnerHTML={{ __html: config.footerRichText }}
+              />
+            </td></tr>
+          </tfoot>
+        )}
+      </table>
     </form>
   );
 }

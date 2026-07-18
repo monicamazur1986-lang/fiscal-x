@@ -14,6 +14,7 @@ export interface MunicipalityConfig {
   departamento?: string;
   municipioNome?: string;
   headerRichText?: string;
+  footerRichText?: string;
   defaultPrazoRichText?: string;
   n8nWebhookUrl?: string;
 }
@@ -21,15 +22,17 @@ export interface MunicipalityConfig {
 const LOCAL_CONFIG_KEY = 'fiscal_x_muni_config_v6';
 const SYSTEM_CONFIG_KEY = 'fiscal_x_system_global_v2';
 
-export function useAppConfig() {
+export function useAppConfig(options?: { municipioIdOverride?: string }) {
   const { profile } = useAuth();
-  
+
+  const effectiveMunicipioId = profile?.role === 'root' ? options?.municipioIdOverride : profile?.municipioId;
+
   const [config, setConfig] = useState<MunicipalityConfig>({
     secretaria: "SECRETARIA MUNICIPAL DE SAÚDE",
     departamento: "VIGILÂNCIA SANITÁRIA",
     municipioNome: "PRUDENTÓPOLIS",
   });
-  
+
   const [systemLogo, setSystemLogo] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -40,17 +43,12 @@ export function useAppConfig() {
       try { setConfig(prev => ({ ...prev, ...JSON.parse(saved) })); } catch (e) {}
     }
 
-    if (!profile?.municipioId || !db) {
-      if (!profile?.municipioId) setLoading(false);
+    if (!effectiveMunicipioId || !db) {
+      if (!effectiveMunicipioId) setLoading(false);
       return;
     }
-    
-    const mid = normalizeId(profile.municipioId);
-    
-    if (mid === 'root') {
-      setLoading(false);
-      return;
-    }
+
+    const mid = normalizeId(effectiveMunicipioId);
 
     const unsub = onSnapshot(doc(db, "municipios", mid, "config", "brand"), (snap) => {
       if (snap.exists()) {
@@ -63,9 +61,9 @@ export function useAppConfig() {
       setLoading(false);
     });
     return unsub;
-  }, [db, profile?.municipioId]);
+  }, [db, effectiveMunicipioId]);
 
-  // 2. CARREGAR CONFIGURAÇÃO GLOBAL DO SISTEMA (MARCA VIGILANT - ROOT)
+  // 2. CARREGAR CONFIGURAÇÃO GLOBAL DO SISTEMA (MARCA FISCAL-X - ROOT)
   useEffect(() => {
     const savedSys = localStorage.getItem(SYSTEM_CONFIG_KEY);
     if (savedSys) setSystemLogo(savedSys);
@@ -83,17 +81,24 @@ export function useAppConfig() {
   }, [db]);
 
   const updateConfig = useCallback(async (data: Partial<MunicipalityConfig>) => {
+    // Sem município identificado (comum pro root antes de selecionar um), a
+    // gravação real no Firestore era silenciosamente pulada — só a tela
+    // local mudava, então a ação "parecia" ter dado certo (toast de
+    // sucesso) mas nada era salvo de verdade. Lançar aqui garante que quem
+    // chamou saiba que a ação falhou, em vez de mostrar um falso sucesso.
+    if (!effectiveMunicipioId) {
+      throw new Error('Nenhum município selecionado — nada foi salvo.');
+    }
+
     const newConfig = { ...config, ...data };
     setConfig(newConfig);
     localStorage.setItem(LOCAL_CONFIG_KEY, JSON.stringify(newConfig));
 
-    if (db && profile?.municipioId) {
-      const mid = normalizeId(profile.municipioId);
-      if (mid !== 'root') {
-        await setDoc(doc(db, "municipios", mid, "config", "brand"), data, { merge: true });
-      }
+    if (db) {
+      const mid = normalizeId(effectiveMunicipioId);
+      await setDoc(doc(db, "municipios", mid, "config", "brand"), data, { merge: true });
     }
-  }, [db, profile?.municipioId, config]);
+  }, [db, effectiveMunicipioId, config]);
 
   const updateSystemLogo = useCallback(async (url: string) => {
     setSystemLogo(url);
@@ -112,12 +117,13 @@ export function useAppConfig() {
     }
   }, [db, profile]);
 
-  return { 
-    config, 
+  return {
+    config,
     systemLogo,
-    updateConfig, 
+    updateConfig,
     updateSystemLogo,
     updateLogo: (url: string) => updateConfig({ logoUrl: url }),
-    loading 
+    loading,
+    needsMunicipioSelection: profile?.role === 'root' && !options?.municipioIdOverride,
   };
 }

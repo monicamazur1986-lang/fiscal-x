@@ -54,7 +54,24 @@ service cloud.firestore {
       allow read, update: if isRoot();
     }
     
+    // Pastas de organização (Documentos e Docfacil), isoladas por município —
+    // mesmo padrão de docfacilModelos.
+    match /folders/{id} {
+      allow read: if belongsToMyMunicipio(resource.data);
+      allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
+      allow update, delete: if isAuthenticated() && (
+        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()))
+      );
+    }
+
     match /biblioteca/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Manual/Central de Ajuda (perguntas e respostas) — global, igual pra
+    // todo mundo, sem isolamento por município.
+    match /faq/{id} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
