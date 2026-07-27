@@ -124,6 +124,12 @@ export function useDocfacil() {
     await deleteDoc(doc(db, 'docfacilModelos', id));
   }, [db]);
 
+  // Antes, cada clique em "Visualizar Documento" criava um DocfacilDocumento
+  // novo (com número novo), sem nenhum conceito de rascunho — fechar a aba no
+  // meio da edição perdia tudo, e reabrir/gerar de novo duplicava o número.
+  // Agora aceita um `id`: passado, atualiza o mesmo documento (mesmo número)
+  // em vez de criar outro; o número só é reservado uma vez, no primeiro save
+  // (rascunho ou finalizado), igual ao padrão já usado nas autuações.
   const salvarDocumento = useCallback(async (data: {
     modeloId: string;
     tipo: DocfacilTipo;
@@ -131,8 +137,28 @@ export function useDocfacil() {
     assunto: string;
     conteudo: string;
     folderId?: string;
-  }): Promise<DocfacilDocumento> => {
+    status: 'rascunho' | 'finalizado';
+  }, id?: string): Promise<DocfacilDocumento> => {
     if (!db || !municipioId || !profile) throw new Error('Sem conexão com a nuvem.');
+    const now = new Date().toISOString();
+    // O Firestore rejeita gravações com campo `undefined` (lança exceção em
+    // vez de simplesmente ignorar) — gerar um documento fora de uma pasta
+    // deixa `folderId` undefined, então normaliza pra "" antes de gravar.
+    const folderId = data.folderId || "";
+
+    if (id) {
+      const existing = documentos.find((d) => d.id === id);
+      const updated: DocfacilDocumento = {
+        ...(existing as DocfacilDocumento),
+        ...data,
+        folderId,
+        id,
+        updatedAt: now,
+      };
+      await setDoc(doc(db, 'docfacilDocumentos', id), updated, { merge: true });
+      return updated;
+    }
+
     const year = new Date().getFullYear();
     const seq = await nextCounter(`docfacil-${data.tipo}-${year}`);
     const numero = `${String(seq).padStart(4, '0')}/${year}`;
@@ -140,20 +166,39 @@ export function useDocfacil() {
     const targetId = doc(collection(db, 'docfacilDocumentos')).id;
     const novo: DocfacilDocumento = {
       ...data,
+      folderId,
       id: targetId,
       numero,
       municipioId,
       createdBy: profile.uid,
       createdByName: profile.displayName || 'Fiscal',
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
     await setDoc(doc(db, 'docfacilDocumentos', targetId), novo);
     return novo;
-  }, [db, municipioId, profile, nextCounter]);
+  }, [db, municipioId, profile, documentos, nextCounter]);
+
+  const excluirDocumento = useCallback(async (id: string) => {
+    if (!db) return;
+    await deleteDoc(doc(db, 'docfacilDocumentos', id));
+  }, [db]);
 
   const moverDocumento = useCallback(async (id: string, folderId: string | null) => {
     if (!db) return;
     await setDoc(doc(db, 'docfacilDocumentos', id), { folderId: folderId || "" }, { merge: true });
+  }, [db]);
+
+  // Mesma lógica de lixeira de Intimações: mover pra lixeira só marca
+  // `deleted`, sem apagar de verdade — dá pra restaurar depois. A exclusão
+  // definitiva continua sendo excluirDocumento, chamada só de dentro da
+  // própria lixeira.
+  const moverParaLixeira = useCallback(async (id: string, toTrash: boolean) => {
+    if (!db) return;
+    await setDoc(doc(db, 'docfacilDocumentos', id), {
+      deleted: toTrash,
+      deletedAt: toTrash ? new Date().toISOString() : null,
+    }, { merge: true });
   }, [db]);
 
   return {
@@ -163,7 +208,9 @@ export function useDocfacil() {
     salvarModelo,
     excluirModelo,
     salvarDocumento,
+    excluirDocumento,
     moverDocumento,
+    moverParaLixeira,
     getModeloById: (id: string) => modelos.find((m) => m.id === id) || null,
   };
 }

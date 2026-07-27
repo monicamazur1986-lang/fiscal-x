@@ -27,21 +27,36 @@ interface ExemploEncontrado {
 }
 
 /**
- * Busca, entre os rascunhos que o próprio fiscal já exportou antes (ver
- * src/lib/fiscal-ai-exemplos.ts), o mais parecido com o caso atual — usado
- * como referência de estilo no prompt da Claude. Roda no servidor via Admin
- * SDK (o fluxo de geração é uma Server Action, sem sessão de usuário
- * autenticada no SDK cliente do Firestore).
+ * Resolve o município do fiscal a partir do uid — usado tanto pra buscar
+ * exemplos anteriores quanto pra restringir a busca de legislação municipal
+ * (ver src/lib/legal-search.ts) ao município de quem está gerando o
+ * rascunho. Roda no servidor via Admin SDK (o fluxo de geração é uma Server
+ * Action, sem sessão de usuário autenticada no SDK cliente do Firestore).
  */
-export async function buscarMelhorExemplo(caseDescription: string, uid: string): Promise<ExemploEncontrado | null> {
+export async function resolverMunicipioId(uid: string): Promise<string | null> {
   if (!getApps().length || !uid) return null;
-
   try {
     const db = getFirestore();
     const userSnap = await db.collection('users').doc(uid).get();
-    const municipioId = userSnap.exists ? userSnap.data()?.municipioId : null;
-    if (!municipioId) return null;
+    return userSnap.exists ? (userSnap.data()?.municipioId ?? null) : null;
+  } catch (e) {
+    console.warn('Falha ao resolver município do fiscal:', e);
+    return null;
+  }
+}
 
+/**
+ * Busca, entre os rascunhos que o próprio fiscal já exportou antes (ver
+ * src/lib/fiscal-ai-exemplos.ts), o mais parecido com o caso atual — usado
+ * como referência de estilo no prompt da Claude. Recebe o município já
+ * resolvido (ver resolverMunicipioId) pra não repetir a leitura do
+ * Firestore que o fluxo chamador já fez.
+ */
+export async function buscarMelhorExemplo(caseDescription: string, municipioId: string | null): Promise<ExemploEncontrado | null> {
+  if (!getApps().length || !municipioId) return null;
+
+  try {
+    const db = getFirestore();
     const snap = await db.collection('fiscalAiExemplos').where('municipioId', '==', municipioId).limit(200).get();
 
     let melhor: { score: number; exemplo: ExemploEncontrado } | null = null;

@@ -25,7 +25,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
-import { BackButton } from "@/components/back-button"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { DEFAULT_PRAZO_TEXT } from "@/lib/schema"
 import { normalizeId } from "@/lib/utils"
@@ -206,7 +205,6 @@ export default function IdentidadeMunicipalPage() {
             </p>
           )}
         </div>
-        <BackButton href="/dashboard" label="Cancelar e Voltar" className="bg-transparent border-none shadow-none text-zinc-400" />
       </header>
 
       {isRoot && needsMunicipioSelection ? (

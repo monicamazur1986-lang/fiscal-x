@@ -204,9 +204,19 @@ export type DocfacilDocumento = {
   conteudo: string;
   municipioId: string;
   folderId?: string;
+  /** 'rascunho' até o fiscal finalizar — só então o documento passa a ser
+   * considerado emitido de fato (mas o número já é reservado desde o
+   * primeiro salvamento, igual às autuações). */
+  status: 'rascunho' | 'finalizado';
+  /** Mesma lógica de lixeira já usada em Intimações — 'mover pra lixeira'
+   * só marca deleted, sem apagar de verdade; a exclusão definitiva é uma
+   * ação separada, só disponível de dentro da própria lixeira. */
+  deleted?: boolean;
+  deletedAt?: string;
   createdBy: string;
   createdByName?: string;
   createdAt: string;
+  updatedAt?: string;
 };
 
 /** Pergunta e resposta do Manual/Central de Ajuda — global, igual pra todos

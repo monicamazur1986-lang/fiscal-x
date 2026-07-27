@@ -6,6 +6,7 @@ import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
 import { Button } from "@/components/ui/button"
 import { OfficialLetterhead } from "@/components/official-letterhead"
 import { useDocfacil } from "@/hooks/use-docfacil"
+import { sanitizeHtml } from "@/lib/sanitize-html"
 import type { DocfacilTipo } from "@/lib/types"
 
 const TIPO_LABEL: Record<DocfacilTipo, string> = {
@@ -74,7 +75,7 @@ export default function VisualizarDocumentoPage({ params }: { params: Promise<{ 
               <p className="text-[10pt] font-bold uppercase">Assunto: {documento.assunto}</p>
             </div>
 
-            <div className="text-[11pt] leading-relaxed" dangerouslySetInnerHTML={{ __html: documento.conteudo }} />
+            <div className="text-[11pt] leading-relaxed" dangerouslySetInnerHTML={{ __html: sanitizeHtml(documento.conteudo) }} />
           </div>
         </div>
       </div>

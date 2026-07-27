@@ -249,8 +249,11 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
       setPendingSyncIds(Object.keys(pendingWritesRef.current));
     }
 
+    // Antes o erro era engolido com .catch(() => {}) — se a exclusão falhasse
+    // no servidor (sem permissão, sem internet), a tela já mostrava "excluído
+    // com sucesso" e a inspeção continuava existindo no Firestore.
     if (db && !configError) {
-        await deleteDoc(doc(db, "inspecoes", id)).catch(() => {});
+        await deleteDoc(doc(db, "inspecoes", id));
     }
   }, [db, configError]);
 

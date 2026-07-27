@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { LifeBuoy, Loader2, Bug, HelpCircle, Lightbulb, MessageSquare, Send, Building2 } from "lucide-react"
-import { BackButton } from "@/components/back-button"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
@@ -73,7 +72,6 @@ export default function GestaoSuportePage() {
     <div className="flex-1 max-w-5xl mx-auto w-full p-4 sm:p-8 font-sans space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4">
-          <BackButton href="/dashboard" />
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-primary rounded-xl text-white shadow-lg"><LifeBuoy className="h-5 w-5" /></div>
             <h1 className="text-xl sm:text-2xl font-black italic tracking-tighter text-slate-900 uppercase">Gestão de Suporte</h1>

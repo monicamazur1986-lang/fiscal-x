@@ -6,34 +6,817 @@
       {
         "id": "mun-18-I",
         "label": "Art. 18, inciso I",
-        "texto": "Funcionamento de estabelecimento sem Licença Sanitária ou autorização.",
-        "keywords": "alvará licença funcionamento irregular prefeitura"
+        "texto": "Construir, instalar ou fazer funcionar qualquer tipo de estabelecimento, comercial ou industrial, com ou sem fiscalização, seja qual for sua atividade, sem Licença Sanitária.",
+        "pena": "advertência, interdição, cassação da licença sanitária, e/ou multa",
+        "keywords": "sem licença sanitária funcionamento estabelecimento comercial industrial"
+      },
+      {
+        "id": "mun-18-II",
+        "label": "Art. 18, inciso II",
+        "texto": "Construir, instalar ou fazer funcionar em qualquer parte do Município, empresas de produção, manipulação, embalagem, reembalagem, fracionamento, beneficiamento, acondicionamento, transporte, armazenamento, distribuição, aplicação, fabricação, transformação, preparo, purificação, intermediação, expedição, compra, venda, cedência, reesterilização, reprocessamento, comercialização, uso, importação, exportação de medicamentos, drogas, insumos, cosméticos, produtos de higiene, saneantes, produtos para saúde, alimentos, aditivos para alimentos, bebidas, embalagens, produtos dietéticos e demais produtos de interesse à saúde pública, sem licença sanitária, autorização do órgão sanitário competente e/ou contrariando o disposto na Legislação Sanitária.",
+        "pena": "advertência, suspensão, apreensão ou inutilização do produto, interdição, cassação da licença sanitária, e/ou multa",
+        "keywords": "empresa produção fabricação sem licença sanitária autorização"
+      },
+      {
+        "id": "mun-18-III",
+        "label": "Art. 18, inciso III",
+        "texto": "Construir, instalar ou fazer funcionar laboratórios de análises, de pesquisas clínicas e postos de coleta, farmácias, drogarias, ervanários, distribuidoras, bancos de sangue ou outros que exerçam atividades hemoterápicas, bancos de leite, sêmen, olhos humanos e órgãos em geral, laboratórios de próteses odontológicas, estabelecimentos e/ou serviços que utilizem aparelhos e equipamentos geradores de raio x, substâncias radioativas ou radiações ionizantes e outras, estabelecimentos óticos e afins, estabelecimentos de aparelhos ou materiais para uso odonto-médico-hospitalar e laboratorial, e outros que exerçam atividades de interesse à saúde sem licença sanitária e/ou contrariando o disposto na Legislação Sanitária.",
+        "pena": "advertência, suspensão, apreensão ou inutilização do produto, interdição, cassação da licença sanitária, e/ou multa",
+        "keywords": "farmácia drogaria laboratório banco de sangue sem licença sanitária"
+      },
+      {
+        "id": "mun-18-IV",
+        "label": "Art. 18, inciso IV",
+        "texto": "Construir, instalar ou fazer funcionar, Hospitais, Unidades de Saúde, Clínicas Médicas, Veterinárias, Odontológicas, Fisioterapêuticas, Estéticas ou Consultórios que se dediquem a atividades de interesse à saúde, sem licença sanitária e/ou contrariando o disposto na Legislação Sanitária.",
+        "pena": "advertência, interdição, cassação da licença sanitária, e/ou multa",
+        "keywords": "hospital clínica consultório sem licença sanitária"
+      },
+      {
+        "id": "mun-18-V",
+        "label": "Art. 18, inciso V",
+        "texto": "Construir, instalar ou fazer funcionar Centro de Educação Infantil (CEI), pré-escolas, hotéis para bebês, educandários, escolas de ensino fundamental, médio e superior e estabelecimentos congêneres de atendimento à criança e estudantes, sem licença sanitária e/ou contrariando o disposto na Legislação Sanitária.",
+        "pena": "advertência, interdição, cassação da licença sanitária, e/ou multa",
+        "keywords": "creche escola CEI sem licença sanitária"
+      },
+      {
+        "id": "mun-18-VI",
+        "label": "Art. 18, inciso VI",
+        "texto": "Construir, instalar ou fazer funcionar, instituição de longa permanência para idosos, casas de repouso, associações, clínicas, casas de atendimento, casas geriátricas e estabelecimentos congêneres de atendimentos ao idoso, sem licença sanitária e/ou contrariando o disposto na Legislação Sanitária.",
+        "pena": "advertência, interdição, cassação da licença sanitária, e/ou multa",
+        "keywords": "ILPI asilo idoso casa de repouso sem licença sanitária"
+      },
+      {
+        "id": "mun-18-VII",
+        "label": "Art. 18, inciso VII",
+        "texto": "Construir, instalar ou fazer funcionar estabelecimentos de combate a insetos e roedores, estabelecimentos que se dediquem à limpeza e desinfecção de caixas-d’água e poços artesianos e outras que exerçam atividades de interesse à saúde, sem licença sanitária e/ou contrariando o disposto na Legislação Sanitária.",
+        "pena": "advertência, interdição, cassação da licença sanitária, e/ou multa",
+        "keywords": "dedetizadora caixa d’água poço artesiano sem licença sanitária"
+      },
+      {
+        "id": "mun-18-VIII",
+        "label": "Art. 18, inciso VIII",
+        "texto": "Extrair, produzir, fabricar, transformar, preparar, manipular, purificar, fracionar, embalar ou reembalar, importar, exportar, armazenar, expedir, transportar, comprar, vender, expor à venda, distribuir, ceder ou usar alimentos, produtos alimentícios, medicamentos, drogas, insumos farmacêuticos, de higiene, cosméticos, produtos para saúde, embalagens, saneantes, utensílios e aparelhos que interessam à saúde pública ou individual, sem registro no órgão sanitário competente e/ou contrariando o disposto na Legislação Sanitária.",
+        "pena": "advertência, apreensão ou inutilização do produto, cancelamento do registro do produto, suspensão da venda ou fabricação do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "produto sem registro alimento medicamento cosmético irregular"
       },
       {
         "id": "mun-18-IX",
         "label": "Art. 18, inciso IX",
-        "texto": "Manter estabelecimento sem assistência de responsável técnico habilitado.",
-        "keywords": "RT profissional técnico ausência"
+        "texto": "Fazer funcionar todos os estabelecimentos citados nos incisos I a VI deste artigo sem o responsável técnico legalmente habilitado e/ou em quantidade insuficiente para a execução da atividade exercida.",
+        "pena": "advertência, suspensão da venda ou fabricação do produto, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "sem responsável técnico RT ausente insuficiente"
+      },
+      {
+        "id": "mun-18-X",
+        "label": "Art. 18, inciso X",
+        "texto": "Fazer funcionar todos os estabelecimentos mencionados nos incisos I a VI deste artigo com pessoal que exerça ocupações técnicas e auxiliares relacionadas com a saúde, em número insuficiente, sem qualificação profissional ou habilitação legal e/ou sem registro no órgão de classe.",
+        "pena": "advertência, suspensão da venda ou fabricação do produto, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "pessoal insuficiente sem qualificação sem registro no conselho"
+      },
+      {
+        "id": "mun-18-XI",
+        "label": "Art. 18, inciso XI",
+        "texto": "Fazer funcionar os estabelecimentos citados nos incisos I a VII deste artigo com materiais, equipamentos, instrumentais ou outros em número insuficiente, em precárias condições de uso, de higiene, de manutenção, de conservação, e/ou com qualquer outra alteração que possa comprometer a qualidade da atividade desenvolvida.",
+        "pena": "advertência, suspensão da venda ou fabricação do produto, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "equipamentos materiais insuficientes precárias condições higiene manutenção"
+      },
+      {
+        "id": "mun-18-XII",
+        "label": "Art. 18, inciso XII",
+        "texto": "Construir, instalar, ou fazer funcionar estabelecimentos e/ou veículo de transporte de interesse à saúde sem possuir instalações, aparelhos, equipamentos higienizados e adequados para conservação e manutenção das especificações ou padrões de identidade e qualidade estabelecidos pertinentes aos produtos e serviços prestados, na forma da regulamentação específica.",
+        "pena": "advertência, interdição, cassação da licença sanitária, e/ou multa",
+        "keywords": "instalações aparelhos inadequados transporte veículo higienização"
+      },
+      {
+        "id": "mun-18-XIII",
+        "label": "Art. 18, inciso XIII",
+        "texto": "Exercer a responsabilidade legal dos estabelecimentos de interesse à saúde sem observância dos deveres específicos e estabelecidos no art. 117 da presente lei.",
+        "pena": "advertência, suspensão da venda ou fabricação do produto, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "responsável legal descumprimento deveres art 117"
+      },
+      {
+        "id": "mun-18-XIV",
+        "label": "Art. 18, inciso XIV",
+        "texto": "Exercer profissões, ocupações ou encargos relacionados com a promoção, proteção e recuperação da saúde, sem a necessária habilitação legal.",
+        "pena": "advertência, suspensão da venda ou fabricação do produto, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "exercício ilegal profissão sem habilitação curandeirismo"
+      },
+      {
+        "id": "mun-18-XV",
+        "label": "Art. 18, inciso XV",
+        "texto": "Permitir ou delegar o exercício de atividades relacionadas com a saúde à pessoas não habilitadas legalmente.",
+        "pena": "advertência, interdição, cassação da licença sanitária, e/ou multa",
+        "keywords": "delegar atividade pessoa não habilitada"
+      },
+      {
+        "id": "mun-18-XVI",
+        "label": "Art. 18, inciso XVI",
+        "texto": "Exercer responsabilidade técnica com imperícia, negligência, imprudência e/ou em desacordo com o disposto na legislação pertinente.",
+        "pena": "advertência, interdição, cassação da licença sanitária, e/ou multa",
+        "keywords": "imperícia negligência imprudência responsável técnico"
+      },
+      {
+        "id": "mun-18-XVII",
+        "label": "Art. 18, inciso XVII",
+        "texto": "Realizar processo de limpeza, desinfecção, esterilização e/ou reesterilização utilizando metodologia não reconhecida cientificamente e/ou contrariando o disposto na Legislação Sanitária.",
+        "pena": "advertência, interdição, cassação da licença sanitária, e/ou multa",
+        "keywords": "esterilização desinfecção método não reconhecido cientificamente"
+      },
+      {
+        "id": "mun-18-XVIII",
+        "label": "Art. 18, inciso XVIII",
+        "texto": "Adotar medidas relativas a controle de infecção em desacordo com a Legislação Sanitária e/ou deixar de adotá-las quando necessário.",
+        "pena": "advertência, interdição, cassação da licença sanitária, e/ou multa",
+        "keywords": "controle de infecção CCIH em desacordo"
+      },
+      {
+        "id": "mun-18-XIX",
+        "label": "Art. 18, inciso XIX",
+        "texto": "Fazer funcionar estabelecimentos de interesse à saúde sem entrada independente, de forma a existir comunicação direta com residência ou outro estabelecimento.",
+        "pena": "advertência, interdição, cassação da licença sanitária, e/ou multa",
+        "keywords": "entrada independente comunicação com residência"
+      },
+      {
+        "id": "mun-18-XX",
+        "label": "Art. 18, inciso XX",
+        "texto": "Fazer funcionar estabelecimentos que armazenem, comercializem, utilizem, manipulem produtos agrotóxicos, explosivos, radiativos, inflamáveis, nocivos e/ou perigosos à saúde em áreas contíguas à residência ou outro estabelecimento, que possam ser prejudicados com estas atividades.",
+        "pena": "advertência, pena educativa, apreensão ou inutilização do produto, interdição, suspensão de venda, cassação da licença sanitária e/ou multa",
+        "keywords": "agrotóxico explosivo inflamável perigoso área contígua residência"
+      },
+      {
+        "id": "mun-18-XXI",
+        "label": "Art. 18, inciso XXI",
+        "texto": "Desenvolver atividades de interesse à saúde em dependências residenciais, sem o devido isolamento entre as respectivas áreas de habitação e de trabalho.",
+        "pena": "advertência, interdição, cassação da licença sanitária, e/ou multa",
+        "keywords": "dependência residencial sem isolamento área de trabalho"
       },
       {
         "id": "mun-18-XXII",
         "label": "Art. 18, inciso XXII",
-        "texto": "Inobservância das Boas Práticas de fabricação ou manipulação.",
-        "keywords": "higiene manipulação limpeza"
+        "texto": "Fazer funcionar os estabelecimentos de interesse e de assistência à saúde sem adotar procedimentos de boas práticas de produção e/ou de prestação de serviços.",
+        "pena": "advertência, apreensão, inutilização, interdição, cancelamento de autorização de funcionamento, cancelamento do registro do produto e/ou multa",
+        "keywords": "boas práticas de fabricação BPF não adotadas"
+      },
+      {
+        "id": "mun-18-XXIII",
+        "label": "Art. 18, inciso XXIII",
+        "texto": "Fazer propaganda de produtos e serviços de interesse à saúde contrariando o disposto na Legislação Sanitária.",
+        "pena": "advertência, proibição e/ou suspensão de propaganda ou publicidade, contrapropaganda, suspensão de venda ou fabricação do produto, imposição de mensagem retificadora e/ou multa",
+        "keywords": "propaganda publicidade irregular anúncio"
+      },
+      {
+        "id": "mun-18-XXIV",
+        "label": "Art. 18, inciso XXIV",
+        "texto": "Atribuir a alimentos, medicamentos ou qualquer outro produtos ou substância de interesse à saúde, qualidade nutriente, medicamentosa, terapêutica ou de favorecimento à saúde, falsa ou superior a que realmente possuir, por qualquer forma de divulgação.",
+        "pena": "advertência, proibição e/ou suspensão de propaganda ou publicidade, contrapropaganda, suspensão de venda ou fabricação do produto, imposição de mensagem retificadora e/ou multa",
+        "keywords": "propriedade falsa qualidade nutriente medicamentosa terapêutica"
+      },
+      {
+        "id": "mun-18-XXV",
+        "label": "Art. 18, inciso XXV",
+        "texto": "Divulgar informação que possa induzir o consumidor a erro, quanto à natureza, espécie, origem, qualidade e identidade de substância ou produto de interesse à saúde.",
+        "pena": "advertência, proibição e/ou suspensão de propaganda ou publicidade, contrapropaganda, suspensão de venda ou fabricação do produto, imposição de mensagem retificadora e/ou multa",
+        "keywords": "induzir consumidor a erro propaganda enganosa"
       },
       {
         "id": "mun-18-XXVI",
         "label": "Art. 18, inciso XXVI",
-        "texto": "Utilizar produtos vencidos, deteriorados ou adulterados.",
-        "keywords": "vencido validade estragado"
+        "texto": "Fazer propaganda de produtos alcoólicos e de cigarros, em bens públicos em áreas objeto de concessões e permissões, efetuadas pelo Poder Público, em eventos ou ocasiões especiais como festas tradicionais, ou eventos culturais e esportivos, salvo permissão extraordinária disciplinada por portaria do Poder Executivo Municipal.",
+        "pena": "advertência, pena educativa, proibição e/ou suspensão de propaganda ou publicidade, contrapropaganda e multa",
+        "keywords": "propaganda álcool cigarro bem público evento"
+      },
+      {
+        "id": "mun-18-XXVII",
+        "label": "Art. 18, inciso XXVII",
+        "texto": "Deixar o responsável pela escola, centro de educação infantil ou qualquer instituição que o recebeu de notificar à Vigilância Epidemiológica sobre a existência de atestado médico que comprove o diagnóstico de doença infecto-contagiosa.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "escola creche não notificou doença infecto-contagiosa"
+      },
+      {
+        "id": "mun-18-XXVIII",
+        "label": "Art. 18, inciso XXVIII",
+        "texto": "Deixar, os estabelecimentos de interesse à saúde, de divulgar através dos meios de comunicação de grande circulação, as ocorrências que impliquem em risco à saúde da população e em danos ao meio ambiente, bem como as ações corretivas ou saneadoras aplicadas.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "não divulgou ocorrência risco à saúde meio ambiente"
+      },
+      {
+        "id": "mun-18-XXIX",
+        "label": "Art. 18, inciso XXIX",
+        "texto": "Deixar os fabricantes e titulares de registros de produtos de declarar à autoridade em Vigilância em Saúde os efeitos nocivos inesperados causados por produtos que fabriquem e/ou comercializem.",
+        "pena": "advertência, apreensão ou inutilização do produto, suspensão da venda ou fabricação do produto, interdição, cancelamento do registro do produto, cassação da licença sanitária, proibição de propaganda e/ou multa",
+        "keywords": "não declarou efeito nocivo inesperado do produto"
+      },
+      {
+        "id": "mun-18-XXX",
+        "label": "Art. 18, inciso XXX",
+        "texto": "Deixar de comunicar de imediato, os profissionais de saúde à autoridade em Vigilância em Saúde, na forma da regulamentação, os efeitos nocivos causados por produtos e/ou procedimentos de interesse à saúde pública.",
+        "pena": "advertência, apreensão ou inutilização do produto, suspensão da venda ou fabricação do produto, interdição, cancelamento do registro do produto, cassação da licença sanitária, proibição de propaganda e/ou multa",
+        "keywords": "profissional não comunicou efeito nocivo"
+      },
+      {
+        "id": "mun-18-XXXI",
+        "label": "Art. 18, inciso XXXI",
+        "texto": "Deixar o responsável de notificar os casos previstos pelo art. 94 a 99 desta lei, além de doenças ou zoonoses transmissíveis ao homem, bem como acidentes, agravos ou doenças do trabalho, conforme o que dispõe a legislação pertinente.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "não notificou zoonose acidente de trabalho"
       },
       {
         "id": "mun-18-XXXII",
         "label": "Art. 18, inciso XXXII",
-        "texto": "Deixar de manter condições adequadas de higiene e conservação.",
-        "keywords": "sujeira conservação precária"
+        "texto": "Impedir ou dificultar a aplicação de medidas sanitárias relativas às doenças transmissíveis e/ou eutanásia de animais domésticos, considerados perigosos ou nocivos pelas autoridades de Vigilância em Saúde.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "impedir eutanásia animal perigoso medida sanitária"
+      },
+      {
+        "id": "mun-18-XXXIII",
+        "label": "Art. 18, inciso XXXIII",
+        "texto": "Reter comprovante de vacinação obrigatória.",
+        "pena": "advertência, pena educativa, interdição e/ou multa",
+        "keywords": "reter comprovante de vacinação obrigatória"
+      },
+      {
+        "id": "mun-18-XXXIV",
+        "label": "Art. 18, inciso XXXIV",
+        "texto": "Deixar de executar, dificultar e/ou opor-se à execução de medidas sanitárias que visem à prevenção das doenças transmissíveis e sua disseminação.",
+        "pena": "advertência, pena educativa, interdição e/ou multa",
+        "keywords": "opor-se medida de prevenção doença transmissível"
+      },
+      {
+        "id": "mun-18-XXXV",
+        "label": "Art. 18, inciso XXXV",
+        "texto": "Opor-se à realização de provas imunológicas determinadas por norma legal ou pelas autoridades de Vigilância em Saúde, com vistas à proteção individual e/ou da coletividade.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "recusa prova imunológica exame"
+      },
+      {
+        "id": "mun-18-XXXVI",
+        "label": "Art. 18, inciso XXXVI",
+        "texto": "Desinterditar estabelecimentos de assistência ou de interesse da saúde, construções, obras, reformas em geral, instrumentos, equipamentos ou máquinas utilizados no processo produtivo, e/ou liberar produtos ou outros quando estes estiverem sob interdição parcial ou total, bem como apreensão preventiva ou definitiva efetuada pela autoridade em Vigilância em Saúde.",
+        "pena": "advertência, suspensão, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "desinterditar sem autorização romper lacre"
+      },
+      {
+        "id": "mun-18-XXXVII",
+        "label": "Art. 18, inciso XXXVII",
+        "texto": "Aviar e/ou manipular receita em desacordo com as prescrições médicas ou contrariando o disposto na legislação pertinente.",
+        "pena": "advertência, pena educativa, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "aviar receita em desacordo farmácia"
+      },
+      {
+        "id": "mun-18-XXXVIII",
+        "label": "Art. 18, inciso XXXVIII",
+        "texto": "Fornecer, manipular, vender ou praticar atos de comércio em relação a medicamentos, drogas e produtos para saúde cuja venda e uso dependa de prescrição médica, especialmente antibióticos, sem a observância dessa exigência ou contrariando a legislação pertinente.",
+        "pena": "advertência, pena educativa, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "venda medicamento sem receita antibiótico controlado"
+      },
+      {
+        "id": "mun-18-XXXIX",
+        "label": "Art. 18, inciso XXXIX",
+        "texto": "Deixar de realizar controle de estoque dos medicamentos submetidos a regime especial ou fazê-lo em desacordo com a Legislação Sanitária.",
+        "pena": "advertência, pena educativa, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "controle de estoque medicamento controle especial"
+      },
+      {
+        "id": "mun-18-XL",
+        "label": "Art. 18, inciso XL",
+        "texto": "Prescrever receitas em desacordo com legislação pertinente.",
+        "pena": "advertência, pena educativa, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "prescrição de receita em desacordo"
+      },
+      {
+        "id": "mun-18-XLI",
+        "label": "Art. 18, inciso XLI",
+        "texto": "Lavrar receituário, prontuários, laudos, atestados e outros com caligrafia ilegível e/ou em desobediência ao sistema de classificação internacional de doenças.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "receituário prontuário caligrafia ilegível"
+      },
+      {
+        "id": "mun-18-XLII",
+        "label": "Art. 18, inciso XLII",
+        "texto": "Dispensar medicamentos com fins comerciais através de reembolso postal, Sedex, ou outros sem autorização da autoridade em Vigilância em Saúde competente.",
+        "pena": "advertência, suspensão, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "venda medicamento correio postal Sedex sem autorização"
+      },
+      {
+        "id": "mun-18-XLIII",
+        "label": "Art. 18, inciso XLIII",
+        "texto": "Retirar ou aplicar sangue, proceder a operações de plasmaferese, ou desenvolver outras atividades hemoterápicas, contrariando a legislação pertinente.",
+        "pena": "advertência, suspensão, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "sangue plasmaferese hemoterapia irregular"
+      },
+      {
+        "id": "mun-18-XLIV",
+        "label": "Art. 18, inciso XLIV",
+        "texto": "Exportar partes do corpo humano, órgãos, glândulas, hormônios, tecidos, placentas, substâncias, sangue e seus derivados, ou outros, ou ainda utilizá-los em desacordo com a legislação pertinente.",
+        "pena": "advertência, suspensão, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "órgão humano placenta sangue exportação irregular"
+      },
+      {
+        "id": "mun-18-XLV",
+        "label": "Art. 18, inciso XLV",
+        "texto": "Rotular alimentos, produtos alimentícios, bebidas, refrigerantes, medicamentos, drogas, insumos farmacêuticos, de higiene, de correção estética, cosméticos, perfumes, produtos para saúde, saneantes e similares e quaisquer outros produtos ou substâncias de interesse à saúde, contrariando a Legislação Sanitária.",
+        "pena": "advertência, suspensão da venda ou fabricação do produto, apreensão ou inutilização do produto, interdição, cancelamento do registro e/ou multa",
+        "keywords": "rótulo rotulagem etiqueta errada incompleta"
+      },
+      {
+        "id": "mun-18-XLVI",
+        "label": "Art. 18, inciso XLVI",
+        "texto": "Alterar o processo de fabricação dos produtos sujeitos a controle sanitário, modificar os seus componentes básicos, nome ou demais elementos objeto do registro, sem a autorização do órgão sanitário competente.",
+        "pena": "advertência, suspensão da venda ou fabricação do produto, apreensão ou inutilização do produto, interdição, cancelamento do registro e/ou multa",
+        "keywords": "alterar processo de fabricação sem autorização"
+      },
+      {
+        "id": "mun-18-XLVII",
+        "label": "Art. 18, inciso XLVII",
+        "texto": "Modificar ou alterar as atividades para as quais o estabelecimento foi licenciado, sem autorização da autoridade em Vigilância em Saúde municipal ou do órgão sanitário competente.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "mudar atividade sem autorização licença sanitária"
+      },
+      {
+        "id": "mun-18-XLVIII",
+        "label": "Art. 18, inciso XLVIII",
+        "texto": "Reaproveitar vasilhames capazes de serem nocivos à saúde, no armazenamento, envasamento e/ou acondicionamento de alimentos, bebidas, refrigerantes, medicamentos, drogas, insumos farmacêuticos, cosméticos, perfumes, saneantes domissanitários ou outros de interesse à saúde.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, cancelamento do registro, cassação da licença sanitária e/ou multa",
+        "keywords": "reaproveitamento vasilhame embalagem reutilizada"
+      },
+      {
+        "id": "mun-18-XLIX",
+        "label": "Art. 18, inciso XLIX",
+        "texto": "Guardar, armazenar, ter em depósito, utilizar, fornecer, adquirir, ministrar, expor à venda ou entregar ao consumo produtos de interesse à saúde cujo prazo de validade tenha sido adulterado ou expirado.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "produto vencido validade expirada adulterada"
+      },
+      {
+        "id": "mun-18-L",
+        "label": "Art. 18, inciso L",
+        "texto": "Transportar, embalar, manusear e estocar produtos de interesse à saúde de forma a comprometer sua qualidade ou eficácia.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, cancelamento do registro, cassação da licença sanitária e/ou multa",
+        "keywords": "transporte armazenamento inadequado compromete qualidade"
+      },
+      {
+        "id": "mun-18-LI",
+        "label": "Art. 18, inciso LI",
+        "texto": "Utilizar, na preparação de produtos ou substâncias de interesse à saúde, produtos de origem animal sem registro nos órgãos competentes, órgãos de animais doentes, estafados, emagrecidos ou que apresentem sinais de decomposição no momento de serem manipulados.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, cancelamento do registro, cassação da licença sanitária e/ou multa",
+        "keywords": "produto de origem animal doente decomposição sem registro"
+      },
+      {
+        "id": "mun-18-LII",
+        "label": "Art. 18, inciso LII",
+        "texto": "Armazenar, utilizar, transportar, preparar, comercializar produtos imunológicos, imunoterápicos, biológicos e outros que exijam cuidados especiais de conservação, sem observância das condições necessárias a sua preservação.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, cancelamento do registro, cassação da licença sanitária e/ou multa",
+        "keywords": "produto imunológico biológico sem conservação adequada"
+      },
+      {
+        "id": "mun-18-LIII",
+        "label": "Art. 18, inciso LIII",
+        "texto": "Aplicar raticidas, pesticidas, inseticidas e produtos similares, cuja ação se produza por gás, vapor ou outras formas, em habitações particulares, coletivas e/ou públicas, galerias, bueiros, porões, sótãos ou locais de possível comunicação com residências ou frequentados por pessoas ou animais, sem as devidas precauções e/ou contrariando a legislação pertinente.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, cancelamento da licença sanitária e/ou multa",
+        "keywords": "raticida pesticida inseticida sem precaução dedetização"
+      },
+      {
+        "id": "mun-18-LIV",
+        "label": "Art. 18, inciso LIV",
+        "texto": "Descumprir as normas legais ou outras exigências sanitárias, por empresas de transportes, seus agentes e consignatários, comandantes ou responsáveis diretos por embarcações, aeronaves, ferrovias, veículos terrestres nacionais e estrangeiros.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "transporte embarcação aeronave veículo descumprimento"
+      },
+      {
+        "id": "mun-18-LV",
+        "label": "Art. 18, inciso LV",
+        "texto": "Deixar de manter rigoroso asseio nas dependências dos estabelecimentos de interesse ou de assistência à saúde, habitações particulares ou coletivas.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "falta de asseio limpeza estabelecimento"
+      },
+      {
+        "id": "mun-18-LVI",
+        "label": "Art. 18, inciso LVI",
+        "texto": "Inobservar exigências sanitárias relativas a imóveis, seus proprietários, locatários, usuários ou quem detenha a sua posse.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "imóvel exigência sanitária inobservância proprietário"
+      },
+      {
+        "id": "mun-18-LVII",
+        "label": "Art. 18, inciso LVII",
+        "texto": "Proceder à cremação de cadáveres ou utilizá-los, contrariando as normas pertinentes.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "cremação cadáver irregular funerária"
+      },
+      {
+        "id": "mun-18-LVIII",
+        "label": "Art. 18, inciso LVIII",
+        "texto": "Fraudar, falsificar ou adulterar alimentos, bebidas, medicamentos, drogas, insumos farmacêuticos, cosméticos, saneantes, produtos de higiene e para a saúde, e quaisquer outros que interessem à saúde.",
+        "pena": "advertência, suspensão da venda ou fabricação do produto, apreensão ou inutilização do produto, interdição, cancelamento do registro do produto, cassação da licença sanitária e/ou multa",
+        "keywords": "fraude falsificação adulteração produto alimento medicamento"
+      },
+      {
+        "id": "mun-18-LIX",
+        "label": "Art. 18, inciso LIX",
+        "texto": "Fraudar, falsificar ou adulterar declarações, laudos, registros ou quaisquer outros documentos de interesse à saúde.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "fraude documento laudo declaração registro"
+      },
+      {
+        "id": "mun-18-LX",
+        "label": "Art. 18, inciso LX",
+        "texto": "Entregar ao uso ou consumo, expor à venda, armazenar ou acondicionar produtos, substâncias ou outros de interesse da saúde que estejam contaminados, alterados, em mau estado de conservação, deteriorados e/ou contenham agentes patogênicos, aditivos proibidos, perigosos ou quaisquer substâncias prejudiciais à saúde.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, cancelamento do registro, cassação da licença sanitária e/ou multa",
+        "keywords": "produto contaminado deteriorado agente patogênico"
+      },
+      {
+        "id": "mun-18-LXI",
+        "label": "Art. 18, inciso LXI",
+        "texto": "Expor à venda em locais de comércio de gêneros alimentícios, em feiras e/ou ambulantes, alimentos destinados ao consumo sem a devida proteção e conservação adequada de forma a proporcionar alteração e/ou contaminação dos mesmos.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, cancelamento do registro, cassação da licença sanitária e/ou multa",
+        "keywords": "feira ambulante alimento sem proteção conservação"
+      },
+      {
+        "id": "mun-18-LXII",
+        "label": "Art. 18, inciso LXII",
+        "texto": "Deixar de constar na embalagem a data de preparo e/ou fabricação e/ou fracionamento, quando permitido pela legislação, prazo de validade, número de lote e condições de armazenagem de alimentos, bebidas, medicamentos, cosméticos, produtos de higiene, produtos para saúde, saneantes domissanitários, artigos, materiais ou quaisquer outros produtos fabricados nos estabelecimentos de interesse à saúde.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, cancelamento do registro, cassação da licença sanitária e/ou multa",
+        "keywords": "embalagem sem data de fabricação lote validade"
+      },
+      {
+        "id": "mun-18-LXIII",
+        "label": "Art. 18, inciso LXIII",
+        "texto": "Deixar de identificar os materiais esterilizados com a data da esterilização, validade, número do lote e/ou indicador químico e nome do profissional.",
+        "pena": "advertência, pena educativa, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "material esterilizado sem identificação lote indicador químico"
+      },
+      {
+        "id": "mun-18-LXIV",
+        "label": "Art. 18, inciso LXIV",
+        "texto": "Deixar de executar os métodos de controle da eficácia do processo de esterilização.",
+        "pena": "advertência, pena educativa, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "controle de eficácia da esterilização não executado"
+      },
+      {
+        "id": "mun-18-LXV",
+        "label": "Art. 18, inciso LXV",
+        "texto": "Utilizar utensílios, equipamentos e instrumentos diagnósticos, terapêuticos e auxiliares, que entrem em contato com fluidos orgânicos, mucosas e/ou soluções de continuidade de tecidos de pacientes que não sejam descartáveis ou esterilizados, em caso de impossibilidade tecnológica.",
+        "pena": "advertência, pena educativa, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "instrumento não esterilizado contato fluido orgânico"
+      },
+      {
+        "id": "mun-18-LXVI",
+        "label": "Art. 18, inciso LXVI",
+        "texto": "Fazer uso de radiação ultravioleta e de pastilhas de formalina como meio de esterilização, salvo situações previstas na forma de regulamento.",
+        "pena": "advertência, pena educativa, apreensão ou inutilização do produto, interdição, suspensão de venda, cassação da licença sanitária e/ou multa",
+        "keywords": "radiação ultravioleta pastilha de formalina esterilização"
+      },
+      {
+        "id": "mun-18-LXVII",
+        "label": "Art. 18, inciso LXVII",
+        "texto": "Executar procedimentos compatíveis com as atividades dos estabelecimentos de interesse ou de assistência à saúde, sem estabelecer por escrito as respectivas rotinas padronizadas e de fácil acesso aos funcionários.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "sem POP procedimento operacional padrão por escrito"
+      },
+      {
+        "id": "mun-18-LXVIII",
+        "label": "Art. 18, inciso LXVIII",
+        "texto": "Executar todo e qualquer procedimento classificado como invasivo, bem como a utilização de equipamentos terapêuticos, por quem não possua habilitação técnica de acordo com a legislação vigente.",
+        "pena": "advertência, pena educativa, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "procedimento invasivo sem habilitação técnica"
+      },
+      {
+        "id": "mun-18-LXIX",
+        "label": "Art. 18, inciso LXIX",
+        "texto": "Executar procedimentos invasivos, bem como efetuar a utilização de equipamentos terapêuticos em salões de cabeleireiros, barbearias e institutos de beleza.",
+        "pena": "advertência, pena educativa, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "procedimento invasivo salão de beleza barbearia"
+      },
+      {
+        "id": "mun-18-LXX",
+        "label": "Art. 18, inciso LXX",
+        "texto": "Deixar de manter registros atualizados sobre dados de pacientes em todos os serviços de saúde, na forma da legislação pertinente.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "prontuário paciente desatualizado"
+      },
+      {
+        "id": "mun-18-LXXI",
+        "label": "Art. 18, inciso LXXI",
+        "texto": "Executar exames clínicos em praças e logradouros públicos, salvo em situações autorizadas pelo Gestor Municipal de Saúde, considerando as legislações específicas.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "exame clínico em praça logradouro público sem autorização"
+      },
+      {
+        "id": "mun-18-LXXII",
+        "label": "Art. 18, inciso LXXII",
+        "texto": "Extrair, produzir, fabricar, transformar, manipular, purificar, embalar ou reembalar, transportar, armazenar ou utilizar produtos ou resíduos perigosos, tóxicos, explosivos, inflamáveis, corrosivos, emissores de radiações ionizantes, entre outros congêneres, contrariando a legislação pertinente.",
+        "pena": "advertência, pena educativa, apreensão ou inutilização do produto, interdição, suspensão de venda, cassação da licença sanitária e/ou multa",
+        "keywords": "resíduo perigoso tóxico explosivo radiação ionizante"
+      },
+      {
+        "id": "mun-18-LXXIII",
+        "label": "Art. 18, inciso LXXIII",
+        "texto": "Prestar serviços que utilizem a radiação como princípio e/ou terapêutica, sem estrutura adequada conforme previsto na legislação e ou sem a devida orientação documentada aos usuários quanto ao uso correto e ao risco decorrente da sua exposição.",
+        "pena": "advertência, pena educativa, interdição, suspensão de venda, cassação da licença sanitária e/ou multa",
+        "keywords": "radiação terapêutica sem estrutura sem orientação"
+      },
+      {
+        "id": "mun-18-LXXIV",
+        "label": "Art. 18, inciso LXXIV",
+        "texto": "Deixar de fornecer à autoridade em Vigilância em Saúde dados ou outras informações solicitadas sobre componentes utilizados na produção e/ou em processos produtivos.",
+        "pena": "advertência, pena educativa, apreensão ou inutilização do produto, interdição, suspensão de venda, cassação da licença sanitária e/ou multa",
+        "keywords": "negou informação sobre componentes de produção"
+      },
+      {
+        "id": "mun-18-LXXV",
+        "label": "Art. 18, inciso LXXV",
+        "texto": "Manter ambiente e/ou condição de trabalho que ofereça risco a saúde do trabalhador.",
+        "pena": "advertência, pena educativa, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "condição de trabalho insalubre risco ao trabalhador"
+      },
+      {
+        "id": "mun-18-LXXVI",
+        "label": "Art. 18, inciso LXXVI",
+        "texto": "Deixar os proprietários e trabalhadores dos estabelecimentos de interesse ou de assistência à saúde de exercer suas atividades em condições de saúde e higiene adequadas às atividades desenvolvidas, conforme legislação pertinente.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "condições de saúde e higiene inadequadas ao trabalhador"
+      },
+      {
+        "id": "mun-18-LXXVII",
+        "label": "Art. 18, inciso LXXVII",
+        "texto": "Fabricar, comercializar, entregar ao uso e/ou operar/permitir que se opere instrumentos, máquinas e equipamentos no processo produtivo que ofereçam risco à saúde ou ao trabalhador.",
+        "pena": "advertência, pena educativa, apreensão ou inutilização do equipamento, suspensão da venda ou fabricação do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "máquina equipamento risco ao trabalhador"
+      },
+      {
+        "id": "mun-18-LXXVIII",
+        "label": "Art. 18, inciso LXXVIII",
+        "texto": "Deixar o empregador de providenciar os exames médicos admissionais, periódicos e/ou demissionais de seus funcionários.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "exame médico admissional periódico demissional não realizado"
+      },
+      {
+        "id": "mun-18-LXXIX",
+        "label": "Art. 18, inciso LXXIX",
+        "texto": "Deixar o empregador de fornecer, repor e/ou instruir e fiscalizar os empregados quanto ao uso e manutenção de equipamentos de proteção individual e coletivo.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "EPI equipamento de proteção individual não fornecido"
+      },
+      {
+        "id": "mun-18-LXXX",
+        "label": "Art. 18, inciso LXXX",
+        "texto": "Deixar o empregador de promover adequadas condições de segurança, higiene nos locais de trabalho, conforme legislação pertinente, bem como desatender a ordem de prioridades estabelecidas pelo art. 84 e 85, desta lei.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "segurança higiene local de trabalho inadequado"
+      },
+      {
+        "id": "mun-18-LXXXI",
+        "label": "Art. 18, inciso LXXXI",
+        "texto": "Construir obras sem os devidos padrões de segurança e higiene indispensáveis à saúde do trabalhador e acompanhamento do técnico de segurança do trabalho conforme legislação vigente.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "obra construção sem segurança do trabalho"
+      },
+      {
+        "id": "mun-18-LXXXII",
+        "label": "Art. 18, inciso LXXXII",
+        "texto": "Deixar de promover limpeza e/ou manutenção da estrutura física, equipamentos, materiais e mobiliários nos estabelecimentos de assistência ou de interesse à saúde.",
+        "pena": "advertência, pena educativa, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "falta de limpeza e manutenção estrutura equipamentos"
+      },
+      {
+        "id": "mun-18-LXXXIII",
+        "label": "Art. 18, inciso LXXXIII",
+        "texto": "Apresentar precárias condições de higiene, relativas a ambiente, pessoal e material, de forma a colocar em risco a pureza e qualidade do produto e/ou o serviço prestado aos usuários pelos estabelecimentos de interesse ou de assistência à saúde.",
+        "pena": "advertência, pena educativa, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "condições precárias de higiene ambiente pessoal material"
+      },
+      {
+        "id": "mun-18-LXXXIV",
+        "label": "Art. 18, inciso LXXXIV",
+        "texto": "Possuir estrutura física que possibilite o cruzamento de áreas consideradas limpas e sujas, relativas a pessoal, material e pacientes.",
+        "pena": "advertência, pena educativa, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "cruzamento de área limpa e suja fluxo"
+      },
+      {
+        "id": "mun-18-LXXXV",
+        "label": "Art. 18, inciso LXXXV",
+        "texto": "Extrair, produzir, fabricar, transformar, preparar, importar, exportar, reexportar, remeter, transportar, expor, oferecer, comprar, trocar, ceder, manter em depósito, manipular, comercializar ou adquirir substâncias sob regime de controle especial, sem a devida autorização do órgão sanitário competente.",
+        "pena": "advertência, apreensão ou inutilização do produto, cancelamento do registro do produto, suspensão da venda ou fabricação do produto, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "substância controle especial sem autorização"
+      },
+      {
+        "id": "mun-18-LXXXVI",
+        "label": "Art. 18, inciso LXXXVI",
+        "texto": "Manter em farmácias, drogarias, ervanários e estabelecimentos afins, receituários em branco e/ou carimbos médicos.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "receituário em branco carimbo médico farmácia drogaria"
+      },
+      {
+        "id": "mun-18-LXXXVII",
+        "label": "Art. 18, inciso LXXXVII",
+        "texto": "Utilizar na produção ou manipulação de produtos de interesse à saúde matérias-primas condenadas, proibidas, vencidas, interditadas, nocivas e/ou sem autorização prévia da autoridade em Vigilância em Saúde.",
+        "pena": "advertência, apreensão ou inutilização do produto, cancelamento do registro do produto, suspensão da venda ou fabricação do produto, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "matéria-prima condenada vencida sem autorização"
+      },
+      {
+        "id": "mun-18-LXXXVIII",
+        "label": "Art. 18, inciso LXXXVIII",
+        "texto": "Desenvolver em um mesmo ambiente físico, atividades incompatíveis de produção e/ou prestação de serviços.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "atividades incompatíveis mesmo ambiente físico"
+      },
+      {
+        "id": "mun-18-LXXXIX",
+        "label": "Art. 18, inciso LXXXIX",
+        "texto": "Instalar serviços de abastecimento de água e de remoção de dejetos, sem que a fiscalização municipal examine e considere aceitáveis a água a ser utilizada, as instalações e os materiais empregados.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "abastecimento de água sem fiscalização municipal"
+      },
+      {
+        "id": "mun-18-XC",
+        "label": "Art. 18, inciso XC",
+        "texto": "Deixar de tratar, segundo padrões do Ministério da Saúde, a água distribuída na rede de abastecimento público do Município.",
+        "pena": "advertência, interdição e/ou multa",
+        "keywords": "água não tratada rede de abastecimento público"
+      },
+      {
+        "id": "mun-18-XCI",
+        "label": "Art. 18, inciso XCI",
+        "texto": "Construir ou manter edificações em zona agrícola desobedecendo às exigências legais pertinentes às condições sanitárias e/ou sem suprimento de água potável, tratamento e disposições adequadas de esgotos sanitários e resíduos sólidos.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "edificação zona agrícola sem água potável esgoto"
+      },
+      {
+        "id": "mun-18-XCII",
+        "label": "Art. 18, inciso XCII",
+        "texto": "Criar, manter ou reproduzir animais em desacordo com as condições sanitárias estabelecidas na legislação pertinente.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "criação de animais em desacordo com condições sanitárias"
+      },
+      {
+        "id": "mun-18-XCIII",
+        "label": "Art. 18, inciso XCIII",
+        "texto": "Criar, manter ou reproduzir, em perímetro urbano ou de grande concentração populacional, animais que por sua espécie ou quantidade venham a causar prejuízos e ou risco à saúde pública individual ou coletiva.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "criação de animais em perímetro urbano risco à saúde pública"
+      },
+      {
+        "id": "mun-18-XCIV",
+        "label": "Art. 18, inciso XCIV",
+        "texto": "Instalar ventilação em desacordo com normas técnicas, em locais onde se desenvolvam atividades de interesse ou de assistência à saúde e/ou produtos de interesse da saúde.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "ventilação em desacordo com normas técnicas"
+      },
+      {
+        "id": "mun-18-XCV",
+        "label": "Art. 18, inciso XCV",
+        "texto": "Deixar de exigir, os estabelecimentos que congreguem crianças, creches e estabelecimentos congêneres, no momento da matrícula anual, a apresentação do comprovante de imunização.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "creche sem exigir comprovante de imunização na matrícula"
+      },
+      {
+        "id": "mun-18-XCVI",
+        "label": "Art. 18, inciso XCVI",
+        "texto": "Deixar de preencher corretamente o documento de \"Declaração de Nascidos Vivos\" e/ou deixar de enviá-lo ao Departamento de Vigilância Epidemiológica do município, quaisquer estabelecimentos de saúde onde ocorrerem nascimentos.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "declaração de nascido vivo incompleta não enviada"
+      },
+      {
+        "id": "mun-18-XCVII",
+        "label": "Art. 18, inciso XCVII",
+        "texto": "Deixar de preencher corretamente o documento de \"Declaração de Nascidos Vivos\" e/ou deixar de enviá-los ao Departamento de Vigilância Epidemiológica do município, o Cartório de Registro Civil, no momento do registro da criança, no caso de nascimento domiciliar.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "declaração de nascido vivo nascimento domiciliar cartório"
+      },
+      {
+        "id": "mun-18-XCVIII",
+        "label": "Art. 18, inciso XCVIII",
+        "texto": "Deixar de efetuar, o Cartório de Registro Civil a \"Declaração de Óbito\" em número de vias necessárias e impresso especial destinado a este fim, e/ou deixar de enviar a primeira via do documento ao Departamento de Vigilância Epidemiológica do município, no prazo legal.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "declaração de óbito incompleta cartório prazo"
+      },
+      {
+        "id": "mun-18-XCIX",
+        "label": "Art. 18, inciso XCIX",
+        "texto": "Transgredir qualquer normativa e/ou adotar procedimentos na área de saneamento ambiental que possam colocar em risco a saúde humana.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "saneamento ambiental risco à saúde humana"
+      },
+      {
+        "id": "mun-18-C",
+        "label": "Art. 18, inciso C",
+        "texto": "Canalizar e/ou permitir a ligação de efluentes sanitários em galeria de águas pluviais, vias públicas ou terrenos vizinhos.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "ligação clandestina de esgoto em galeria pluvial"
+      },
+      {
+        "id": "mun-18-CI",
+        "label": "Art. 18, inciso CI",
+        "texto": "Construir ou fazer funcionar todo e qualquer estabelecimento de criação, manutenção e reprodução de animais, contrariando as normas legais e regulamentos pertinentes.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "estabelecimento de criação de animais contrariando normas"
+      },
+      {
+        "id": "mun-18-CII",
+        "label": "Art. 18, inciso CII",
+        "texto": "Reciclar e/ou transformar resíduos sólidos infectantes gerados por estabelecimentos de assistência ou de interesse à saúde.",
+        "pena": "advertência, apreensão ou inutilização do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "reciclagem de resíduo infectante lixo hospitalar"
+      },
+      {
+        "id": "mun-18-CIII",
+        "label": "Art. 18, inciso CIII",
+        "texto": "Extrair, produzir, fabricar, transformar, preparar, manipular, purificar, fracionar, embalar ou reembalar, importar, exportar, armazenar, expedir, transportar, comprar, vender, ceder ou usar produtos de interesse da saúde, sem os padrões de identidade, qualidade e segurança.",
+        "pena": "advertência, apreensão ou inutilização do produto, cancelamento do registro do produto, suspensão da venda ou fabricação do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "produto sem padrão de identidade qualidade segurança"
+      },
+      {
+        "id": "mun-18-CIV",
+        "label": "Art. 18, inciso CIV",
+        "texto": "Comercializar produtos de interesse da saúde identificados como institucionais ou de distribuição gratuita.",
+        "pena": "advertência, apreensão ou inutilização do produto, suspensão da venda ou fabricação do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "venda de amostra gratuita distribuição institucional"
+      },
+      {
+        "id": "mun-18-CV",
+        "label": "Art. 18, inciso CV",
+        "texto": "Deixar de fornecer à Autoridade em Vigilância em Saúde, quando solicitado, informações inerentes a rotulagem dos produtos.",
+        "pena": "advertência, apreensão ou inutilização do produto, cancelamento do registro do produto, suspensão da venda ou fabricação do produto, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "negou informação sobre rotulagem"
+      },
+      {
+        "id": "mun-18-CVI",
+        "label": "Art. 18, inciso CVI",
+        "texto": "Fazer propaganda de produtos farmacêuticos e/ou seus correlatos em promoções, ofertas, doações, ou por meio de concursos ou prêmios aos médicos, cirurgiões-dentistas, médicos veterinários ou quaisquer outros profissionais de saúde.",
+        "pena": "advertência, proibição e/ou suspensão de propaganda ou publicidade, contrapropaganda, suspensão de venda ou fabricação do produto, imposição de mensagem retificadora e/ou multa",
+        "keywords": "propaganda farmacêutica brinde prêmio profissional de saúde"
+      },
+      {
+        "id": "mun-18-CVII",
+        "label": "Art. 18, inciso CVII",
+        "texto": "Deixar de implantar permanente programa de controle de infecção nos estabelecimentos de assistência à saúde, nos quais o mesmo seja obrigatório.",
+        "pena": "advertência, interdição, cassação da licença sanitária e/ou multa",
+        "keywords": "programa de controle de infecção não implantado"
+      },
+      {
+        "id": "mun-18-CVIII",
+        "label": "Art. 18, inciso CVIII",
+        "texto": "Realizar pesquisa clínica, de qualquer natureza, envolvendo animais e/ou seres humanos, sem a autorização do respectivo Comitê de Ética em Pesquisa.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "pesquisa clínica sem autorização do comitê de ética"
+      },
+      {
+        "id": "mun-18-CIX",
+        "label": "Art. 18, inciso CIX",
+        "texto": "Deixar de remeter à autoridade em Vigilância em Saúde competente, na forma solicitada, informações em saúde para fins de planejamento, correção finalística de atividades, monitoramento das condições de funcionamento de estabelecimentos, controle de fatores de risco a que possa estar exposta à coletividade e elaboração de estatísticas de saúde.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "não remeteu informações em saúde solicitadas"
+      },
+      {
+        "id": "mun-18-CX",
+        "label": "Art. 18, inciso CX",
+        "texto": "Deixar de notificar à autoridade em Vigilância em Saúde competente doenças e agravos à saúde de notificação compulsória, acidentes de trabalho, doenças ou agravos à saúde relacionados ao trabalho, eventos adversos à saúde e doenças transmitidas por alimentos, de acordo com legislação pertinente.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "não notificou doença de notificação compulsória"
+      },
+      {
+        "id": "mun-18-CXI",
+        "label": "Art. 18, inciso CXI",
+        "texto": "Deixar de proceder, os respectivos proprietários ou assemelhados, a manutenção das condições sanitárias de imóveis e/ou estabelecimento de qualquer natureza, de forma a evitar a proliferação de vetores e/ou animais peçonhentos que possam comprometer a preservação da saúde pública.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "proliferação de vetores animais peçonhentos falta de manutenção"
+      },
+      {
+        "id": "mun-18-CXII",
+        "label": "Art. 18, inciso CXII",
+        "texto": "Não cumprir com o teor de intimação expedida pela Autoridade em Vigilância em Saúde.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "descumprimento de termo de intimação"
+      },
+      {
+        "id": "mun-18-CXIII",
+        "label": "Art. 18, inciso CXIII",
+        "texto": "Descumprir atos emanados das autoridades de Vigilância em Saúde visando à aplicação da legislação pertinente à promoção, prevenção e proteção e recuperação à saúde.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "descumprimento de ato da autoridade sanitária"
+      },
+      {
+        "id": "mun-18-CXIV",
+        "label": "Art. 18, inciso CXIV",
+        "texto": "Obstar, retardar ou dificultar a ação fiscalizadora da autoridade em Vigilância em Saúde competente no exercício de suas funções.",
+        "pena": "advertência e/ou multa",
+        "keywords": "impedir fiscalização dificultar ação embaraço"
+      },
+      {
+        "id": "mun-18-CXV",
+        "label": "Art. 18, inciso CXV",
+        "texto": "Desacatar ou desrespeitar a autoridade em Vigilância em Saúde, quando no exercício de suas atribuições legais.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "desacato desrespeito à autoridade sanitária"
+      },
+      {
+        "id": "mun-18-CXVI",
+        "label": "Art. 18, inciso CXVI",
+        "texto": "Transgredir outras normas legais federais, estaduais e municipais, destinadas à promoção, prevenção e proteção à saúde.",
+        "pena": "advertência, pena educativa e/ou multa",
+        "keywords": "transgressão de outras normas federais estaduais municipais"
       }
-    ]
+    ],
+    "municipioId": "prudentopolis"
   },
   "LEI_ESTADUAL_13331_2001": {
     "titulo": "Lei Estadual nº 13.331/2001",

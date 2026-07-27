@@ -4,6 +4,7 @@ import dynamic from "next/dynamic"
 import lang from "suneditor/src/lang"
 import "suneditor/dist/css/suneditor.min.css"
 import { OfficialLetterhead } from "./official-letterhead"
+import { sanitizeHtml } from "@/lib/sanitize-html"
 
 // SunEditor acessa `document`/`window` já na primeira renderização e não se
 // protege contra SSR — mesmo dentro de um arquivo "use client", o Next ainda
@@ -40,13 +41,19 @@ interface DocfacilEditorProps {
   /** Mostra o timbre oficial acima da área de texto, como pré-visualização
    * de como o documento final vai ficar. Padrão: true. */
   showLetterhead?: boolean;
+  /** Empurra esse HTML pro editor sempre que mudar (ex: depois de uma
+   * revisão por IA, ou ao retomar um rascunho). O SunEditor é "não
+   * controlado" — só lê `defaultValue` na montagem — então uma troca de
+   * conteúdo feita fora da digitação do próprio usuário (autofocus)
+   * precisa passar por aqui pra realmente aparecer na tela. */
+  forceContent?: string;
 }
 
 /** Editor de texto rico usado nos modelos e documentos do DOCFACIL — envolve
  * o SunEditor (MIT, github.com/JiHong88/suneditor) num "papel" A4 com
  * margens reais e timbre, para a edição já parecer com a página final
  * (como num editor de texto tipo Word), em vez de uma caixa de texto solta. */
-export function DocfacilEditor({ defaultValue, onChange, placeholder, disable, showLetterhead = true }: DocfacilEditorProps) {
+export function DocfacilEditor({ defaultValue, onChange, placeholder, disable, showLetterhead = true, forceContent }: DocfacilEditorProps) {
   return (
     <div className="bg-zinc-100 p-4 sm:p-10 overflow-x-auto">
       <div className="docfacil-paper mx-auto bg-white border border-zinc-200 shadow-sm" style={{ width: "210mm", minWidth: "210mm" }}>
@@ -56,7 +63,8 @@ export function DocfacilEditor({ defaultValue, onChange, placeholder, disable, s
           </div>
         )}
         <SunEditor
-          defaultValue={defaultValue}
+          defaultValue={sanitizeHtml(defaultValue)}
+          setContents={forceContent !== undefined ? sanitizeHtml(forceContent) : undefined}
           onChange={onChange}
           disable={disable}
           lang={lang.pt_br}

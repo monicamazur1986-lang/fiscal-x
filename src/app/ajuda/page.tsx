@@ -224,7 +224,6 @@ export default function AjudaPage() {
   return (
     <div className="min-h-screen bg-[#F5F2EA]">
       <DocfacilTopbar
-        backHref="/dashboard"
         title="Central de Ajuda"
         subtitle="Manual e perguntas frequentes do sistema"
         actions={isGestor ? (

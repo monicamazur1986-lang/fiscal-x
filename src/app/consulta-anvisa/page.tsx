@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import { Search, Loader2, Landmark, Info, RefreshCw } from "lucide-react"
 
-import { BackButton } from "@/components/back-button"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -125,7 +124,6 @@ export default function ConsultaAnvisaPage() {
             <p className="text-[8px] md:text-[9px] text-zinc-400 font-black uppercase tracking-[0.2em] mt-1">Empresas (AFE) e produtos regularizados</p>
           </div>
         </div>
-        <BackButton href="/dashboard" />
       </header>
 
       <div className="flex items-start gap-3 p-4 rounded-2xl bg-blue-50 border border-blue-100 text-blue-700">

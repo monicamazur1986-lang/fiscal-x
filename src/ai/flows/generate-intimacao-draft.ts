@@ -12,7 +12,7 @@ import { claude, isClaudeReady, CLAUDE_MODEL } from '@/ai/claude';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { searchLegislacao } from '@/lib/legal-search';
 import { checkAndConsumeAiQuota, MONTHLY_AI_LIMIT } from '@/ai/usage-limit';
-import { buscarMelhorExemplo } from '@/lib/draft-examples-search';
+import { buscarMelhorExemplo, resolverMunicipioId } from '@/lib/draft-examples-search';
 
 // zodOutputFormat exige um schema construído com 'zod/v4' — a instância `z`
 // re-exportada pelo Genkit é do zod v3 e não é estruturalmente compatível.
@@ -77,10 +77,10 @@ function inferOrigem(descLower: string): Origem {
  * MOTOR DE INTELIGÊNCIA NATIVA (OFFLINE)
  * Realiza busca granular e valida se há dados suficientes para lavratura.
  */
-function generateLocalHeuristicDraft(input: GenerateIntimacaoDraftInput): GenerateIntimacaoDraftOutput {
+function generateLocalHeuristicDraft(input: GenerateIntimacaoDraftInput, municipioId?: string | null): GenerateIntimacaoDraftOutput {
   const rawDesc = input.caseDescription.trim();
   const type = input.reportType;
-  
+
   // 1. VALIDAÇÃO DE DENSIDADE (SEGURANÇA JURÍDICA)
   if (rawDesc.length < 12) {
     return {
@@ -92,7 +92,7 @@ function generateLocalHeuristicDraft(input: GenerateIntimacaoDraftInput): Genera
   // 2. BUSCA GRANULAR DE LEGISLAÇÃO (MiniSearch: ranking por relevância, prefixo e tolerância a erros de digitação)
   const pref = input.lawPreference || 'todas';
   const descLower = rawDesc.toLowerCase();
-  const matchedArticles = searchLegislacao(rawDesc, { pref });
+  const matchedArticles = searchLegislacao(rawDesc, { pref, municipioId: municipioId || undefined });
 
   // Se não encontrar nada no banco, interrompe para evitar nulidade
   if (matchedArticles.length === 0) {
@@ -188,8 +188,13 @@ export const generateIntimacaoDraftFlow = ai.defineFlow(
       return { draftIntimacao: "", error: "RELATO MUITO CURTO: Por favor, descreva com mais detalhes o que aconteceu para que o sistema possa localizar a lei correspondente." };
     }
 
+    // Resolvido uma única vez e reaproveitado nas duas buscas (legislação
+    // municipal e exemplo anterior) — nenhum artigo de outro município deve
+    // aparecer na fundamentação de um fiscal que não pertence a ele.
+    const municipioId = await resolverMunicipioId(input.uid);
+
     if (!input.useCloudAI || !isClaudeReady) {
-      return generateLocalHeuristicDraft(input);
+      return generateLocalHeuristicDraft(input, municipioId);
     }
 
     const quota = await checkAndConsumeAiQuota(input.uid);
@@ -202,10 +207,10 @@ export const generateIntimacaoDraftFlow = ai.defineFlow(
 
     try {
       const pref = input.lawPreference || 'todas';
-      const selectedArticles = searchLegislacao(input.caseDescription, { pref, limit: 10 });
+      const selectedArticles = searchLegislacao(input.caseDescription, { pref, limit: 10, municipioId: municipioId || undefined });
 
       if (selectedArticles.length === 0) {
-        return generateLocalHeuristicDraft(input);
+        return generateLocalHeuristicDraft(input, municipioId);
       }
 
       const finalContext = selectedArticles.map(a => `ID: ${a.id} | LEI: ${a.lawTitle} | ARTIGO/INCISO: ${a.label} | TEXTO LEGAL: ${a.texto}${a.pena ? ` | PENA APLICÁVEL: ${a.pena}` : ''}`).join('\n');
@@ -214,7 +219,7 @@ export const generateIntimacaoDraftFlow = ai.defineFlow(
       // que o próprio fiscal já exportou (aprovou) antes, pra usar como
       // referência de estilo — sem exemplos ainda cadastrados, isso não
       // muda em nada o comportamento atual.
-      const melhorExemplo = await buscarMelhorExemplo(input.caseDescription, input.uid);
+      const melhorExemplo = await buscarMelhorExemplo(input.caseDescription, municipioId);
       const exemploBlock = melhorExemplo
         ? `\n\nEXEMPLO DE RASCUNHO ANTERIOR JÁ APROVADO PELO FISCAL (use só como referência de estilo, tom e nível de detalhe — NUNCA copie fatos, nomes ou números deste exemplo; gere um texto novo, específico pro caso atual):\n"${melhorExemplo.draftGerado}"`
         : '';
@@ -240,7 +245,7 @@ export const generateIntimacaoDraftFlow = ai.defineFlow(
       return { ...output, draftIntimacao: cleanDraft, engine: 'cloud' as const };
 
     } catch (e: any) {
-      return generateLocalHeuristicDraft(input);
+      return generateLocalHeuristicDraft(input, municipioId);
     }
   }
 );

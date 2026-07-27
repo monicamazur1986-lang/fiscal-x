@@ -239,16 +239,22 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
       return [...updated];
     });
 
+    // Antes, a gravação real disparava com .catch(() => {}) — se falhasse
+    // (sem permissão, sem internet), a tela já tinha mostrado sucesso e
+    // ninguém ficava sabendo que nada foi persistido no servidor. Agora
+    // aguardamos e propagamos a falha pro chamador (que já trata isso).
     if (db && !configError) {
-      for (const id of stringIds) {
-        setDoc(doc(db, "intimacoes", id), { deleted: toTrash, deletedAt: now }, { merge: true }).catch(() => {});
-      }
+      const results = await Promise.allSettled(
+        stringIds.map(id => setDoc(doc(db, "intimacoes", id), { deleted: toTrash, deletedAt: now }, { merge: true }))
+      );
+      const failed = results.filter(r => r.status === 'rejected').length;
+      if (failed > 0) throw new Error(`${failed} de ${stringIds.length} item(ns) não foram salvos no servidor.`);
     }
   }, [db, configError]);
 
   const permanentDelete = useCallback(async (ids: string[]) => {
     const stringIds = ids.map(id => String(id));
-    
+
     setIntimacoes(prev => {
       const updated = prev.filter(i => !stringIds.includes(String(i.id)));
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
@@ -256,20 +262,20 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     });
 
     if (db && !configError) {
-      for (const id of stringIds) {
-        deleteDoc(doc(db, "intimacoes", id)).catch(() => {});
-      }
+      const results = await Promise.allSettled(stringIds.map(id => deleteDoc(doc(db, "intimacoes", id))));
+      const failed = results.filter(r => r.status === 'rejected').length;
+      if (failed > 0) throw new Error(`${failed} de ${stringIds.length} item(ns) não foram excluídos no servidor.`);
     }
   }, [db, configError]);
 
   const bulkMoveToFolder = useCallback(async (ids: string[], folderId: string | null) => {
     const folderValue = folderId || "";
     const stringIds = ids.map(id => String(id));
-    
+
     setIntimacoes(prev => {
-      const updated = prev.map(i => 
-        stringIds.includes(String(i.id)) 
-          ? { ...i, folderId: folderValue, deleted: false } 
+      const updated = prev.map(i =>
+        stringIds.includes(String(i.id))
+          ? { ...i, folderId: folderValue, deleted: false }
           : i
       );
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
@@ -277,9 +283,11 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     });
 
     if (db && !configError) {
-      for (const id of stringIds) {
-        setDoc(doc(db, "intimacoes", id), { folderId: folderValue, deleted: false }, { merge: true }).catch(() => {});
-      }
+      const results = await Promise.allSettled(
+        stringIds.map(id => setDoc(doc(db, "intimacoes", id), { folderId: folderValue, deleted: false }, { merge: true }))
+      );
+      const failed = results.filter(r => r.status === 'rejected').length;
+      if (failed > 0) throw new Error(`${failed} de ${stringIds.length} item(ns) não foram movidos no servidor.`);
     }
   }, [db, configError]);
 

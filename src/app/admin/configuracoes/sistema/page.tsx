@@ -22,7 +22,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
-import { BackButton } from "@/components/back-button"
 
 export default function ConfigSistemaGlobalPage() {
   const { profile, loading: authLoading } = useAuth()
@@ -120,7 +119,6 @@ export default function ConfigSistemaGlobalPage() {
           </div>
           <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.2em] ml-1">Configurações Master (ROOT)</p>
         </div>
-        <BackButton href="/dashboard" className="bg-transparent border-none shadow-none text-zinc-400" />
       </header>
 
       <div className="grid grid-cols-1 gap-8">

@@ -26,7 +26,6 @@ import {
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { BackButton } from "./back-button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { generateIntimacaoDraft } from "@/ai/flows/generate-intimacao-draft"
@@ -232,7 +231,6 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
     <div className="max-w-3xl mx-auto w-full space-y-5 pt-4 font-sans pb-40 px-4">
       {/* Cabeçalho discreto — uma linha só, sem repetir informação dentro do card */}
       <div className="flex items-center gap-3 no-print">
-        <BackButton href="/dashboard" className="h-10 rounded-2xl bg-white border-zinc-100 hover:text-primary" />
         <div className="flex items-center gap-2 text-slate-500">
           <Sparkles className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">Fiscal AI – Assistente Inteligente</span>

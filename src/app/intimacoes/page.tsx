@@ -3,6 +3,7 @@
 
 import { useState, useMemo } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   Plus,
   Trash2,
@@ -105,6 +106,7 @@ interface RelatorioMunicipal {
 }
 
 export default function DocumentosPage() {
+  const router = useRouter();
   const { profile } = useAuth();
   const { config } = useAppConfig();
   const isRoot = profile?.role === 'root';
@@ -304,9 +306,13 @@ export default function DocumentosPage() {
   const handleBulkDelete = async () => {
     if (activeFolderId === "trash") {
         if (!window.confirm(`Excluir permanentemente estes ${selectedIds.length} itens?`)) return;
-        await permanentDelete(selectedIds);
-        toast({ title: "Itens removidos permanentemente" });
-        setSelectedIds([]);
+        try {
+          await permanentDelete(selectedIds);
+          toast({ title: "Itens removidos permanentemente" });
+          setSelectedIds([]);
+        } catch (e) {
+          toast({ variant: "destructive", title: "Erro ao excluir permanentemente" });
+        }
         return;
     }
     if (!window.confirm(`Mover ${selectedIds.length} itens para a lixeira?`)) return;
@@ -422,7 +428,6 @@ export default function DocumentosPage() {
   return (
     <div className="min-h-screen bg-[#F5F2EA]">
       <DocfacilTopbar
-        backHref="/dashboard"
         title="Documentos"
         subtitle={isRoot ? (selectedMunicipioForRoot || "Selecione um município") : (profile?.municipioNome || "Arquivo municipal de autuações")}
         actions={isRoot ? (
@@ -657,12 +662,15 @@ export default function DocumentosPage() {
                 const itemId = String(item.id);
 
                 return (
-                  <div key={itemId} className={cn(
-                    "relative flex flex-col sm:flex-row sm:items-center gap-3 pl-5 pr-4 py-3 transition-colors",
+                  <div
+                    key={itemId}
+                    onClick={() => router.push(`/intimacoes/${itemId}`)}
+                    className={cn(
+                    "relative flex flex-col sm:flex-row sm:items-center gap-3 pl-5 pr-4 py-3 transition-colors cursor-pointer",
                     selectedIds.includes(itemId) ? "bg-[#F5F2EA]" : "hover:bg-[#FAF8F3]"
                   )}>
                     <span className={cn("absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-sm", isFinal ? "bg-[#1F7A5C]" : "bg-amber-500")} />
-                    <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
+                    <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-3 w-full sm:w-auto shrink-0">
                         <Checkbox
                         checked={selectedIds.includes(itemId)}
                         onCheckedChange={() => toggleSelect(itemId)}
@@ -719,7 +727,7 @@ export default function DocumentosPage() {
                             )}
                         </div>
 
-                        <div className="lg:col-span-2 flex justify-end items-center gap-1">
+                        <div onClick={(e) => e.stopPropagation()} className="lg:col-span-2 flex justify-end items-center gap-1">
                             <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-md text-[#6B6659] hover:text-[#0E4A44] hover:bg-[#E4EEEC]">
                                 <Link href={`/intimacoes/${itemId}`}><ArrowUpRight className="h-4 w-4" /></Link>
                             </Button>
@@ -730,7 +738,7 @@ export default function DocumentosPage() {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="rounded-md w-56 p-1 shadow-lg">
                                     <DropdownMenuItem onClick={() => handleOpenAdjustment(itemId)} className="rounded text-xs font-medium h-9 px-3 cursor-pointer gap-2"><Scale className="h-3.5 w-3.5" /> Ajustar prazo</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => { bulkDelete([itemId], true); toast({ title: "Movido para lixeira" }); }} className="rounded text-rose-600 text-xs font-medium h-9 px-3 cursor-pointer"><Trash2 className="mr-2 h-3.5 w-3.5" /> Mover pra lixeira</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={async () => { try { await bulkDelete([itemId], true); toast({ title: "Movido para lixeira" }); } catch (e) { toast({ variant: "destructive", title: "Erro ao excluir" }); } }} className="rounded text-rose-600 text-xs font-medium h-9 px-3 cursor-pointer"><Trash2 className="mr-2 h-3.5 w-3.5" /> Mover pra lixeira</DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>

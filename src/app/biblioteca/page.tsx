@@ -414,7 +414,6 @@ export default function BibliotecaJuridicaPage() {
   return (
     <div className="min-h-screen bg-[#F5F2EA]">
       <DocfacilTopbar
-        backHref="/dashboard"
         title="Biblioteca Jurídica"
         subtitle={isRoot ? (selectedMunicipioForRoot || "Todos os municípios") : "Legislação e normas aplicáveis"}
         actions={isRoot ? (

@@ -22,6 +22,16 @@ export type SignatureTargetType = 'fiscal' | 'responsavel' | 'responsavelTecnico
 
 const termoOptions = ["TERMO DE INTIMAÇÃO", "AUTO DE INFRAÇÃO", "TERMO DE APREENSÃO", "TERMO DE INTERDIÇÃO", "TERMO DE INUTILIZAÇÃO"];
 
+/** Durante a geração do PDF (html2canvas), campos de formulário (<input>/
+ * <textarea>) não são fotografados com fidelidade — o html2canvas aproxima
+ * o texto em vez de capturar o DOM real, e isso cortava/sobrepunha palavras
+ * no documento final. Por isso, nesse momento, cada campo vira texto
+ * estático simples (mesmo estilo, sem ser um controle de formulário) —
+ * mesma técnica já usada aqui para o campo "tipoTermo". */
+function StaticField({ value, className }: { value?: string | null; className?: string }) {
+  return <div className={className}>{value || ""}</div>;
+}
+
 interface DocumentoOficialBodyProps {
   control: Control<IntimacaoFormValues>;
   watch: UseFormWatch<IntimacaoFormValues>;
@@ -148,7 +158,11 @@ export function DocumentoOficialBody({
           <FormField control={control} name="numeroProcesso" render={({ field }) => (
             <div className="flex items-center gap-2">
               <span className="text-[12pt] md:text-[14pt] font-black uppercase text-black">Nº</span>
-              <input value={field.value || ""} onChange={(e) => field.onChange(e.target.value.toUpperCase())} disabled={isFinalized} className="bg-transparent border-none text-[12pt] md:text-[14pt] font-black uppercase outline-none w-full text-black" />
+              {isGeneratingPdf ? (
+                <StaticField value={field.value} className="text-[12pt] md:text-[14pt] font-black uppercase text-black" />
+              ) : (
+                <input value={field.value || ""} onChange={(e) => field.onChange(e.target.value.toUpperCase())} disabled={isFinalized} className="bg-transparent border-none text-[12pt] md:text-[14pt] font-black uppercase outline-none w-full text-black" />
+              )}
             </div>
           )} />
         </div>
@@ -168,7 +182,9 @@ export function DocumentoOficialBody({
           <div className="data-cell">
             <span className="data-label">CNPJ / CPF:</span>
             <div className="flex items-center justify-start gap-4">
-              <FormField control={control} name="cnpj" render={({ field }) => (<input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input !w-[150pt]" />)} />
+              <FormField control={control} name="cnpj" render={({ field }) => (
+                isGeneratingPdf ? <StaticField value={field.value} className="data-field-input !w-[150pt]" /> : <input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input !w-[150pt]" />
+              )} />
               {showCnpjLookup && !isFinalized && !isGeneratingPdf && (
                 <Button onClick={onCnpjLookup} type="button" disabled={isSearchingCnpj} size="sm" variant="ghost" className="h-7 gap-1.5 px-3 rounded-lg font-black text-[8px] uppercase tracking-widest text-primary border border-primary/20 bg-white no-print">{isSearchingCnpj ? <Loader2 className="animate-spin h-3 w-3" /> : <Search className="h-3 w-3" />} Consultar</Button>
               )}
@@ -178,32 +194,44 @@ export function DocumentoOficialBody({
         <div className="data-row">
           <div className="data-cell">
             <span className="data-label">ENDEREÇO COMPLETO:</span>
-            <FormField control={control} name="endereco" render={({ field }) => (<Textarea value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input min-h-[1.5em] resize-none border-none p-0 bg-transparent shadow-none" />)} />
+            <FormField control={control} name="endereco" render={({ field }) => (
+              isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <Textarea value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input min-h-[1.5em] resize-none border-none p-0 bg-transparent shadow-none" />
+            )} />
           </div>
         </div>
         <div className="data-row">
           <div className="data-cell" style={{ flex: '0 0 60%' }}>
             <span className="data-label">BAIRRO:</span>
-            <FormField control={control} name="bairro" render={({ field }) => (<input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />)} />
+            <FormField control={control} name="bairro" render={({ field }) => (
+              isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />
+            )} />
           </div>
           <div className="data-cell">
             <span className="data-label">TELEFONE:</span>
-            <FormField control={control} name="telefone" render={({ field }) => (<input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />)} />
+            <FormField control={control} name="telefone" render={({ field }) => (
+              isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />
+            )} />
           </div>
         </div>
         {!isReuNomeLonga ? (
           <div className="data-row border-none">
             <div className="data-cell" style={{ flex: '1 1 0%' }}>
               <span className="data-label">RESPONSÁVEL LEGAL / RESPONSÁVEL NO LOCAL:</span>
-              <FormField control={control} name="reu" render={({ field }) => (<Textarea value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input min-h-[1.5em] resize-none border-none p-0 bg-transparent shadow-none" />)} />
+              <FormField control={control} name="reu" render={({ field }) => (
+                isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <Textarea value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input min-h-[1.5em] resize-none border-none p-0 bg-transparent shadow-none" />
+              )} />
             </div>
             <div className="data-cell" style={{ flex: '0 0 110pt' }}>
               <span className="data-label">CARGO / FUNÇÃO:</span>
-              <FormField control={control} name="reuCargo" render={({ field }) => (<input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />)} />
+              <FormField control={control} name="reuCargo" render={({ field }) => (
+                isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />
+              )} />
             </div>
             <div className="data-cell" style={{ flex: '0 0 110pt' }}>
               <span className="data-label">RG / CPF Nº:</span>
-              <FormField control={control} name="responsavelLegalIdentidade" render={({ field }) => (<input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />)} />
+              <FormField control={control} name="responsavelLegalIdentidade" render={({ field }) => (
+                isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />
+              )} />
             </div>
           </div>
         ) : (
@@ -211,17 +239,23 @@ export function DocumentoOficialBody({
             <div className="data-row">
               <div className="data-cell">
                 <span className="data-label">RESPONSÁVEL LEGAL / RESPONSÁVEL NO LOCAL:</span>
-                <FormField control={control} name="reu" render={({ field }) => (<Textarea value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input min-h-[1.5em] resize-none border-none p-0 bg-transparent shadow-none" />)} />
+                <FormField control={control} name="reu" render={({ field }) => (
+                isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <Textarea value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input min-h-[1.5em] resize-none border-none p-0 bg-transparent shadow-none" />
+              )} />
               </div>
             </div>
             <div className="data-row border-none">
               <div className="data-cell" style={{ flex: '0 0 50%' }}>
                 <span className="data-label">CARGO / FUNÇÃO:</span>
-                <FormField control={control} name="reuCargo" render={({ field }) => (<input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />)} />
+                <FormField control={control} name="reuCargo" render={({ field }) => (
+                isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />
+              )} />
               </div>
               <div className="data-cell">
                 <span className="data-label">RG / CPF Nº:</span>
-                <FormField control={control} name="responsavelLegalIdentidade" render={({ field }) => (<input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />)} />
+                <FormField control={control} name="responsavelLegalIdentidade" render={({ field }) => (
+                isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />
+              )} />
               </div>
             </div>
           </>
@@ -239,15 +273,21 @@ export function DocumentoOficialBody({
             <div className="data-row border-none">
               <div className="data-cell" style={{ flex: '1 1 0%' }}>
                 <span className="data-label">RESPONSÁVEL TÉCNICO:</span>
-                <FormField control={control} name="responsavelTecnico" render={({ field }) => (<Textarea value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input min-h-[1.5em] resize-none border-none p-0 bg-transparent shadow-none" placeholder="Opcional" />)} />
+                <FormField control={control} name="responsavelTecnico" render={({ field }) => (
+                  isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <Textarea value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input min-h-[1.5em] resize-none border-none p-0 bg-transparent shadow-none" placeholder="Opcional" />
+                )} />
               </div>
               <div className="data-cell" style={{ flex: '0 0 110pt' }}>
                 <span className="data-label">RG / CPF Nº:</span>
-                <FormField control={control} name="responsavelTecnicoIdentidade" render={({ field }) => (<input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />)} />
+                <FormField control={control} name="responsavelTecnicoIdentidade" render={({ field }) => (
+                  isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />
+                )} />
               </div>
               <div className="data-cell" style={{ flex: '0 0 110pt' }}>
                 <span className="data-label">Nº CONSELHO:</span>
-                <FormField control={control} name="responsavelTecnicoConselho" render={({ field }) => (<input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />)} />
+                <FormField control={control} name="responsavelTecnicoConselho" render={({ field }) => (
+                  isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />
+                )} />
               </div>
             </div>
           ) : (
@@ -255,17 +295,23 @@ export function DocumentoOficialBody({
               <div className="data-row">
                 <div className="data-cell">
                   <span className="data-label">RESPONSÁVEL TÉCNICO:</span>
-                  <FormField control={control} name="responsavelTecnico" render={({ field }) => (<Textarea value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input min-h-[1.5em] resize-none border-none p-0 bg-transparent shadow-none" placeholder="Opcional" />)} />
+                  <FormField control={control} name="responsavelTecnico" render={({ field }) => (
+                  isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <Textarea value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input min-h-[1.5em] resize-none border-none p-0 bg-transparent shadow-none" placeholder="Opcional" />
+                )} />
                 </div>
               </div>
               <div className="data-row border-none">
                 <div className="data-cell" style={{ flex: '0 0 50%' }}>
                   <span className="data-label">RG / CPF Nº:</span>
-                  <FormField control={control} name="responsavelTecnicoIdentidade" render={({ field }) => (<input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />)} />
+                  <FormField control={control} name="responsavelTecnicoIdentidade" render={({ field }) => (
+                  isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />
+                )} />
                 </div>
                 <div className="data-cell">
                   <span className="data-label">Nº CONSELHO:</span>
-                  <FormField control={control} name="responsavelTecnicoConselho" render={({ field }) => (<input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />)} />
+                  <FormField control={control} name="responsavelTecnicoConselho" render={({ field }) => (
+                  isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />
+                )} />
                 </div>
               </div>
             </>

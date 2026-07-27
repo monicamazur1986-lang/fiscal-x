@@ -6,10 +6,29 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Logomarca global do sistema (aparece na tela de login) - pública para leitura
+    // Espelha getUserData()/isRoot() do firestore.rules — Storage Rules v2
+    // consegue ler o Firestore (cross-service rules) pra tomar a mesma
+    // decisão de autorização em vez de confiar só em isAuthenticated().
+    function myUserData() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isRoot() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'app.fiscalx@gmail.com' ||
+        myUserData().role == 'root'
+      );
+    }
+
+    function belongsToMyMunicipio(municipioId) {
+      return isAuthenticated() && (isRoot() || myUserData().municipioId == municipioId);
+    }
+
+    // Logomarca global do sistema (aparece na tela de login) - pública para leitura,
+    // mas só root grava (mesmo papel exigido por updateSystemLogo no app).
     match /system/{allPaths=**} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isRoot();
     }
 
     // Fotos de perfil enviadas via /api/upload (Admin SDK) - leitura pública, escrita só pelo servidor
@@ -18,21 +37,35 @@ service firebase.storage {
       allow write: if false;
     }
 
-    // Identidade visual, mural, fotos de inspeção e decretos: qualquer usuário autenticado
-    // (o isolamento fino por município/role fica a cargo do Firestore; aqui garantimos
-    // pelo menos que anônimos não conseguem ler ou escrever nada)
-    match /municipios/{allPaths=**} {
-      allow read, write: if isAuthenticated();
+    // Identidade visual municipal (brasão etc.) — path já carrega o
+    // município; antes qualquer autenticado lia/escrevia em qualquer
+    // município (bastava saber o caminho). Agora exige pertencer a ele.
+    match /municipios/{municipioId}/{allPaths=**} {
+      allow read, write: if belongsToMyMunicipio(municipioId);
     }
 
-    match /recados/{allPaths=**} {
-      allow read, write: if isAuthenticated();
+    // Fotos do mural — nome do arquivo sempre começa com o uid de quem
+    // enviou (ver recados/page.tsx); só o dono (ou root) pode escrever.
+    // Leitura fica aberta a qualquer autenticado (mural é só leitura ampla
+    // dentro do próprio município no Firestore; o Storage não sabe o
+    // município do arquivo, só o dono).
+    match /recados/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (fileName.matches(request.auth.uid + '_.*') || isRoot());
     }
 
-    match /inspecoes/{allPaths=**} {
-      allow read, write: if isAuthenticated();
+    // Fotos de inspeção — path já carrega o uid do fiscal; só o próprio
+    // dono (ou root) pode escrever. Antes, qualquer autenticado conseguia
+    // escrever na pasta de qualquer outro fiscal.
+    match /inspecoes/{uid}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (request.auth.uid == uid || isRoot());
     }
 
+    // TODO(seguranca): decretos/{timestamp}_{cpf} não carrega uid nem
+    // município no caminho — enviado durante o auto-cadastro (conta recém
+    // criada, ainda sem doc em users/ garantido). Precisa de uma revisão
+    // própria antes de restringir, pra não quebrar o cadastro de fiscais.
     match /decretos/{allPaths=**} {
       allow read, write: if isAuthenticated();
     }

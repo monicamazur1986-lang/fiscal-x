@@ -49,7 +49,12 @@ export async function renderReportIntoPdf(pdf: any, sourceEl: HTMLElement, stagi
 
     pageEl.appendChild(headerEl.cloneNode(true));
     pages[i].forEach((block) => pageEl.appendChild(block.cloneNode(true)));
-    if (footerEl) pageEl.appendChild(footerEl.cloneNode(true));
+    if (footerEl) {
+      const footerClone = footerEl.cloneNode(true) as HTMLElement;
+      const pageNumEl = footerClone.querySelector('[data-pdf-pagenum]');
+      if (pageNumEl) pageNumEl.textContent = `Página ${i + 1} de ${pages.length}`;
+      pageEl.appendChild(footerClone);
+    }
 
     staging.innerHTML = '';
     staging.appendChild(pageEl);

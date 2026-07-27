@@ -21,7 +21,6 @@ import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 
 import { Button } from "@/components/ui/button"
-import { BackButton } from "./back-button"
 import { useToast } from "@/hooks/use-toast"
 import { useIntimacoes } from "@/hooks/use-intimacoes"
 import { useAppConfig } from "@/hooks/use-app-config"
@@ -523,7 +522,6 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             <div className="document-container font-serif pb-60">
                 <div className="no-print w-full max-w-[210mm] flex flex-wrap justify-between items-center mb-8 px-4 gap-4">
                     <div className="flex gap-3 flex-wrap">
-                        <BackButton href="/dashboard" />
                         <Button
                             onClick={() => setManualFitOverride(!fitToScreen)}
                             className={cn(

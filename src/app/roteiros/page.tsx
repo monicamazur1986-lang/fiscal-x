@@ -8,6 +8,9 @@ import {
   ShieldCheck,
   Building2,
   ChevronsUpDown,
+  UtensilsCrossed,
+  Pill,
+  Syringe,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import Link from "next/link"
@@ -49,6 +52,10 @@ const roteiros = [
   // Exclusivo do município de Prudentópolis — não aparece pra outras cidades
   // (ver filtro por municipioId logo abaixo).
   { id: 'odontologia-prudentopolis', titulo: 'Guia de Inspeção Consultórios/Clínicas Odontológicas', categoria: 'Saúde', icone: ToothIcon, base: 'RDC 063/11 e Res. SESA', municipioId: 'prudentopolis' },
+  { id: 'clinica-estetica-prudentopolis', titulo: 'Guia de Inspeção para Clínica de Estética', categoria: 'Saúde', icone: Syringe, base: 'RDC 63/2011 e Dec. Est. 5.711/2002', municipioId: 'prudentopolis' },
+  // Nível estadual — sem municipioId, visível a qualquer município.
+  { id: 'alimentacao', titulo: 'Roteiro de Inspeção de Serviços de Alimentação', categoria: 'Saúde', icone: UtensilsCrossed, base: 'RDC 275/2002 e RDC 216/2004' },
+  { id: 'farmacia', titulo: 'Roteiro de Auto-Inspeção de Farmácias e Drogarias', categoria: 'Saúde', icone: Pill, base: 'Lei 5.991/1973 e RDC 44/2009' },
 ]
 
 export default function RoteirosPage() {
@@ -82,7 +89,6 @@ export default function RoteirosPage() {
   return (
     <div className="min-h-screen bg-[#F5F2EA]">
       <DocfacilTopbar
-        backHref="/dashboard"
         title="Roteiros"
         subtitle={isRoot ? (selectedMunicipioForRoot || "Todos os municípios") : "Instrumentos oficiais para fiscalização sanitária"}
         actions={isRoot ? (
