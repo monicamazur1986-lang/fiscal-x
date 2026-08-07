@@ -46,7 +46,7 @@ export default function ConfigSistemaGlobalPage() {
 
   if (!mounted || authLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
+      <div className="flex h-screen items-center justify-center bg-[#F5F2EA]">
         <Loader2 className="h-10 w-10 animate-spin text-primary/40" />
       </div>
     )
@@ -112,34 +112,34 @@ export default function ConfigSistemaGlobalPage() {
       <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-slate-900 text-white shadow-xl">
-                <Sparkles className="h-6 w-6 text-emerald-400" />
+            <div className="p-2.5 rounded-xl bg-[#0E4A44] text-white shadow-sm">
+                <Sparkles className="h-6 w-6" />
             </div>
-            <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Marca do Sistema</h1>
+            <h1 className="font-serif text-3xl sm:text-4xl text-[#262420]">Marca do Sistema</h1>
           </div>
-          <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.2em] ml-1">Configurações Master (ROOT)</p>
+          <p className="text-[10px] text-[#A39D8C] font-bold uppercase tracking-[0.2em] ml-1">Configurações Master (ROOT)</p>
         </div>
       </header>
 
       <div className="grid grid-cols-1 gap-8">
-            <Card className="bg-white border-2 border-slate-200 rounded-[3rem] overflow-hidden shadow-2xl">
+            <Card className="bg-white border-2 border-[#E4DFD1] rounded-lg overflow-hidden shadow-sm">
                 <CardHeader className="p-10 text-center space-y-2">
-                    <CardTitle className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic flex items-center justify-center gap-3">
+                    <CardTitle className="font-serif text-2xl text-[#262420] flex items-center justify-center gap-3">
                         <Layout className="h-6 w-6 text-primary" /> Logotipo do Sistema
                     </CardTitle>
-                    <CardDescription className="text-zinc-500 font-bold uppercase text-[9px] tracking-widest">Este logo substitui o mascote padrão em todas as telas</CardDescription>
+                    <CardDescription className="text-[#A39D8C] font-bold uppercase text-[9px] tracking-widest">Este logo substitui o mascote padrão em todas as telas</CardDescription>
                 </CardHeader>
                 <CardContent className="p-10 space-y-10">
-                    <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-[3rem] bg-slate-50 gap-10">
-                        <div className="relative w-full max-w-[280px] aspect-square group shadow-2xl bg-white rounded-[3rem] p-8 flex items-center justify-center overflow-hidden">
+                    <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-[#E4DFD1] rounded-lg bg-[#FAF8F3] gap-10">
+                        <div className="relative w-full max-w-[280px] aspect-square group shadow-sm bg-white rounded-lg p-8 flex items-center justify-center overflow-hidden">
                             {systemLogo ? (
                                 <img src={systemLogo} alt="Marca Global" className="max-w-full max-h-full object-contain transition-transform duration-500 group-hover:scale-105" />
                             ) : (
-                                <div className="text-center opacity-20"><Sparkles className="h-20 w-20 mx-auto mb-4" /><p className="text-[10px] font-black uppercase tracking-widest">Mascote Padrão</p></div>
+                                <div className="text-center text-[#A39D8C]"><Sparkles className="h-20 w-20 mx-auto mb-4" /><p className="text-[10px] font-black uppercase tracking-widest">Mascote Padrão</p></div>
                             )}
-                            
+
                             {systemLogo && (
-                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-[3rem]">
+                                <div className="absolute inset-0 bg-black/60 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
                                     <Button onClick={handleRemoveLogo} variant="destructive" size="icon" className="h-12 w-12 rounded-full shadow-2xl"><Trash2 className="h-5 w-5" /></Button>
                                 </div>
                             )}
@@ -147,16 +147,16 @@ export default function ConfigSistemaGlobalPage() {
 
                         <div className="w-full max-w-sm">
                             <Label htmlFor="system-logo-upload" className="cursor-pointer w-full group">
-                                <div className="flex items-center justify-center gap-4 bg-slate-900 text-white h-16 rounded-2xl font-black uppercase text-[12px] tracking-widest group-hover:bg-slate-800 transition-all shadow-xl active:scale-95">
-                                    {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ImageIcon className="h-5 w-5 text-emerald-400" />}
+                                <div className="flex items-center justify-center gap-4 bg-primary text-white h-16 rounded-2xl font-black uppercase text-[12px] tracking-widest group-hover:bg-primary/90 transition-all shadow-lg active:scale-95">
+                                    {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ImageIcon className="h-5 w-5" />}
                                     {systemLogo ? "Substituir Imagem" : "Carregar Logotipo Oficial"}
                                 </div>
-                                <input 
-                                    id="system-logo-upload" 
-                                    type="file" 
-                                    className="sr-only" 
-                                    accept="image/*" 
-                                    onChange={handleFileUpload} 
+                                <input
+                                    id="system-logo-upload"
+                                    type="file"
+                                    className="sr-only"
+                                    accept="image/*"
+                                    onChange={handleFileUpload}
                                     disabled={uploading}
                                 />
                             </Label>
@@ -166,15 +166,15 @@ export default function ConfigSistemaGlobalPage() {
             </Card>
       </div>
 
-      <footer className="p-8 rounded-[3rem] bg-slate-100 border border-slate-200 flex items-center gap-6">
-          <div className="p-4 bg-white rounded-2xl shadow-sm">
+      <footer className="p-8 rounded-lg bg-white border border-[#E4DFD1] flex items-center gap-6">
+          <div className="p-4 bg-[#FAF8F3] rounded-2xl shadow-sm">
             {storage ? <CheckCircle2 className="h-8 w-8 text-emerald-500" /> : <CloudOff className="h-8 w-8 text-amber-500" />}
           </div>
           <div>
-              <h4 className="text-[11px] font-black uppercase italic text-slate-900 leading-none">Status de Armazenamento</h4>
-              <p className="text-[9px] font-bold uppercase text-slate-500 mt-1 tracking-widest leading-relaxed">
-                  {storage 
-                    ? "As imagens são persistidas no Google Cloud Storage e replicadas globalmente." 
+              <h4 className="font-serif text-sm text-[#262420] leading-none">Status de Armazenamento</h4>
+              <p className="text-[9px] font-bold uppercase text-[#6B6659] mt-1.5 tracking-widest leading-relaxed">
+                  {storage
+                    ? "As imagens são persistidas no Google Cloud Storage e replicadas globalmente."
                     : "O logo está sendo salvo localmente para o ambiente atual do sistema."}
               </p>
           </div>

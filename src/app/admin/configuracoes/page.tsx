@@ -18,10 +18,12 @@ import {
   RotateCcw,
   Scale,
   Landmark,
-  FileText
+  FileText,
+  ClipboardList
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
@@ -29,17 +31,29 @@ import { RichTextEditor } from "@/components/rich-text-editor"
 import { DEFAULT_PRAZO_TEXT } from "@/lib/schema"
 import { normalizeId } from "@/lib/utils"
 import municipiosPR from "@/lib/municipios-pr.json"
+import { useMunicipioTemGestor } from "@/hooks/use-municipio-tem-gestor"
+import { ROTEIRO_TEXTO_OPTIONS, getDefaultIntroHtml, getDefaultConclusaoHtml } from "@/lib/roteiro-textos-padrao"
 
 
 export default function IdentidadeMunicipalPage() {
   const { profile, loading: authLoading } = useAuth()
   const isRoot = profile?.role === 'root'
+  const { temGestor, loading: temGestorLoading } = useMunicipioTemGestor()
+  // Fiscal só entra aqui se o município dele não tiver gestor cadastrado —
+  // ver src/hooks/use-municipio-tem-gestor.ts e o motivo em
+  // src/app/api/municipio/config/route.ts (a gravação real é reconfirmada
+  // no servidor, esta checagem aqui só controla a navegação/UI).
+  const fiscalSemGestor = profile?.role === 'fiscal' && !temGestorLoading && !temGestor
   const [selectedMunicipio, setSelectedMunicipio] = useState("")
   const { config, updateConfig, updateLogo, loading: configLoading, needsMunicipioSelection } = useAppConfig(
     isRoot ? { municipioIdOverride: selectedMunicipio || undefined } : undefined
   )
   const { toast } = useToast()
   const router = useRouter()
+  const [selectedRoteiroId, setSelectedRoteiroId] = useState(ROTEIRO_TEXTO_OPTIONS[0].id)
+  const [roteiroIntroHtml, setRoteiroIntroHtml] = useState("")
+  const [roteiroConclusaoHtml, setRoteiroConclusaoHtml] = useState("")
+  const [savingRoteiroTextos, setSavingRoteiroTextos] = useState(false)
 
   const effectiveMunicipioId = isRoot ? selectedMunicipio : profile?.municipioId
   const effectiveMunicipioNome = isRoot ? selectedMunicipio : profile?.municipioNome
@@ -67,6 +81,14 @@ export default function IdentidadeMunicipalPage() {
     }
   }, [config])
 
+  // Textos padrão do roteiro selecionado — carrega o customizado do
+  // município ou, na ausência, o fixo do código (com os tokens {{...}}
+  // ainda não preenchidos, já que aqui é o "molde", não uma inspeção real).
+  useEffect(() => {
+    setRoteiroIntroHtml(config.roteiroTextos?.[selectedRoteiroId]?.introducaoHtml || getDefaultIntroHtml(selectedRoteiroId));
+    setRoteiroConclusaoHtml(config.roteiroTextos?.[selectedRoteiroId]?.conclusaoHtml || getDefaultConclusaoHtml(selectedRoteiroId));
+  }, [config, selectedRoteiroId])
+
   const resetToDefaultHeader = () => {
     const cityName = config.municipioNome || effectiveMunicipioNome || "PRUDENTÓPOLIS";
     const initial = `
@@ -79,16 +101,20 @@ export default function IdentidadeMunicipalPage() {
     setHeaderHtml(initial);
   };
 
-  // Proteção de Rota
+  // Proteção de Rota — libera também o fiscal quando o município dele não
+  // tem gestor cadastrado (fiscalSemGestor). Espera a checagem de gestor
+  // terminar (temGestorLoading) antes de decidir redirecionar, senão um
+  // fiscal sem gestor seria expulso da tela no instante entre o mount e a
+  // resposta da checagem.
   useEffect(() => {
-    if (mounted && !authLoading && profile) {
-      if (profile.role !== 'admin' && profile.role !== 'root') {
+    if (mounted && !authLoading && profile && !temGestorLoading) {
+      if (profile.role !== 'admin' && profile.role !== 'root' && !fiscalSemGestor) {
         router.replace("/dashboard");
       }
     }
-  }, [profile, authLoading, router, mounted]);
+  }, [profile, authLoading, router, mounted, temGestorLoading, fiscalSemGestor]);
 
-  if (!mounted || authLoading || configLoading || !profile) {
+  if (!mounted || authLoading || configLoading || temGestorLoading || !profile) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -96,7 +122,7 @@ export default function IdentidadeMunicipalPage() {
     )
   }
 
-  if (profile.role !== 'admin' && profile.role !== 'root') return null;
+  if (profile.role !== 'admin' && profile.role !== 'root' && !fiscalSemGestor) return null;
 
   // Extrai o caminho (ex.: "municipios/prudentopolis/shield_123") de uma URL
   // de download do Storage — em vez de confiar que ref() aceita a URL https
@@ -181,26 +207,41 @@ export default function IdentidadeMunicipalPage() {
     } finally { setSaving(false) }
   }
 
+  const handleSaveRoteiroTextos = async () => {
+    setSavingRoteiroTextos(true)
+    try {
+      await updateConfig({
+        roteiroTextos: {
+          ...config.roteiroTextos,
+          [selectedRoteiroId]: { introducaoHtml: roteiroIntroHtml, conclusaoHtml: roteiroConclusaoHtml },
+        },
+      })
+      toast({ title: "Textos do Roteiro Salvos" })
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro ao salvar", description: e?.message })
+    } finally { setSavingRoteiroTextos(false) }
+  }
+
   return (
     <div className="max-w-6xl mx-auto w-full p-4 sm:p-8 space-y-10 font-sans pb-32">
       <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl menu-satin-dark text-white shadow-xl">
+            <div className="p-2.5 rounded-xl bg-[#0E4A44] text-white shadow-sm">
                 <Landmark className="h-6 w-6" />
             </div>
-            <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic">Identidade Municipal</h1>
+            <h1 className="font-serif text-3xl sm:text-4xl text-[#262420]">Identidade Municipal</h1>
           </div>
           {isRoot ? (
-            <div className="flex items-center gap-2 bg-white border border-zinc-200 rounded-xl px-3 h-11 mt-2">
-              <Building2 className="h-4 w-4 text-zinc-400" />
+            <div className="flex items-center gap-2 bg-white border border-[#E4DFD1] rounded-xl px-3 h-11 mt-2">
+              <Building2 className="h-4 w-4 text-[#A39D8C]" />
               <select value={selectedMunicipio} onChange={(e) => setSelectedMunicipio(e.target.value)} className="text-xs font-bold uppercase outline-none bg-transparent">
                 <option value="">Selecionar Município</option>
                 {municipiosPR.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
           ) : (
-            <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.2em] ml-1">
+            <p className="text-[10px] text-[#A39D8C] font-bold uppercase tracking-[0.2em] ml-1">
               Município: {profile?.municipioNome?.toUpperCase() || "SISTEMA"}
             </p>
           )}
@@ -208,34 +249,42 @@ export default function IdentidadeMunicipalPage() {
       </header>
 
       {isRoot && needsMunicipioSelection ? (
-        <div className="py-24 flex flex-col items-center justify-center gap-3 bg-white border-2 border-dashed border-zinc-200 rounded-[2rem] text-center">
-          <Building2 className="h-10 w-10 text-zinc-300" />
-          <p className="text-sm font-black uppercase text-zinc-400">Selecione um município para editar a identidade</p>
+        <div className="py-24 flex flex-col items-center justify-center gap-3 bg-white border-2 border-dashed border-[#E4DFD1] rounded-lg text-center">
+          <Building2 className="h-10 w-10 text-[#D8D2C0]" />
+          <p className="text-sm font-black uppercase text-[#A39D8C]">Selecione um município para editar a identidade</p>
         </div>
       ) : (
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <div className="lg:col-span-4 space-y-8">
-            <Card className="bg-white border-2 border-slate-100 rounded-[2.5rem] overflow-hidden shadow-sm">
-                <CardHeader className="bg-slate-50 border-b border-slate-100">
-                    <CardTitle className="text-lg font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">
+      <Tabs defaultValue="brasao" className="w-full">
+        <TabsList className="w-full sm:w-auto h-auto flex-wrap justify-start bg-white border border-[#E4DFD1] rounded-2xl p-1.5 gap-1 shadow-sm">
+          <TabsTrigger value="brasao" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><ImageIcon className="h-3.5 w-3.5" /> Brasão</TabsTrigger>
+          <TabsTrigger value="cabecalho" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><Type className="h-3.5 w-3.5" /> Cabeçalho</TabsTrigger>
+          <TabsTrigger value="rodape" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><Type className="h-3.5 w-3.5" /> Rodapé</TabsTrigger>
+          <TabsTrigger value="prazos" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><Scale className="h-3.5 w-3.5" /> Prazos</TabsTrigger>
+          <TabsTrigger value="roteiros" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><ClipboardList className="h-3.5 w-3.5" /> Roteiros</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="brasao" className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <Card className="lg:col-span-7 bg-white border-2 border-[#E4DFD1] rounded-lg overflow-hidden shadow-sm">
+                <CardHeader className="bg-[#FAF8F3] border-b border-[#E4DFD1]">
+                    <CardTitle className="font-serif text-lg text-[#262420] flex items-center gap-2">
                         <ImageIcon className="h-4 w-4 text-[#00a99d]" /> Brasão Oficial
                     </CardTitle>
-                    <CardDescription className="text-zinc-500 font-bold uppercase text-[8px] tracking-widest">Utilizado apenas em cabeçalhos A4</CardDescription>
+                    <CardDescription className="text-[#A39D8C] font-bold uppercase text-[8px] tracking-widest">Utilizado apenas em cabeçalhos A4</CardDescription>
                 </CardHeader>
                 <CardContent className="p-8 space-y-6">
-                    <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-100 rounded-[2rem] bg-slate-50 gap-6">
+                    <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-[#E4DFD1] rounded-lg bg-[#FAF8F3] gap-6">
                         <div className="relative w-full max-w-[160px] aspect-square group shadow-inner bg-white rounded-[2rem] p-4 flex items-center justify-center">
                             {config.logoUrl ? (
                               <img src={config.logoUrl} alt="Brasão" className="max-w-full max-h-full object-contain" />
                             ) : (
-                              <Landmark className="w-2/3 h-2/3 text-zinc-300" strokeWidth={1} />
+                              <Landmark className="w-2/3 h-2/3 text-[#D8D2C0]" strokeWidth={1} />
                             )}
                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 group-active:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center justify-center rounded-[2rem]">
                                 <Button onClick={handleDeleteLogo} variant="destructive" size="icon" className="h-10 w-10 rounded-full"><Trash2 className="h-4 w-4" /></Button>
                             </div>
                         </div>
                         <Label htmlFor="logo-upload" className="cursor-pointer w-full">
-                            <div className="flex items-center justify-center gap-3 bg-white text-primary h-12 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-50 transition-all border border-slate-200 shadow-sm">
+                            <div className="flex items-center justify-center gap-3 bg-white text-primary h-12 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-[#FAF8F3] transition-all border border-[#E4DFD1] shadow-sm">
                                 {uploadingLogo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                                 Carregar Brasão
                             </div>
@@ -245,81 +294,162 @@ export default function IdentidadeMunicipalPage() {
                 </CardContent>
             </Card>
 
-            <div className="p-8 rounded-[2.5rem] bg-slate-900 text-white space-y-4 shadow-2xl">
-                <div className="p-3 bg-white/10 rounded-2xl w-fit"><ShieldCheck className="h-6 w-6 text-emerald-400" /></div>
-                <h3 className="text-lg font-black uppercase italic tracking-tighter">Segurança Visual</h3>
-                <p className="text-[10px] font-medium text-slate-400 leading-relaxed text-justify">
+            <div className="lg:col-span-5 p-8 rounded-lg bg-[#262420] text-white space-y-4 shadow-2xl h-fit">
+                <div className="p-3 bg-white/10 rounded-2xl w-fit"><ShieldCheck className="h-6 w-6 text-[#9FD8CF]" /></div>
+                <h3 className="font-serif text-lg">Segurança Visual</h3>
+                <p className="text-[10px] font-medium text-white/60 leading-relaxed text-justify">
                     As imagens aqui configuradas pertencem exclusivamente ao órgão fiscalizador do seu município. A marca do software (Sentinela) é gerenciada pelo Auditor Master do sistema.
                 </p>
             </div>
-        </div>
+        </TabsContent>
 
-        <div className="lg:col-span-8 space-y-8">
-            <Card className="bg-white border-slate-200 rounded-[2.5rem] overflow-hidden shadow-sm">
+        <TabsContent value="cabecalho" className="mt-6">
+            <Card className="bg-white border-[#E4DFD1] rounded-lg overflow-hidden shadow-sm">
                 <CardHeader className="flex flex-row items-center justify-between pb-4">
                     <div>
-                        <CardTitle className="text-lg font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">
+                        <CardTitle className="font-serif text-lg text-[#262420] flex items-center gap-2">
                             <Type className="h-4 w-4 text-primary" /> Cabeçalho de Documentos
                         </CardTitle>
-                        <CardDescription className="text-zinc-500 font-bold uppercase text-[9px] tracking-widest">Identificação da Prefeitura e Secretaria</CardDescription>
+                        <CardDescription className="text-[#A39D8C] font-bold uppercase text-[9px] tracking-widest">Identificação da Prefeitura e Secretaria</CardDescription>
                     </div>
-                    <Button onClick={resetToDefaultHeader} variant="ghost" className="h-9 px-4 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-primary">
+                    <Button onClick={resetToDefaultHeader} variant="ghost" className="h-9 px-4 rounded-xl text-[9px] font-black uppercase tracking-widest text-[#6B6659] hover:text-primary">
                         <RotateCcw className="h-3 w-3 mr-2" /> Restaurar Padrão
                     </Button>
                 </CardHeader>
                 <CardContent className="p-6 border-t">
-                    <div className="p-6 border-2 border-slate-100 rounded-[2rem] bg-slate-50/50 min-h-[180px]">
+                    <div className="p-6 border border-[#E4DFD1] rounded-lg bg-[#FAF8F3] min-h-[180px]">
                         <RichTextEditor value={headerHtml} onChange={setHeaderHtml} fontSize="11pt" minHeight="120px" />
                     </div>
                 </CardContent>
-            </Card>
-
-            <Card className="bg-white border-slate-200 rounded-[2.5rem] overflow-hidden shadow-sm">
-                <CardHeader className="flex flex-row items-center justify-between pb-4">
-                    <div>
-                        <CardTitle className="text-lg font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">
-                            <Type className="h-4 w-4 text-primary" /> Rodapé de Documentos
-                        </CardTitle>
-                        <CardDescription className="text-zinc-500 font-bold uppercase text-[9px] tracking-widest">Repetido no rodapé de cada página (opcional)</CardDescription>
-                    </div>
-                    {footerHtml && (
-                        <Button onClick={() => setFooterHtml("")} variant="ghost" className="h-9 px-4 rounded-xl text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-rose-500">
-                            <RotateCcw className="h-3 w-3 mr-2" /> Limpar
-                        </Button>
-                    )}
-                </CardHeader>
-                <CardContent className="p-6 border-t">
-                    <div className="p-6 border-2 border-slate-100 rounded-[2rem] bg-slate-50/50 min-h-[100px]">
-                        <RichTextEditor value={footerHtml} onChange={setFooterHtml} fontSize="9pt" minHeight="60px" placeholder="Ex.: endereço, telefone e horário de atendimento do órgão (opcional)" />
-                    </div>
-                </CardContent>
-            </Card>
-
-            <Card className="bg-white border-slate-200 rounded-[2.5rem] overflow-hidden shadow-sm flex flex-col">
-                <CardHeader className="pb-4">
-                    <CardTitle className="text-lg font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2">
-                        <Scale className="h-4 w-4 text-emerald-600" /> Texto de Notificação Padrão
-                    </CardTitle>
-                    <CardDescription className="text-zinc-500 font-bold uppercase text-[9px] tracking-widest">Prazos e orientações legais de defesa</CardDescription>
-                </CardHeader>
-                <CardContent className="p-6 border-t">
-                    <div className="p-6 border-2 border-slate-100 rounded-[2rem] bg-slate-50/50 min-h-[180px]">
-                        <RichTextEditor value={prazoHtml} onChange={setPrazoHtml} fontSize="10pt" minHeight="120px" />
-                    </div>
-                </CardContent>
                 <CardContent className="px-6 pb-6 pt-0">
-                    <Button 
-                        onClick={handleSaveConfigs} 
-                        disabled={saving} 
-                        className="w-full h-16 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest gap-4 shadow-xl"
+                    <Button
+                        onClick={handleSaveConfigs}
+                        disabled={saving}
+                        className="w-full h-16 bg-primary hover:bg-primary/90 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest gap-4 shadow-lg"
                     >
                         {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
                         Salvar Padrões Municipais
                     </Button>
                 </CardContent>
             </Card>
-        </div>
-      </div>
+        </TabsContent>
+
+        <TabsContent value="rodape" className="mt-6">
+            <Card className="bg-white border-[#E4DFD1] rounded-lg overflow-hidden shadow-sm">
+                <CardHeader className="flex flex-row items-center justify-between pb-4">
+                    <div>
+                        <CardTitle className="font-serif text-lg text-[#262420] flex items-center gap-2">
+                            <Type className="h-4 w-4 text-primary" /> Rodapé de Documentos
+                        </CardTitle>
+                        <CardDescription className="text-[#A39D8C] font-bold uppercase text-[9px] tracking-widest">Repetido no rodapé de cada página (opcional)</CardDescription>
+                    </div>
+                    {footerHtml && (
+                        <Button onClick={() => setFooterHtml("")} variant="ghost" className="h-9 px-4 rounded-xl text-[9px] font-black uppercase tracking-widest text-[#6B6659] hover:text-rose-500">
+                            <RotateCcw className="h-3 w-3 mr-2" /> Limpar
+                        </Button>
+                    )}
+                </CardHeader>
+                <CardContent className="p-6 border-t">
+                    <div className="p-6 border border-[#E4DFD1] rounded-lg bg-[#FAF8F3] min-h-[100px]">
+                        <RichTextEditor value={footerHtml} onChange={setFooterHtml} fontSize="9pt" minHeight="60px" placeholder="Ex.: endereço, telefone e horário de atendimento do órgão (opcional)" />
+                    </div>
+                </CardContent>
+                <CardContent className="px-6 pb-6 pt-0">
+                    <Button
+                        onClick={handleSaveConfigs}
+                        disabled={saving}
+                        className="w-full h-16 bg-primary hover:bg-primary/90 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest gap-4 shadow-lg"
+                    >
+                        {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
+                        Salvar Padrões Municipais
+                    </Button>
+                </CardContent>
+            </Card>
+        </TabsContent>
+
+        <TabsContent value="prazos" className="mt-6">
+            <Card className="bg-white border-[#E4DFD1] rounded-lg overflow-hidden shadow-sm flex flex-col">
+                <CardHeader className="pb-4">
+                    <CardTitle className="font-serif text-lg text-[#262420] flex items-center gap-2">
+                        <Scale className="h-4 w-4 text-emerald-600" /> Texto de Notificação Padrão
+                    </CardTitle>
+                    <CardDescription className="text-[#A39D8C] font-bold uppercase text-[9px] tracking-widest">Prazos e orientações legais de defesa</CardDescription>
+                </CardHeader>
+                <CardContent className="p-6 border-t">
+                    <div className="p-6 border border-[#E4DFD1] rounded-lg bg-[#FAF8F3] min-h-[180px]">
+                        <RichTextEditor value={prazoHtml} onChange={setPrazoHtml} fontSize="10pt" minHeight="120px" />
+                    </div>
+                </CardContent>
+                <CardContent className="px-6 pb-6 pt-0">
+                    <Button
+                        onClick={handleSaveConfigs}
+                        disabled={saving}
+                        className="w-full h-16 bg-primary hover:bg-primary/90 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest gap-4 shadow-lg"
+                    >
+                        {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
+                        Salvar Padrões Municipais
+                    </Button>
+                </CardContent>
+            </Card>
+        </TabsContent>
+
+        <TabsContent value="roteiros" className="mt-6">
+          <Card className="bg-white border-[#E4DFD1] rounded-lg overflow-hidden shadow-sm">
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4">
+                  <div>
+                      <CardTitle className="font-serif text-lg text-[#262420] flex items-center gap-2">
+                          <ClipboardList className="h-4 w-4 text-primary" /> Textos Padrão dos Roteiros de Inspeção
+                      </CardTitle>
+                      <CardDescription className="text-[#A39D8C] font-bold uppercase text-[9px] tracking-widest">Considerações Gerais e Conclusão de cada roteiro, por padrão</CardDescription>
+                  </div>
+                  <select
+                      value={selectedRoteiroId}
+                      onChange={(e) => setSelectedRoteiroId(e.target.value)}
+                      className="text-xs font-bold uppercase outline-none bg-[#FAF8F3] border border-[#E4DFD1] rounded-xl px-3 h-11"
+                  >
+                      {ROTEIRO_TEXTO_OPTIONS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                  </select>
+              </CardHeader>
+              <CardContent className="p-6 border-t space-y-6">
+                  <p className="text-[10px] font-medium text-[#6B6659] leading-relaxed">
+                      Este é o texto que aparece pré-preenchido quando um fiscal inicia uma inspeção nova deste roteiro (ele pode editar à vontade depois). Os trechos entre chaves duplas, como <code className="text-[#0E4A44]">{'{{ESTABELECIMENTO}}'}</code>, são preenchidos automaticamente com os dados já digitados na inspeção.
+                  </p>
+                  <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                          <Label className="text-[10px] font-black uppercase text-[#6B6659]">Considerações Gerais (introdução)</Label>
+                          <Button onClick={() => setRoteiroIntroHtml(getDefaultIntroHtml(selectedRoteiroId))} variant="ghost" className="h-8 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest text-[#6B6659] hover:text-primary">
+                              <RotateCcw className="h-3 w-3 mr-2" /> Restaurar Padrão
+                          </Button>
+                      </div>
+                      <div className="p-6 border border-[#E4DFD1] rounded-lg bg-[#FAF8F3] min-h-[160px]">
+                          <RichTextEditor value={roteiroIntroHtml} onChange={setRoteiroIntroHtml} fontSize="10pt" minHeight="140px" />
+                      </div>
+                  </div>
+                  <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                          <Label className="text-[10px] font-black uppercase text-[#6B6659]">Conclusão e Prazo Legal</Label>
+                          <Button onClick={() => setRoteiroConclusaoHtml(getDefaultConclusaoHtml(selectedRoteiroId))} variant="ghost" className="h-8 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest text-[#6B6659] hover:text-primary">
+                              <RotateCcw className="h-3 w-3 mr-2" /> Restaurar Padrão
+                          </Button>
+                      </div>
+                      <div className="p-6 border border-[#E4DFD1] rounded-lg bg-[#FAF8F3] min-h-[160px]">
+                          <RichTextEditor value={roteiroConclusaoHtml} onChange={setRoteiroConclusaoHtml} fontSize="10pt" minHeight="140px" />
+                      </div>
+                  </div>
+              </CardContent>
+              <CardContent className="px-6 pb-6 pt-0">
+                  <Button
+                      onClick={handleSaveRoteiroTextos}
+                      disabled={savingRoteiroTextos}
+                      className="w-full h-16 bg-primary hover:bg-primary/90 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest gap-4 shadow-lg"
+                  >
+                      {savingRoteiroTextos ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
+                      Salvar Textos deste Roteiro
+                  </Button>
+              </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
       )}
     </div>
   )

@@ -2,9 +2,8 @@
 
 import {
   LogOut, Users,
-  UserCircle, Sparkles, Settings, Inbox, ArrowLeft
+  UserCircle, Sparkles, Settings, Inbox, ArrowLeft, Image as ImageIcon, MessageSquare, Loader2
 } from "lucide-react"
-import { SentinelaMascot } from "./brand-logo"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -18,47 +17,73 @@ import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
 import { usePendingAlerts } from "@/hooks/use-pending-alerts"
+import { useMunicipioTemGestor } from "@/hooks/use-municipio-tem-gestor"
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
 import { useCallback, useState } from "react"
 import { ProfileEditDialog } from "./profile-edit-dialog"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { requestChecklistExit } from "@/hooks/use-checklist-exit-guard"
+import { auth } from "@/lib/firebase"
+import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth"
+import { useToast } from "@/hooks/use-toast"
+
+function mapPasswordChangeError(code: string | undefined): string {
+  switch (code) {
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+      return "Senha atual incorreta.";
+    case 'auth/weak-password':
+      return "A nova senha precisa ter pelo menos 6 caracteres.";
+    case 'auth/too-many-requests':
+      return "Muitas tentativas. Aguarde alguns minutos e tente novamente.";
+    case 'auth/requires-recent-login':
+      return "Sessão expirada. Saia e entre novamente antes de trocar a senha.";
+    default:
+      return "Não foi possível alterar a senha. Tente novamente.";
+  }
+}
 
 /**
- * Dialog para alteração de senha
+ * Dialog para alteração de senha — reautentica e troca direto pelo SDK do
+ * Firebase Auth no cliente (nunca passa pelo nosso servidor), já que
+ * updatePassword/reauthenticateWithCredential resolvem isso sem precisar de
+ * uma rota própria com Admin SDK.
  */
-function PasswordChangeDialog({ isOpen, onOpenChange, userId }: { isOpen: boolean; onOpenChange: (open: boolean) => void; userId: string }) {
+function PasswordChangeDialog({ isOpen, onOpenChange }: { isOpen: boolean; onOpenChange: (open: boolean) => void }) {
+  const { toast } = useToast()
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const [saving, setSaving] = useState(false)
 
   const handleSubmit = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) return;
     if (newPassword !== confirmPassword) {
-      alert("As senhas não coincidem")
-      return
+      toast({ variant: "destructive", title: "As senhas não coincidem" });
+      return;
     }
-    // Opcional: Adicionar um estado de loading aqui para o botão
+
+    const currentUser = auth.currentUser;
+    if (!currentUser?.email) {
+      toast({ variant: "destructive", title: "Sessão expirada", description: "Saia e entre novamente." });
+      return;
+    }
+
+    setSaving(true);
     try {
-      const res = await fetch(`/api/users/${userId}/password`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        // Opcional: Adicionar um token de autenticação no header (e.g., Authorization: Bearer <idToken>)
-        body: JSON.stringify({ currentPassword, newPassword }),
-      })
-
-      // Sempre tentar ler a resposta JSON para obter mensagens de erro detalhadas do backend
-      const data = await res.json();
-
-      if (res.ok) { // Verifica se a resposta HTTP foi bem-sucedida (status 2xx)
-        alert(data.message || "Senha alterada com sucesso!");
-        onOpenChange(false);
-      } else { // Se a resposta HTTP não foi bem-sucedida
-        alert(data.message || "Erro ao alterar senha.");
-        // Opcional: Logar o erro completo do backend para depuração
-      }
-    } catch (error) {
-      alert("Falha na requisição")
-      console.error("Erro na requisição de alteração de senha:", error);
+      const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
+      await reauthenticateWithCredential(currentUser, credential);
+      await updatePassword(currentUser, newPassword);
+      toast({ title: "Senha alterada com sucesso" });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      onOpenChange(false);
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Erro ao alterar senha", description: mapPasswordChangeError(error?.code) });
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -67,6 +92,7 @@ function PasswordChangeDialog({ isOpen, onOpenChange, userId }: { isOpen: boolea
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Alterar Senha</DialogTitle>
+          <DialogDescription>Confirme sua senha atual para definir uma nova.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <Input
@@ -87,7 +113,9 @@ function PasswordChangeDialog({ isOpen, onOpenChange, userId }: { isOpen: boolea
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
           />
-          <Button onClick={handleSubmit} className="w-full">Salvar</Button>
+          <Button onClick={handleSubmit} disabled={saving} className="w-full">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -105,6 +133,9 @@ export function AppHeader() {
   const router = useRouter()
   const { user, profile, logout } = useAuth()
   const { pendingUsersCount, pendingChamadosCount } = usePendingAlerts()
+  // Libera "Configurações" pro fiscal também quando o município dele não tem
+  // gestor cadastrado — ver src/hooks/use-municipio-tem-gestor.ts.
+  const { temGestor } = useMunicipioTemGestor()
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [isPasswordOpen, setIsPasswordOpen] = useState(false)
 
@@ -117,27 +148,48 @@ export function AppHeader() {
 
   if (!user || pathname === "/login") return null
 
+  // O link de volta pro Início pode ser "segurado" por uma vistoria em
+  // andamento (ver src/hooks/use-checklist-exit-guard.ts) — se houver um
+  // guard registrado, ele assume a navegação (abre o diálogo de
+  // salvar/excluir) e este clique não navega direto.
+  const handleInicioClick = (e: React.MouseEvent) => {
+    if (requestChecklistExit("/dashboard")) {
+      e.preventDefault();
+    }
+  };
+
   // Definição clara dos papéis
   const role = profile?.role
   const isRoot = role === "root" // exclusivo para o root da plataforma
   const isAdmin = role === "admin"
+  const podeConfigurar = isAdmin || isRoot || (role === "fiscal" && !temGestor)
 
   return (
     <>
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-14 items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1">
             {pathname !== "/dashboard" && (
-              <Link href="/dashboard" className="flex items-center gap-1.5 text-sm font-medium text-zinc-500 hover:text-zinc-900 transition-colors shrink-0">
-                <ArrowLeft className="h-4 w-4" />
-                <span className="hidden sm:inline">Início</span>
+              <Link
+                href="/dashboard"
+                onClick={handleInicioClick}
+                aria-label="Voltar ao início"
+                title="Voltar ao início"
+                className="flex items-center justify-center h-10 w-10 rounded-full text-[#6B6659] hover:bg-[#F1EEE4] hover:text-[#0E4A44] active:bg-[#E4EEEC] transition-colors shrink-0"
+              >
+                <ArrowLeft className="h-5 w-5" />
               </Link>
             )}
-            <Link href="/dashboard" className="flex items-center">
-              <SentinelaMascot className="rounded-lg border-none shadow-none" width={36} height={36} simplified />
-            </Link>
           </div>
           <div className="flex items-center space-x-4">
+            <Link
+              href="/recados"
+              aria-label="Mural de Avisos"
+              title="Mural de Avisos"
+              className="flex items-center justify-center h-10 w-10 rounded-full text-[#6B6659] hover:bg-[#F1EEE4] hover:text-[#0E4A44] active:bg-[#E4EEEC] transition-colors shrink-0"
+            >
+              <MessageSquare className="h-5 w-5" />
+            </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-8 w-8 rounded-full">
@@ -175,10 +227,16 @@ export function AppHeader() {
                     )}
                   </DropdownMenuItem>
                 )}
-                {(isAdmin || isRoot) && (
+                {podeConfigurar && (
                   <DropdownMenuItem onClick={() => router.push("/admin/configuracoes")}>
                     <Settings className="mr-2 h-4 w-4" />
                     <span>Configurações</span>
+                  </DropdownMenuItem>
+                )}
+                {isRoot && (
+                  <DropdownMenuItem onClick={() => router.push("/admin/configuracoes/sistema")}>
+                    <ImageIcon className="mr-2 h-4 w-4" />
+                    <span>Marca do Sistema</span>
                   </DropdownMenuItem>
                 )}
                 {(isAdmin || isRoot) && (
@@ -202,10 +260,9 @@ export function AppHeader() {
       </header>
       <ProfileEditDialog isOpen={isProfileOpen} onOpenChange={setIsProfileOpen} />
       {user?.uid && (
-        <PasswordChangeDialog 
-          isOpen={isPasswordOpen} 
-          onOpenChange={setIsPasswordOpen} 
-          userId={user.uid} 
+        <PasswordChangeDialog
+          isOpen={isPasswordOpen}
+          onOpenChange={setIsPasswordOpen}
         />
       )}
     </>

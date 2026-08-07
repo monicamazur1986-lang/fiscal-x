@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { db } from '@/lib/firebase'; // Importe a instância 'db' diretamente
+import { db, auth } from '@/lib/firebase'; // Importe a instância 'db' diretamente
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { useAuth, ROOT_ADMIN_EMAIL } from './use-auth';
 import { normalizeId } from '@/lib/utils';
@@ -17,6 +17,11 @@ export interface MunicipalityConfig {
   footerRichText?: string;
   defaultPrazoRichText?: string;
   n8nWebhookUrl?: string;
+  /** Textos padrão (por id de roteiro) de "Considerações Gerais" e "Conclusão
+   * e Prazo Legal" dos relatórios de roteiro — ajustado pelo gestor em
+   * Identidade Municipal; na falta de entrada aqui, usa o padrão fixo do
+   * código (ver src/lib/roteiro-textos-padrao.ts). */
+  roteiroTextos?: Record<string, { introducaoHtml?: string; conclusaoHtml?: string }>;
 }
 
 const LOCAL_CONFIG_KEY = 'fiscal_x_muni_config_v6';
@@ -94,11 +99,32 @@ export function useAppConfig(options?: { municipioIdOverride?: string }) {
     setConfig(newConfig);
     localStorage.setItem(LOCAL_CONFIG_KEY, JSON.stringify(newConfig));
 
+    // Um fiscal sem gestor cadastrado no município (liberado a ajustar a
+    // Identidade Municipal — ver useMunicipioTemGestor) não consegue gravar
+    // direto aqui: firestore.rules só permite escrita em
+    // municipios/{id}/config/* pra isAdmin(). Passa então pela rota
+    // server-side (Admin SDK), que reconfirma a ausência de gestor antes de
+    // gravar. Admin/root seguem gravando direto do client, como sempre.
+    if (profile?.role === 'fiscal') {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error('Não autenticado.');
+      const res = await fetch('/api/municipio/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ data }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({} as any));
+        throw new Error(body?.message || 'Falha ao salvar configuração.');
+      }
+      return;
+    }
+
     if (db) {
       const mid = normalizeId(effectiveMunicipioId);
       await setDoc(doc(db, "municipios", mid, "config", "brand"), data, { merge: true });
     }
-  }, [db, effectiveMunicipioId, config]);
+  }, [db, effectiveMunicipioId, config, profile]);
 
   const updateSystemLogo = useCallback(async (url: string) => {
     setSystemLogo(url);
