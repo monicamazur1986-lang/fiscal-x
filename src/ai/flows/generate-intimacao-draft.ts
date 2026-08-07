@@ -13,6 +13,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { searchLegislacao } from '@/lib/legal-search';
 import { checkAndConsumeAiQuota, MONTHLY_AI_LIMIT } from '@/ai/usage-limit';
 import { buscarMelhorExemplo, resolverMunicipioId } from '@/lib/draft-examples-search';
+import { normalizeText } from '@/lib/text-normalize';
 
 // zodOutputFormat exige um schema construído com 'zod/v4' — a instância `z`
 // re-exportada pelo Genkit é do zod v3 e não é estruturalmente compatível.
@@ -92,6 +93,12 @@ function generateLocalHeuristicDraft(input: GenerateIntimacaoDraftInput, municip
   // 2. BUSCA GRANULAR DE LEGISLAÇÃO (MiniSearch: ranking por relevância, prefixo e tolerância a erros de digitação)
   const pref = input.lawPreference || 'todas';
   const descLower = rawDesc.toLowerCase();
+  // Só para as checagens de palavra-chave abaixo (passo 4) — sem acento,
+  // porque "responsável"/"eletrônico" (grafia correta que qualquer fiscal
+  // digita) nunca batiam com os gatilhos 'responsavel'/'eletronico' sem
+  // acento. `descLower` (com acento) continua sendo o que entra no texto
+  // final do documento — não pode virar "nao"/"esta" no rascunho gerado.
+  const descNormalized = normalizeText(rawDesc);
   const matchedArticles = searchLegislacao(rawDesc, { pref, municipioId: municipioId || undefined });
 
   // Se não encontrar nada no banco, interrompe para evitar nulidade
@@ -118,13 +125,13 @@ function generateLocalHeuristicDraft(input: GenerateIntimacaoDraftInput, municip
 
   // 4. REESCRITA TÉCNICA (HEURÍSTICA DE PORTUGUÊS PADRÃO)
   let factAnalysis = "";
-  if (descLower.includes('vape') || descLower.includes('cigarro eletronico')) {
+  if (descNormalized.includes('vape') || descNormalized.includes('cigarro eletronico')) {
     factAnalysis = "a existência de cigarro eletrônico, produto cuja comercialização é proibida no Brasil por não possuir registro na ANVISA";
-  } else if (descLower.includes('vencid') || descLower.includes('validade')) {
+  } else if (descNormalized.includes('vencid') || descNormalized.includes('validade')) {
     factAnalysis = "a exposição de produtos com prazo de validade expirado para a entrega ao consumo";
-  } else if (descLower.includes('higiene') || descLower.includes('sujeira') || descLower.includes('sujidade')) {
+  } else if (descNormalized.includes('higiene') || descNormalized.includes('sujeira') || descNormalized.includes('sujidade')) {
     factAnalysis = "que o estabelecimento apresenta condições higiênico-sanitárias insatisfatórias, com presença de sujidades acumuladas";
-  } else if (descLower.includes('sem rt') || descLower.includes('responsavel')) {
+  } else if (descNormalized.includes('sem rt') || descNormalized.includes('responsavel')) {
     factAnalysis = "que o estabelecimento encontra-se em funcionamento sem a assistência de um responsável técnico (RT) habilitado";
   } else {
     factAnalysis = `que ${descLower.charAt(0).toLowerCase() + descLower.slice(1).replace(/\.$/, '')}`;
@@ -242,9 +249,24 @@ export const generateIntimacaoDraftFlow = ai.defineFlow(
       if (output.error) return output;
 
       const cleanDraft = output.draftIntimacao.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+      // A Claude pode devolver draftIntimacao vazio sem preencher `error`
+      // (contrariando a própria instrução do prompt) — sem essa checagem, o
+      // fiscal via um card de "rascunho gerado" completamente em branco, sem
+      // nenhuma explicação do que deu errado.
+      if (!cleanDraft) {
+        return {
+          draftIntimacao: "",
+          error: "RELATO INSUFICIENTE PARA A IA EM NUVEM: detalhe melhor a irregularidade e tente novamente.",
+        };
+      }
       return { ...output, draftIntimacao: cleanDraft, engine: 'cloud' as const };
 
     } catch (e: any) {
+      // Sem log nenhum aqui, qualquer instabilidade real da Claude (rede,
+      // parse, cota da própria Anthropic) ficava impossível de diagnosticar
+      // depois — o fiscal só via o resultado local, sem pista de que a nuvem
+      // tinha falhado por baixo.
+      console.error("Falha na geração via Claude — usando motor local como fallback:", e);
       return generateLocalHeuristicDraft(input, municipioId);
     }
   }

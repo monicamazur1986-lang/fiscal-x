@@ -6,16 +6,16 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import {
   Loader2,
-  Search,
-  X,
   Trash2,
-  Smartphone,
   Save,
   FileCheck2,
   FileText,
-  Maximize2,
   Download,
   Share2,
+  Lock,
+  PackageX,
+  Eye,
+  Pencil,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
@@ -25,26 +25,45 @@ import { useToast } from "@/hooks/use-toast"
 import { useIntimacoes } from "@/hooks/use-intimacoes"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useAuth } from "@/hooks/use-auth"
+import { auth as firebaseAuth } from "@/lib/firebase"
 import { intimacaoSchema, DEFAULT_PRAZO_TEXT, INTERDICAO_PRAZO_TEXT, APREENSAO_PRAZO_TEXT } from "@/lib/schema"
 import { Intimacao, Autoridade } from "@/lib/types"
 import { Label } from "@/components/ui/label"
 import { SignaturePad } from "./signature-pad"
-import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "./ui/dialog"
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from "./ui/alert-dialog"
 import { DocumentoOficialBody, type IntimacaoFormValues, type SignatureTargetType } from "./documento-oficial-body"
-import { renderDocumentIntoPdf } from "@/lib/generate-intimacao-pdf"
+import { renderDocumentIntoPdf, computePageGroups } from "@/lib/generate-intimacao-pdf"
 
 const TIPOS_QUE_GERAM_AUTO_INFRACAO = ["TERMO DE APREENSÃO", "TERMO DE INTERDIÇÃO"];
+// Muitos fiscais começam a autuação direto pelo Auto de Infração (em vez de
+// partir de uma Interdição/Apreensão) — por isso ele também precisa oferecer
+// o mesmo sistema de documento vinculado, só que na direção oposta: gera um
+// Termo de Interdição OU de Apreensão, não outro Auto de Infração.
+const TIPO_QUE_GERA_INTERDICAO_OU_APREENSAO = "AUTO DE INFRAÇÃO";
 
 type SignatureTarget = { doc: 'main' | 'anexo', type: SignatureTargetType, index?: number };
 type EditingFiscal = { doc: 'main' | 'anexo', index: number, data: Autoridade };
 
-// Recalcula, para um documento específico, onde cairiam as quebras de página A4
-// (297mm), reservando o espaço do cabeçalho repetido a partir da 2ª página.
-function useDocPageBreaks(containerRef: React.RefObject<HTMLDivElement>, headerRef: React.RefObject<HTMLElement>, fitToScreen: boolean, extraDeps: any[] = []) {
-  const [pageBreaks, setPageBreaks] = useState<number[]>([]);
+type LivePageBreak = { beforeIndex: number; pageNumber: number; totalPages: number };
+
+// Altura estimada do LivePageHeader (documento-oficial-body.tsx) — contador
+// de página + o mesmo brasão/identificação institucional compacta do topo +
+// a linha de identificação do documento. Não dá pra medir de verdade porque
+// ele só existe DEPOIS de decidirmos onde entra (ovo e galinha); documentado
+// como aproximação — a paginação real do PDF (renderDocumentIntoPdf) mede o
+// cabeçalho oculto de verdade, não depende desta constante.
+const LIVE_HEADER_HEIGHT_PT = 135;
+const PT_TO_MM = 25.4 / 72;
+
+// Recalcula, para um documento específico, onde cairiam as quebras de página
+// A4 (297mm) e devolve os pontos exatos (índice do bloco original em
+// documento-oficial-body.tsx) onde um LivePageHeader deve entrar — usando a
+// MESMA lógica de agrupamento por seção do PDF real (computePageGroups,
+// generate-intimacao-pdf.tsx) em vez de uma estimativa cega por pixel.
+function useLivePagination(containerRef: React.RefObject<HTMLDivElement>, headerRef: React.RefObject<HTMLElement>, fitToScreen: boolean, extraDeps: any[] = []) {
+  const [livePageBreaks, setLivePageBreaks] = useState<LivePageBreak[]>([]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -54,17 +73,44 @@ function useDocPageBreaks(containerRef: React.RefObject<HTMLDivElement>, headerR
     const A4_HEIGHT_MM = 297;
 
     const recalculate = () => {
+      const sourceForm = el.querySelector('form') as HTMLElement | null;
+      const bodyContainer = sourceForm?.querySelector('tbody > tr > td') as HTMLElement | null;
+      const footer = sourceForm?.querySelector('footer') as HTMLElement | null;
+      if (!bodyContainer) { setLivePageBreaks(prev => prev.length ? [] : prev); return; }
+
       const pxPerMm = el.offsetWidth / A4_WIDTH_MM;
       const pageHeightPx = A4_HEIGHT_MM * pxPerMm;
       const headerHeightPx = headerRef.current?.offsetHeight || 0;
+      const footerHeightPx = footer?.offsetHeight || 0;
+      const liveHeaderHeightPx = LIVE_HEADER_HEIGHT_PT * PT_TO_MM * pxPerMm;
 
-      const breaks: number[] = [];
-      let cursor = pageHeightPx;
-      while (cursor < el.scrollHeight) {
-        breaks.push(cursor);
-        cursor += Math.max(pageHeightPx - headerHeightPx, 1);
-      }
-      setPageBreaks(breaks);
+      const firstPageWindowPx = Math.max(pageHeightPx - headerHeightPx - footerHeightPx, 1);
+      const continuationWindowPx = Math.max(pageHeightPx - liveHeaderHeightPx - footerHeightPx, 1);
+
+      // Exclui os LivePageHeader já inseridos numa rodada anterior — sem
+      // isso, a medição contaria a própria decoração como conteúdo e
+      // entraria em loop, deslocando a quebra a cada nova renderização.
+      const bodyChildren = Array.from(bodyContainer.children).filter(
+        (child) => !child.hasAttribute('data-live-page-header')
+      ) as HTMLElement[];
+      const groups = computePageGroups(bodyChildren, firstPageWindowPx, continuationWindowPx);
+
+      const next: LivePageBreak[] = [];
+      groups.forEach((group, idx) => {
+        if (idx === 0) return;
+        const sectionIndexAttr = group[0]?.getAttribute('data-section-index');
+        const beforeIndex = sectionIndexAttr != null ? parseInt(sectionIndexAttr, 10) : NaN;
+        if (!Number.isNaN(beforeIndex)) {
+          next.push({ beforeIndex, pageNumber: idx + 1, totalPages: groups.length });
+        }
+      });
+
+      setLivePageBreaks(prev => {
+        const same = prev.length === next.length && prev.every((b, i) =>
+          b.beforeIndex === next[i].beforeIndex && b.pageNumber === next[i].pageNumber && b.totalPages === next[i].totalPages
+        );
+        return same ? prev : next;
+      });
     };
 
     recalculate();
@@ -74,22 +120,7 @@ function useDocPageBreaks(containerRef: React.RefObject<HTMLDivElement>, headerR
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitToScreen, ...extraDeps]);
 
-  return pageBreaks;
-}
-
-function PageBreakMarkers({ pageBreaks }: { pageBreaks: number[] }) {
-  return (
-    <>
-      {pageBreaks.map((offset, i) => (
-        <div key={i} className="no-print absolute left-0 right-0 pointer-events-none z-20" style={{ top: offset }}>
-          <div className="border-t-2 border-dashed border-primary/40" />
-          <span className="absolute -top-2.5 right-2 bg-primary text-white text-[7pt] font-black uppercase tracking-widest px-2 py-0.5 rounded-full shadow-sm">
-            Página {i + 2}
-          </span>
-        </div>
-      ))}
-    </>
-  );
+  return livePageBreaks;
 }
 
 function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<Intimacao>, intimacaoId?: string }) {
@@ -131,11 +162,14 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
     const [lastAutoSavedAt, setLastAutoSavedAt] = useState<Date | null>(null);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
     const [isSharingPdf, setIsSharingPdf] = useState(false);
+    // "Visualizar" — mostra o documento limpo, sem os controles de edição por
+    // cima (mesmo truque já usado durante a geração do PDF: os campos viram
+    // texto estático em vez de <input>/<Select>), sem precisar finalizar
+    // (travar a edição de vez) só pra conferir como o termo vai ficar.
+    const [isPreviewMode, setIsPreviewMode] = useState(false);
     const [signatureTarget, setSignatureTarget] = useState<SignatureTarget | null>(null);
     const [editingFiscal, setEditingFiscal] = useState<EditingFiscal | null>(null);
     const [isSearchingCnpj, setIsSearchingCnpj] = useState(false);
-    const [fitToScreen, setFitToScreen] = useState(false);
-    const [manualFitOverride, setManualFitOverride] = useState<boolean | null>(null);
     const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
     const [hasAnexo, setHasAnexo] = useState(false);
     const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
@@ -189,18 +223,15 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    // Ajusta a tela automaticamente quando o documento A4 (794px) não cabe na
-    // largura disponível, a menos que o usuário já tenha escolhido manualmente.
-    useEffect(() => {
-        if (manualFitOverride !== null) {
-            setFitToScreen(manualFitOverride);
-            return;
-        }
-        setFitToScreen(windowWidth - 32 < 794);
-    }, [windowWidth, manualFitOverride]);
+    // Encolhe o documento A4 (794px) automaticamente quando não cabe na
+    // largura disponível (telas estreitas) — sem controle manual: numa tela
+    // larga o zoom já fica travado em 100% de qualquer forma (nunca precisa
+    // encolher além do tamanho real), então uma opção pra "forçar o ajuste"
+    // não tinha efeito prático nenhum ali, só confundia.
+    const fitToScreen = windowWidth - 32 < 794;
 
-    const pageBreaksMain = useDocPageBreaks(mainDocumentRef, mainHeaderRef, fitToScreen);
-    const pageBreaksAnexo = useDocPageBreaks(anexoDocumentRef, anexoHeaderRef, fitToScreen, [hasAnexo]);
+    const livePageBreaksMain = useLivePagination(mainDocumentRef, mainHeaderRef, fitToScreen);
+    const livePageBreaksAnexo = useLivePagination(anexoDocumentRef, anexoHeaderRef, fitToScreen, [hasAnexo]);
 
     useEffect(() => {
         if (profile && !getValues('numeroProcesso') && !loadingIntimacoes) {
@@ -220,15 +251,23 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
         else setValue('prazo', DEFAULT_PRAZO_TEXT);
     };
 
-    const handleGerarAutoInfracao = async () => {
+    // Gera o documento vinculado (anexo) com os dados do estabelecimento,
+    // autoridades e fundamentação já preenchidos no principal. O tipo do
+    // anexo depende de quem está chamando: Interdição/Apreensão sempre geram
+    // um Auto de Infração; o próprio Auto de Infração gera Interdição ou
+    // Apreensão (o fiscal escolhe qual, ver botões no card abaixo).
+    const handleGerarAnexo = async (tipoAnexo: string) => {
         const novoNumero = await generateNewNumeroProcesso();
         const main = getValues();
         const base = intimacaoSchema.parse({});
+        const prazoAnexo = tipoAnexo === 'TERMO DE INTERDIÇÃO' ? INTERDICAO_PRAZO_TEXT
+            : tipoAnexo === 'TERMO DE APREENSÃO' ? APREENSAO_PRAZO_TEXT
+            : DEFAULT_PRAZO_TEXT;
         anexoMethods.reset({
             ...base,
-            tipoTermo: "AUTO DE INFRAÇÃO",
+            tipoTermo: tipoAnexo,
             numeroProcesso: novoNumero,
-            prazo: DEFAULT_PRAZO_TEXT,
+            prazo: prazoAnexo,
             comarca: main.comarca,
             autor: main.autor,
             cnpj: main.cnpj,
@@ -444,7 +483,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
         const tipo = getValues('tipoTermo');
         const numero = getValues('numeroProcesso');
         const filename = hasAnexo
-          ? `${tipo} + AUTO DE INFRAÇÃO - ${numero}.pdf`
+          ? `${tipo} + ${anexoMethods.getValues('tipoTermo')} - ${numero}.pdf`
           : `${tipo} - ${numero}.pdf`;
         return { pdf, filename };
       } catch (e) {
@@ -495,7 +534,10 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
         if (cnpj?.length !== 14) return;
         setIsSearchingCnpj(true);
         try {
-            const res = await fetch(`/api/cnpj/${cnpj}`);
+            const idToken = await firebaseAuth?.currentUser?.getIdToken();
+            const res = await fetch(`/api/cnpj/${cnpj}`, {
+                headers: idToken ? { Authorization: `Bearer ${idToken}` } : undefined,
+            });
             if (res.ok) {
                 const data = await res.json();
                 setValue("autor", data.razao_social);
@@ -515,26 +557,15 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
 
     const scaleFactor = fitToScreen ? Math.min((windowWidth - 32) / 794, 1) : 1;
     const paperStyle = fitToScreen ? { transform: `scale(${scaleFactor})`, margin: '0 auto', transformOrigin: 'top center' } : {};
-    const mostraCardAutoInfracao = !isGeneratingPdf && (hasAnexo || TIPOS_QUE_GERAM_AUTO_INFRACAO.includes(tipoTermoAtual));
+    // Preview e geração de PDF usam o mesmo truque de renderização (campos
+    // viram texto estático, controles de edição somem) — ver isReadOnlyRender.
+    const isReadOnlyRender = isGeneratingPdf || isPreviewMode;
+    const mostraCardAutoInfracao = !isReadOnlyRender && (hasAnexo || TIPOS_QUE_GERAM_AUTO_INFRACAO.includes(tipoTermoAtual) || tipoTermoAtual === TIPO_QUE_GERA_INTERDICAO_OU_APREENSAO);
+    const tipoAnexoAtual = anexoMethods.watch('tipoTermo');
 
     return (
         <FormProvider {...methods}>
             <div className="document-container font-serif pb-60">
-                <div className="no-print w-full max-w-[210mm] flex flex-wrap justify-between items-center mb-8 px-4 gap-4">
-                    <div className="flex gap-3 flex-wrap">
-                        <Button
-                            onClick={() => setManualFitOverride(!fitToScreen)}
-                            className={cn(
-                                "rounded-xl font-black text-[10px] uppercase tracking-widest gap-2 transition-all shadow-xl h-11 px-8 border-2",
-                                fitToScreen ? "bg-primary text-white border-primary" : "bg-white border-primary text-primary"
-                            )}
-                        >
-                            {fitToScreen ? <Maximize2 className="h-4 w-4" /> : <Smartphone className="h-4 w-4" />}
-                            {fitToScreen ? "Ver em A4 Real" : "Ajustar à Tela"}
-                        </Button>
-                    </div>
-                </div>
-
                 <div className="document-paper-wrapper custom-scrollbar">
                     <div
                       ref={mainDocumentRef}
@@ -551,7 +582,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                             onRemoveAutoridade={(i) => remove(i)}
                             onEditAutoridade={(i, data) => setEditingFiscal({ doc: 'main', index: i, data })}
                             isFinalized={isFinalized}
-                            isGeneratingPdf={isGeneratingPdf}
+                            isGeneratingPdf={isReadOnlyRender}
                             config={config}
                             formRef={mainFormRef}
                             headerRef={mainHeaderRef}
@@ -560,25 +591,42 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                             onPrazoChange={() => { prazoEditadoManualmenteRef.current = true; }}
                             onCnpjLookup={handleCnpjLookup}
                             isSearchingCnpj={isSearchingCnpj}
+                            livePageBreaks={livePageBreaksMain}
                         />
-                        {!isGeneratingPdf && <PageBreakMarkers pageBreaks={pageBreaksMain} />}
                     </div>
 
                     {mostraCardAutoInfracao && (
                         <div className="no-print max-w-[210mm] mx-auto my-8 p-6 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 flex flex-col sm:flex-row items-center justify-between gap-4">
                             {!hasAnexo ? (
-                                <>
-                                    <div>
-                                        <p className="font-black uppercase text-sm text-primary">Auto de Infração Vinculado</p>
-                                        <p className="text-xs text-zinc-500 mt-1">Gera um Auto de Infração com os mesmos dados do estabelecimento, autoridades e fundamentação, para assinatura própria e exportação em um único PDF.</p>
-                                    </div>
-                                    <Button type="button" onClick={handleGerarAutoInfracao} disabled={isFinalized} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-12 px-6 bg-primary text-white shrink-0">
-                                        <FileText className="h-4 w-4" /> Gerar Auto de Infração Vinculado
-                                    </Button>
-                                </>
+                                tipoTermoAtual === TIPO_QUE_GERA_INTERDICAO_OU_APREENSAO ? (
+                                    <>
+                                        <div>
+                                            <p className="font-serif text-base text-primary">Termo Vinculado</p>
+                                            <p className="text-xs text-[#6B6659] mt-1">Gera uma Interdição ou Apreensão com os mesmos dados do estabelecimento, autoridades e fundamentação, para assinatura própria e exportação em um único PDF.</p>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                            <Button type="button" onClick={() => handleGerarAnexo('TERMO DE INTERDIÇÃO')} disabled={isFinalized} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-12 px-5 bg-primary text-white">
+                                                <Lock className="h-4 w-4" /> Gerar Interdição
+                                            </Button>
+                                            <Button type="button" onClick={() => handleGerarAnexo('TERMO DE APREENSÃO')} disabled={isFinalized} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-12 px-5 bg-primary text-white">
+                                                <PackageX className="h-4 w-4" /> Gerar Apreensão
+                                            </Button>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <p className="font-serif text-base text-primary">Auto de Infração Vinculado</p>
+                                            <p className="text-xs text-[#6B6659] mt-1">Gera um Auto de Infração com os mesmos dados do estabelecimento, autoridades e fundamentação, para assinatura própria e exportação em um único PDF.</p>
+                                        </div>
+                                        <Button type="button" onClick={() => handleGerarAnexo('AUTO DE INFRAÇÃO')} disabled={isFinalized} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-12 px-6 bg-primary text-white shrink-0">
+                                            <FileText className="h-4 w-4" /> Gerar Auto de Infração Vinculado
+                                        </Button>
+                                    </>
+                                )
                             ) : (
                                 <>
-                                    <p className="font-black uppercase text-sm text-primary">Auto de Infração Vinculado Nº {anexoMethods.watch('numeroProcesso')}</p>
+                                    <p className="font-serif text-base text-primary">{tipoAnexoAtual} Vinculado Nº {anexoMethods.watch('numeroProcesso')}</p>
                                     {!anexoIsFinalized && !isFinalized && (
                                         <Button type="button" variant="outline" onClick={handleRemoverAnexo} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-10 px-4 text-rose-600 border-rose-300 shrink-0">
                                             <Trash2 className="h-4 w-4" /> Remover
@@ -606,14 +654,14 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                     onRemoveAutoridade={(i) => anexoRemove(i)}
                                     onEditAutoridade={(i, data) => setEditingFiscal({ doc: 'anexo', index: i, data })}
                                     isFinalized={anexoIsFinalized}
-                                    isGeneratingPdf={isGeneratingPdf}
+                                    isGeneratingPdf={isReadOnlyRender}
                                     config={config}
                                     formRef={anexoFormRef}
                                     headerRef={anexoHeaderRef}
                                     onRequestSignature={(target) => setSignatureTarget({ doc: 'anexo', ...target })}
                                     showCnpjLookup={false}
+                                    livePageBreaks={livePageBreaksAnexo}
                                 />
-                                {!isGeneratingPdf && <PageBreakMarkers pageBreaks={pageBreaksAnexo} />}
                             </div>
                         </FormProvider>
                     )}
@@ -621,26 +669,37 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
 
                 {!isFinalized ? (
                     <div className="fixed bottom-3 right-3 z-[100] no-print flex items-center gap-2">
-                        {lastAutoSavedAt && (
-                            <span className="hidden sm:inline text-[9px] font-bold uppercase tracking-widest text-zinc-400 bg-white/90 px-3 py-1.5 rounded-full border border-zinc-200 shadow-sm">
+                        {!isPreviewMode && lastAutoSavedAt && (
+                            <span className="hidden sm:inline text-[9px] font-bold uppercase tracking-widest text-[#6B6659] bg-white/90 px-3 py-1.5 rounded-full border border-[#E4DFD1] shadow-sm">
                                 Salvo automaticamente às {format(lastAutoSavedAt, "HH:mm")}
                             </span>
                         )}
-                        <div className="flex items-center gap-2 bg-white/95 backdrop-blur-xl border border-zinc-200 rounded-2xl shadow-lg p-2">
-                            <Button type="button" onClick={() => handleSaveDraft()} disabled={isSavingDraft || isSaving} variant="outline" size="sm" className="h-10 px-4 rounded-xl border-zinc-300 text-zinc-600 font-black uppercase text-[10px] tracking-widest gap-2">
-                                {isSavingDraft ? <Loader2 className="animate-spin h-4 w-4" /> : <Save className="h-4 w-4" />} Salvar Rascunho
-                            </Button>
-                            <Button type="button" onClick={() => setShowFinalizeConfirm(true)} disabled={isSaving || isSavingDraft} size="sm" className="h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white gap-2 rounded-xl font-black uppercase text-[10px] tracking-widest">
-                                {isSaving ? <Loader2 className="animate-spin h-4 w-4" /> : <FileCheck2 className="h-4 w-4" />} Finalizar
-                            </Button>
+                        <div className="flex items-center gap-2 bg-white/95 backdrop-blur-xl border border-[#E4DFD1] rounded-2xl shadow-lg p-2">
+                            {isPreviewMode ? (
+                                <Button type="button" onClick={() => setIsPreviewMode(false)} size="sm" className="h-10 px-4 bg-primary hover:bg-primary/90 text-white gap-2 rounded-xl font-black uppercase text-[10px] tracking-widest">
+                                    <Pencil className="h-4 w-4" /> Voltar a Editar
+                                </Button>
+                            ) : (
+                                <>
+                                    <Button type="button" onClick={() => setIsPreviewMode(true)} variant="outline" size="icon" title="Visualizar" className="h-10 w-10 rounded-xl border-[#E4DFD1] text-[#6B6659]">
+                                        <Eye className="h-4 w-4" />
+                                    </Button>
+                                    <Button type="button" onClick={() => handleSaveDraft()} disabled={isSavingDraft || isSaving} variant="outline" size="sm" className="h-10 px-4 rounded-xl border-[#E4DFD1] text-[#6B6659] font-black uppercase text-[10px] tracking-widest gap-2">
+                                        {isSavingDraft ? <Loader2 className="animate-spin h-4 w-4" /> : <Save className="h-4 w-4" />} Salvar Rascunho
+                                    </Button>
+                                    <Button type="button" onClick={() => setShowFinalizeConfirm(true)} disabled={isSaving || isSavingDraft} size="sm" className="h-10 px-4 bg-primary hover:bg-primary/90 text-white gap-2 rounded-xl font-black uppercase text-[10px] tracking-widest">
+                                        {isSaving ? <Loader2 className="animate-spin h-4 w-4" /> : <FileCheck2 className="h-4 w-4" />} Finalizar
+                                    </Button>
+                                </>
+                            )}
                         </div>
                     </div>
                 ) : (
-                    <div className="fixed bottom-3 right-3 z-[100] no-print flex items-center gap-2 bg-white/95 backdrop-blur-xl border border-zinc-200 rounded-2xl shadow-lg p-2">
-                        <Button type="button" onClick={handleDownloadPdf} disabled={isGeneratingPdf || isSharingPdf} variant="outline" size="sm" className="h-10 px-4 rounded-xl border-zinc-300 text-zinc-600 font-black uppercase text-[10px] tracking-widest gap-2">
+                    <div className="fixed bottom-3 right-3 z-[100] no-print flex items-center gap-2 bg-white/95 backdrop-blur-xl border border-[#E4DFD1] rounded-2xl shadow-lg p-2">
+                        <Button type="button" onClick={handleDownloadPdf} disabled={isGeneratingPdf || isSharingPdf} variant="outline" size="sm" className="h-10 px-4 rounded-xl border-[#E4DFD1] text-[#6B6659] font-black uppercase text-[10px] tracking-widest gap-2">
                             {isGeneratingPdf && !isSharingPdf ? <Loader2 className="animate-spin h-4 w-4" /> : <Download className="h-4 w-4" />} Baixar PDF
                         </Button>
-                        <Button type="button" onClick={handleSharePdf} disabled={isGeneratingPdf || isSharingPdf} size="sm" className="h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white gap-2 rounded-xl font-black uppercase text-[10px] tracking-widest">
+                        <Button type="button" onClick={handleSharePdf} disabled={isGeneratingPdf || isSharingPdf} size="sm" className="h-10 px-4 bg-primary hover:bg-primary/90 text-white gap-2 rounded-xl font-black uppercase text-[10px] tracking-widest">
                             {isSharingPdf ? <Loader2 className="animate-spin h-4 w-4" /> : <Share2 className="h-4 w-4" />} Compartilhar
                         </Button>
                     </div>
@@ -648,18 +707,18 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             </div>
 
             <AlertDialog open={showFinalizeConfirm} onOpenChange={setShowFinalizeConfirm}>
-                <AlertDialogContent className="rounded-[2rem]">
+                <AlertDialogContent className="rounded-lg">
                     <AlertDialogHeader>
-                        <AlertDialogTitle className="font-black uppercase tracking-tighter text-xl italic">Finalizar Documento?</AlertDialogTitle>
+                        <AlertDialogTitle className="font-serif text-xl text-[#262420]">Finalizar Documento?</AlertDialogTitle>
                         <AlertDialogDescription>
                             {hasAnexo
-                                ? "Isso trava a edição do Termo e do Auto de Infração vinculado e sincroniza os dois na nuvem. Depois de finalizar, use \"Baixar PDF\" ou \"Compartilhar\" para exportar. Não será possível editar depois."
+                                ? `Isso trava a edição do Termo e do ${tipoAnexoAtual} vinculado e sincroniza os dois na nuvem. Depois de finalizar, use "Baixar PDF" ou "Compartilhar" para exportar. Não será possível editar depois.`
                                 : "Isso trava a edição do documento e sincroniza na nuvem. Depois de finalizar, use \"Baixar PDF\" ou \"Compartilhar\" para exportar. Não será possível editar depois."}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => { setShowFinalizeConfirm(false); handleSubmit(handleFinalize)(); }} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-emerald-600 hover:bg-emerald-700">Finalizar</AlertDialogAction>
+                        <AlertDialogAction onClick={() => { setShowFinalizeConfirm(false); handleSubmit(handleFinalize)(); }} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-primary hover:bg-primary/90">Finalizar</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
@@ -667,12 +726,12 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             <SignaturePad isOpen={!!signatureTarget} onOpenChange={(o) => !o && setSignatureTarget(null)} onSave={handleSignatureSave} title="Assinatura Digital Oficial" />
 
             <Dialog open={!!editingFiscal} onOpenChange={(o) => !o && setEditingFiscal(null)}>
-                <DialogContent className="rounded-[2.5rem] sm:max-w-md"><DialogHeader><DialogTitle className="font-black uppercase tracking-tighter text-xl italic">Editar Autoridade</DialogTitle></DialogHeader>{editingFiscal && (<div className="space-y-5 py-4"><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 ml-1">Nome Completo</Label><Input value={editingFiscal.data.nome} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, nome: e.target.value.toUpperCase()}})} className="h-12 rounded-xl bg-zinc-50 border-none font-bold text-xs uppercase" /></div><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 ml-1">Cargo</Label><Input value={editingFiscal.data.cargo} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, cargo: e.target.value.toUpperCase()}})} className="h-12 rounded-xl bg-zinc-50 border-none font-bold text-xs uppercase" /></div><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 ml-1">Identidade</Label><Input value={editingFiscal.data.rg} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, rg: e.target.value.toUpperCase()}})} className="h-12 rounded-xl bg-zinc-50 border-none font-bold text-xs" /></div></div>)}<DialogFooter><Button onClick={() => { if (editingFiscal) { const upd = editingFiscal.doc === 'main' ? update : anexoUpdate; upd(editingFiscal.index, { ...editingFiscal.data, municipioId: editingFiscal.data.municipioId || '', signature: editingFiscal.data.signature || '' }); setEditingFiscal(null); toast({ title: "Dados Atualizados" }); } }} className="w-full h-12 rounded-xl bg-primary text-white font-black uppercase text-[10px] tracking-widest shadow-lg">Salvar Alterações</Button></DialogFooter></DialogContent>
+                <DialogContent className="rounded-lg sm:max-w-md"><DialogHeader><DialogTitle className="font-serif text-xl text-[#262420]">Editar Autoridade</DialogTitle></DialogHeader>{editingFiscal && (<div className="space-y-5 py-4"><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-[#A39D8C] ml-1">Nome Completo</Label><Input value={editingFiscal.data.nome} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, nome: e.target.value.toUpperCase()}})} className="h-12 rounded-lg bg-[#FAF8F3] border-none font-bold text-xs uppercase" /></div><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-[#A39D8C] ml-1">Cargo</Label><Input value={editingFiscal.data.cargo} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, cargo: e.target.value.toUpperCase()}})} className="h-12 rounded-lg bg-[#FAF8F3] border-none font-bold text-xs uppercase" /></div><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-[#A39D8C] ml-1">Identidade</Label><Input value={editingFiscal.data.rg} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, rg: e.target.value.toUpperCase()}})} className="h-12 rounded-lg bg-[#FAF8F3] border-none font-bold text-xs" /></div></div>)}<DialogFooter><Button onClick={() => { if (editingFiscal) { const upd = editingFiscal.doc === 'main' ? update : anexoUpdate; upd(editingFiscal.index, { ...editingFiscal.data, municipioId: editingFiscal.data.municipioId || '', signature: editingFiscal.data.signature || '' }); setEditingFiscal(null); toast({ title: "Dados Atualizados" }); } }} className="w-full h-12 rounded-xl bg-primary text-white font-black uppercase text-[10px] tracking-widest shadow-lg">Salvar Alterações</Button></DialogFooter></DialogContent>
             </Dialog>
         </FormProvider>
     );
 }
 
 export function IntimacaoForm(props: { defaultValues?: Partial<Intimacao>, intimacaoId?: string }) {
-    return (<Suspense fallback={<div className="flex h-screen items-center justify-center bg-slate-50"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}><FormContent {...props} /></Suspense>)
+    return (<Suspense fallback={<div className="flex h-screen items-center justify-center bg-[#F5F2EA]"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}><FormContent {...props} /></Suspense>)
 }

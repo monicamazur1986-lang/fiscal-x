@@ -35,7 +35,6 @@ import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { useBiblioteca } from "@/hooks/use-biblioteca"
 import { useAuth } from "@/hooks/use-auth"
 import { Badge } from "@/components/ui/badge"
 
@@ -78,7 +77,6 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
   const router = useRouter()
   const { toast } = useToast()
   const { profile } = useAuth()
-  const { documents, loading: loadingBiblioteca } = useBiblioteca()
   const recognitionRef = useRef<any>(null)
 
   useEffect(() => {
@@ -123,10 +121,8 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
   }
 
   const handleGenerate = async () => {
-    if (!caseDescription.trim() || !reportType || !lawPreference || coolDown > 0 || isLoading || loadingBiblioteca) {
-      if (loadingBiblioteca) {
-        toast({ title: "Aguarde", description: "A base de conhecimento jurídico ainda está carregando." });
-      } else if (!reportType || !lawPreference) {
+    if (!caseDescription.trim() || !reportType || !lawPreference || coolDown > 0 || isLoading) {
+      if (!reportType || !lawPreference) {
         toast({ variant: "destructive", title: "Selecione a finalidade do documento e a base legal antes de gerar." });
       }
       return;
@@ -383,7 +379,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
 
           <Button
               onClick={handleGenerate}
-              disabled={isLoading || !caseDescription.trim() || !reportType || !lawPreference || coolDown > 0 || loadingBiblioteca}
+              disabled={isLoading || !caseDescription.trim() || !reportType || !lawPreference || coolDown > 0}
               className={cn(
                   "flex-1 w-full sm:w-auto h-12 rounded-xl font-semibold gap-2.5 transition-all",
                   coolDown > 0 ? "bg-zinc-200 text-zinc-400 cursor-not-allowed" : "bg-primary hover:bg-primary/90 text-white"

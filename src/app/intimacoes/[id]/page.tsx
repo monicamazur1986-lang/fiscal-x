@@ -24,7 +24,7 @@ function EditarIntimacao({ params }: { params: Promise<{ id: string }> }) {
     return (
       <div className="flex h-[50vh] w-full flex-col items-center justify-center gap-4">
         <Loader2 className="h-6 w-6 animate-spin text-primary/40" />
-        <p className="text-[8px] font-black text-zinc-400 uppercase tracking-[0.3em]">Carregando</p>
+        <p className="text-[8px] font-black text-[#A39D8C] uppercase tracking-[0.3em]">Carregando</p>
       </div>
     );
   }

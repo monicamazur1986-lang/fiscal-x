@@ -3,6 +3,7 @@
 import { Landmark } from "lucide-react"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { cn } from "@/lib/utils"
+import { sanitizeHtml } from "@/lib/sanitize-html"
 
 /** Timbre oficial (brasão + prefeitura/secretaria/departamento) usado em
  * todos os documentos gerados pelo sistema — mesmo padrão já usado em
@@ -30,7 +31,7 @@ export function OfficialLetterhead({ className }: { className?: string }) {
       </div>
       <div className="flex-1 text-center font-serif">
         {config.headerRichText ? (
-          <div dangerouslySetInnerHTML={{ __html: config.headerRichText }} />
+          <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(config.headerRichText) }} />
         ) : (
           <>
             <p className="text-[10pt] font-black uppercase text-black">PREFEITURA MUNICIPAL DE {config.municipioNome || "PRUDENTÓPOLIS"}</p>

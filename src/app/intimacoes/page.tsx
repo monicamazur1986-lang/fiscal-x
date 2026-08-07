@@ -433,7 +433,7 @@ export default function DocumentosPage() {
         actions={isRoot ? (
           <Popover open={municipioPickerOpen} onOpenChange={setMunicipioPickerOpen}>
             <PopoverTrigger asChild>
-              <button className="flex items-center gap-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-900 transition-colors">
+              <button className="flex items-center gap-1.5 text-xs font-medium text-[#6B6659] hover:text-[#262420] transition-colors">
                 <Building2 className="h-3.5 w-3.5" />
                 {selectedMunicipioForRoot ? selectedMunicipioForRoot : "Selecionar município"}
                 <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
@@ -624,7 +624,7 @@ export default function DocumentosPage() {
           {selectedIds.length > 0 && (
             <div className="bg-[#0E4A44] text-white p-3 rounded-md flex items-center justify-between animate-in slide-in-from-top-2">
               <div className="flex items-center gap-3 ml-1">
-                <button onClick={() => setSelectedIds([])} className="text-zinc-400 hover:text-white"><X className="h-4 w-4" /></button>
+                <button onClick={() => setSelectedIds([])} className="text-white/60 hover:text-white"><X className="h-4 w-4" /></button>
                 <span className="text-xs font-medium">{selectedIds.length} itens selecionados</span>
               </div>
               <div className="flex items-center gap-1">
@@ -914,7 +914,7 @@ export default function DocumentosPage() {
               </div>
             </div>
           ) : (
-            <div className="py-16 text-center text-sm text-zinc-400">Nenhum dado encontrado para este ano.</div>
+            <div className="py-16 text-center text-sm text-[#A39D8C]">Nenhum dado encontrado para este ano.</div>
           )}
         </DialogContent>
       </Dialog>

@@ -10,6 +10,66 @@ import type { MunicipalityConfig } from '@/hooks/use-app-config';
 import { DocumentoOficialBody, type IntimacaoFormValues } from '@/components/documento-oficial-body';
 
 /**
+ * Agrupa os filhos do corpo do documento (as `section-box` de cada seção,
+ * filhos diretos de `tbody > tr > td` — ver documento-oficial-body.tsx) em
+ * páginas, respeitando o limite de altura de cada uma. Nunca corta uma seção
+ * ao meio: só empurra a seção inteira pra próxima página se não couber na
+ * atual. A 1ª página tem uma janela de conteúdo diferente da 2ª em diante
+ * (cabeçalho cheio vs. condensado ocupam alturas diferentes).
+ *
+ * Compartilhada entre a geração real do PDF (renderDocumentIntoPdf, abaixo) e
+ * a prévia de quebra de página na tela (useDocPageBreaks, intimacao-form.tsx)
+ * — sem isso, as duas podiam divergir sobre onde o documento realmente quebra.
+ */
+export function computePageGroups(
+  children: HTMLElement[],
+  firstPageWindowPx: number,
+  continuationWindowPx: number
+): HTMLElement[][] {
+  const pages: HTMLElement[][] = [[]];
+  let usedHeight = 0;
+  children.forEach((child) => {
+    const h = child.offsetHeight;
+    const windowPx = pages.length === 1 ? firstPageWindowPx : continuationWindowPx;
+    if (usedHeight > 0 && usedHeight + h > windowPx) {
+      pages.push([]);
+      usedHeight = 0;
+    }
+    pages[pages.length - 1].push(child);
+    usedHeight += h;
+  });
+  return pages;
+}
+
+/**
+ * html2canvas tem um bug conhecido: não recalcula `object-fit`/`object-contain`
+ * corretamente durante a captura — o brasão podia sair do tamanho combinado
+ * (bem maior, espremendo o texto ao lado) mesmo a tela mostrando certo,
+ * porque a captura simplesmente ignorava a contenção calculada pelo
+ * navegador. Por isso, ao clonar um cabeçalho pra captura, a largura/altura
+ * que o navegador JÁ calculou pro brasão (`getBoundingClientRect`, medida
+ * enquanto o elemento fonte está visível) é fixada como estilo inline na
+ * imagem clonada — sem precisar do html2canvas recalcular `object-fit`.
+ */
+function applyFixedLogoSize(clone: HTMLElement, rect: { width: number; height: number } | null) {
+  if (!rect || rect.width <= 0 || rect.height <= 0) return;
+  const cloneLogo = clone.querySelector('[data-header-logo]') as HTMLImageElement | null;
+  if (!cloneLogo) return;
+  cloneLogo.style.width = `${rect.width}px`;
+  cloneLogo.style.height = `${rect.height}px`;
+  cloneLogo.style.maxWidth = 'none';
+  cloneLogo.style.maxHeight = 'none';
+  cloneLogo.style.objectFit = 'fill';
+}
+
+function measureLogoRect(headerEl: HTMLElement): { width: number; height: number } | null {
+  const logo = headerEl.querySelector('[data-header-logo]') as HTMLImageElement | null;
+  if (!logo) return null;
+  const rect = logo.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0 ? { width: rect.width, height: rect.height } : null;
+}
+
+/**
  * Renderiza as páginas de UM documento (já montado no DOM em `sourceEl`, com
  * um <form><header>...) dentro de um jsPDF já existente, via html2canvas.
  * Compartilhado entre o download individual (intimacao-form.tsx) e a geração
@@ -26,6 +86,11 @@ export async function renderDocumentIntoPdf(
 
   const sourceForm = sourceEl.querySelector('form') as HTMLElement;
   const sourceHeader = sourceForm?.querySelector('header') as HTMLElement;
+  // Cabeçalho repetido nas páginas 2+ — mesmo brasão/identificação
+  // institucional do topo, mais a identificação do documento (tipo + nº
+  // processo + "continuação"). Fica oculto (`hidden`) no documento normal,
+  // só é exibido na cópia clonada aqui embaixo, momentos antes da captura.
+  const sourceContinuationHeader = sourceForm?.querySelector('[data-continuation-header]') as HTMLElement | null;
   // Rodapé é opcional (só existe se o gestor configurou um texto de rodapé
   // em Identidade Municipal) — ver documento-oficial-body.tsx / <tfoot>.
   const sourceFooter = sourceForm?.querySelector('footer') as HTMLElement | null;
@@ -40,20 +105,32 @@ export async function renderDocumentIntoPdf(
   const pageHeightPx = 297 * pxPerMm;
   const headerHeightPx = sourceHeader.offsetHeight;
   const footerHeightPx = sourceFooter?.offsetHeight || 0;
-  const contentWindowPx = Math.max(pageHeightPx - headerHeightPx - footerHeightPx, 1);
+  const mainLogoRect = measureLogoRect(sourceHeader);
 
-  const bodyChildren = Array.from(bodyContainer.children) as HTMLElement[];
-  const pages: HTMLElement[][] = [[]];
-  let usedHeight = 0;
-  bodyChildren.forEach((child) => {
-    const h = child.offsetHeight;
-    if (usedHeight > 0 && usedHeight + h > contentWindowPx) {
-      pages.push([]);
-      usedHeight = 0;
-    }
-    pages[pages.length - 1].push(child);
-    usedHeight += h;
-  });
+  // Mede a altura real do cabeçalho condensado (e o tamanho do brasão dentro
+  // dele) desescondendo-o brevemente (fora da tela, ninguém vê) — só assim dá
+  // pra saber quanto espaço ele ocupa antes de decidir onde a 2ª página
+  // quebra, e pra fixar o tamanho do brasão nas cópias mais abaixo (ver
+  // applyFixedLogoSize).
+  let continuationHeaderHeightPx = 0;
+  let continuationLogoRect: { width: number; height: number } | null = null;
+  if (sourceContinuationHeader) {
+    sourceContinuationHeader.classList.remove('hidden');
+    continuationHeaderHeightPx = sourceContinuationHeader.offsetHeight;
+    continuationLogoRect = measureLogoRect(sourceContinuationHeader);
+    sourceContinuationHeader.classList.add('hidden');
+  }
+
+  const firstPageWindowPx = Math.max(pageHeightPx - headerHeightPx - footerHeightPx, 1);
+  const continuationWindowPx = Math.max(pageHeightPx - continuationHeaderHeightPx - footerHeightPx, 1);
+
+  // Exclui os cabeçalhos de página "só tela" (LivePageHeader, documento-oficial-body.tsx)
+  // — eles existem só pra prévia ao vivo do preenchimento e não devem contar
+  // como conteúdo real na paginação nem aparecer no PDF gerado.
+  const bodyChildren = Array.from(bodyContainer.children).filter(
+    (el) => !el.hasAttribute('data-live-page-header')
+  ) as HTMLElement[];
+  const pages = computePageGroups(bodyChildren, firstPageWindowPx, continuationWindowPx);
 
   for (let i = 0; i < pages.length; i++) {
     const pageEl = document.createElement('div');
@@ -64,9 +141,32 @@ export async function renderDocumentIntoPdf(
     pageEl.style.height = 'auto';
 
     const pageForm = document.createElement('form');
-    pageForm.appendChild(sourceHeader.cloneNode(true));
+    if (i === 0 || !sourceContinuationHeader) {
+      const headerClone = sourceHeader.cloneNode(true) as HTMLElement;
+      applyFixedLogoSize(headerClone, mainLogoRect);
+      pageForm.appendChild(headerClone);
+    } else {
+      const continuationClone = sourceContinuationHeader.cloneNode(true) as HTMLElement;
+      continuationClone.classList.remove('hidden');
+      applyFixedLogoSize(continuationClone, continuationLogoRect);
+      pageForm.appendChild(continuationClone);
+    }
     pages[i].forEach(child => pageForm.appendChild(child.cloneNode(true)));
     if (sourceFooter) pageForm.appendChild(sourceFooter.cloneNode(true));
+
+    // Numeração de página — sempre presente, mesmo sem rodapé configurado
+    // pelo gestor (o rodapé em si é opcional; a paginação, não).
+    const pageNumberEl = document.createElement('p');
+    pageNumberEl.textContent = `Página ${i + 1} de ${pages.length}`;
+    pageNumberEl.style.textAlign = 'center';
+    pageNumberEl.style.fontFamily = "'Times New Roman', Times, serif";
+    pageNumberEl.style.fontSize = '7.5pt';
+    pageNumberEl.style.color = '#000000';
+    pageNumberEl.style.marginTop = sourceFooter ? '2pt' : '10pt';
+    pageNumberEl.style.paddingTop = '4pt';
+    if (!sourceFooter) pageNumberEl.style.borderTop = '0.5pt solid rgba(0,0,0,0.2)';
+    pageForm.appendChild(pageNumberEl);
+
     pageEl.appendChild(pageForm);
 
     staging.innerHTML = '';
