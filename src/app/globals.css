@@ -10,9 +10,15 @@
     --card-foreground: 224 47% 12%;
     --popover: 0 0% 100%;
     --popover-foreground: 224 47% 12%;
-    --primary: 224 47% 12%; 
+    /* Verde-petróleo institucional (#0E4A44) — antes um azul-marinho genérico.
+       Alavanca central: bg-primary/text-primary/border-primary/ring-primary já
+       são usados extensivamente nas telas ainda não convertidas (Roteiros,
+       Admin, Agenda) via componentes shadcn — retintar aqui já re-tinge boa
+       parte delas de uma vez. Telas já institucionais usam hex arbitrário
+       (bg-[#0E4A44]), não este token, então não são afetadas. */
+    --primary: 174 68% 17%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 174 100% 33%; 
+    --secondary: 174 100% 33%;
     --secondary-foreground: 210 40% 98%;
     --muted: 215 20% 95%;
     --muted-foreground: 215 15% 45%;
@@ -22,15 +28,29 @@
     --destructive-foreground: 210 40% 98%;
     --border: 215 20% 90%;
     --input: 215 20% 90%;
-    --ring: 224 47% 12%;
+    --ring: 174 68% 17%;
     --radius: 2rem;
+  }
+
+  /* iOS/Android aplicam por padrão um arredondamento + sombra nativos a
+     <input>/<textarea> comuns, por cima de qualquer CSS nosso — em campos sem
+     padding próprio (documentos oficiais, Roteiros) isso cortava as letras
+     nas pontas. Fora de checkbox/radio/range/file, que dependem do próprio
+     visual nativo (ou de um componente próprio) pra continuar utilizáveis. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  textarea {
+    -webkit-appearance: none;
+    appearance: none;
   }
 }
 
 @layer components {
+    /* Fundo padrão do app (atrás de AppHeader + conteúdo) — era um gradiente
+       frio slate/branco; agora o tom "papel" institucional (#F5F2EA), pra
+       telas que ainda não definem seu próprio fundo herdarem o certo. */
     .bg-human-warm {
-      background: #f8fafc;
-      background-image: radial-gradient(circle at 50% 0%, #ffffff 0%, #f1f5f9 100%);
+      background: #F5F2EA;
+      background-image: radial-gradient(circle at 50% 0%, #FFFDF8 0%, #F5F2EA 100%);
       background-attachment: fixed;
     }
 
@@ -217,7 +237,7 @@
     }
 
     .data-cell {
-        padding: 6pt 10pt !important;
+        padding: 4pt 8pt !important;
         border-right: 1pt solid #94a3b8;
         flex: 1;
         display: flex;
@@ -244,6 +264,11 @@
         color: #000000;
         text-transform: uppercase;
         width: 100%;
+        /* Sem padding próprio (é pra parecer o preenchimento de um documento
+           datilografado) — em iOS/Android o navegador aplica um arredondamento
+           nativo por padrão a <input>/<textarea>, que sem espaço de sobra corta
+           as letras nas pontas. appearance:none abaixo remove esse estilo nativo. */
+        border-radius: 0;
     }
 
     .signature-block {
@@ -304,7 +329,7 @@
 .agenda-rbc-wrapper .rbc-agenda-view table.rbc-agenda-table {
     border-radius: 1.5rem;
     overflow: hidden;
-    border-color: #e2e8f0;
+    border-color: #E4DFD1;
 }
 .agenda-rbc-wrapper .rbc-header {
     padding: 10px 4px;
@@ -312,12 +337,12 @@
     font-size: 9px;
     text-transform: uppercase;
     letter-spacing: 0.15em;
-    color: #94a3b8;
-    background-color: #0f172a;
-    border-color: #1e293b;
+    color: #6B6659;
+    background-color: #FAF8F3;
+    border-color: #E4DFD1;
 }
 .agenda-rbc-wrapper .rbc-off-range-bg {
-    background-color: #f8fafc;
+    background-color: #FAF8F3;
 }
 .agenda-rbc-wrapper .rbc-today {
     background-color: var(--rbc-today-bg);

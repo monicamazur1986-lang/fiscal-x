@@ -239,7 +239,7 @@ export default function AgendaPage() {
 
   if (!mounted || loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
+      <div className="flex h-screen items-center justify-center bg-[#F5F2EA]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
@@ -254,14 +254,14 @@ export default function AgendaPage() {
   ];
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 font-sans overflow-hidden">
-      <header className="bg-white border-b border-slate-200 z-30 shrink-0">
+    <div className="flex flex-col h-screen bg-[#F5F2EA] font-sans overflow-hidden">
+      <header className="bg-white border-b border-[#E4DFD1] z-30 shrink-0">
         <div className="flex flex-col lg:flex-row items-center justify-between p-4 lg:px-10 gap-6">
           <div className="flex items-center gap-4">
             <div className="p-2.5 bg-primary rounded-xl text-white shadow-lg">
               <CalendarIcon className="h-5 w-5" />
             </div>
-            <h1 className="text-xl lg:text-2xl font-black italic tracking-tighter text-slate-900 uppercase">Gestão de Agenda</h1>
+            <h1 className="font-serif text-xl lg:text-2xl text-[#262420]">Gestão de Agenda</h1>
             {pendingSyncCount > 0 && (
               <span className="flex items-center gap-1.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-bold px-3 py-1">
                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -289,31 +289,31 @@ export default function AgendaPage() {
                 <Plus className="mr-2 h-4 w-4" /> Novo Registro
               </Button>
             </DialogTrigger>
-            <DialogContent className="rounded-[2.5rem] sm:max-w-md border-none shadow-2xl p-0 overflow-hidden bg-white">
-              <DialogHeader className="p-6 bg-zinc-900 text-white">
-                <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">
+            <DialogContent className="rounded-[2rem] sm:max-w-md border border-[#E4DFD1] shadow-2xl p-0 overflow-hidden bg-[#FCFAF5]">
+              <DialogHeader className="p-6 border-b border-[#F1EEE4]">
+                <DialogTitle className="font-serif text-xl text-[#262420]">
                   {editingInspecao ? "Configurar Agendamento" : "Novo Agendamento"}
                 </DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSave} className="p-8 space-y-6">
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Estabelecimento</Label>
-                  <Input value={titulo} onChange={(e) => setTitulo(e.target.value.toUpperCase())} className="rounded-xl h-12 text-xs font-bold bg-slate-50 border-none uppercase" required />
+                  <Label className="text-[10px] font-black uppercase text-[#6B6659] ml-1">Estabelecimento</Label>
+                  <Input value={titulo} onChange={(e) => setTitulo(e.target.value.toUpperCase())} className="rounded-xl h-12 text-xs font-bold bg-white border-[#E4DFD1] uppercase" required />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Data</Label>
-                    <Input type="date" value={dataAgendamento} onChange={(e) => setDataAgendamento(e.target.value)} className="rounded-xl h-12 text-xs font-bold bg-slate-50 border-none" required />
+                    <Label className="text-[10px] font-black uppercase text-[#6B6659] ml-1">Data</Label>
+                    <Input type="date" value={dataAgendamento} onChange={(e) => setDataAgendamento(e.target.value)} className="rounded-xl h-12 text-xs font-bold bg-white border-[#E4DFD1]" required />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Hora</Label>
-                    <Input type="time" value={hora} onChange={(e) => setHora(e.target.value)} className="rounded-xl h-12 text-xs font-bold bg-slate-50 border-none" required />
+                    <Label className="text-[10px] font-black uppercase text-[#6B6659] ml-1">Hora</Label>
+                    <Input type="time" value={hora} onChange={(e) => setHora(e.target.value)} className="rounded-xl h-12 text-xs font-bold bg-white border-[#E4DFD1]" required />
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Estágio Operacional</Label>
+                  <Label className="text-[10px] font-black uppercase text-[#6B6659] ml-1">Estágio Operacional</Label>
                   <Select value={status} onValueChange={(v: any) => setStatus(v)}>
-                    <SelectTrigger className="h-12 rounded-xl text-xs font-bold bg-slate-50 border-none uppercase">
+                    <SelectTrigger className="h-12 rounded-xl text-xs font-bold bg-white border-[#E4DFD1] uppercase">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -325,9 +325,9 @@ export default function AgendaPage() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Alertar</Label>
+                  <Label className="text-[10px] font-black uppercase text-[#6B6659] ml-1">Alertar</Label>
                   <Select value={String(alertaMinutosAntes)} onValueChange={(v) => setAlertaMinutosAntes(Number(v))}>
-                    <SelectTrigger className="h-12 rounded-xl text-xs font-bold bg-slate-50 border-none uppercase">
+                    <SelectTrigger className="h-12 rounded-xl text-xs font-bold bg-white border-[#E4DFD1] uppercase">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -339,7 +339,7 @@ export default function AgendaPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} className="rounded-xl min-h-[100px] text-xs font-medium bg-slate-50 border-none resize-none" placeholder="Observações de campo..." />
+                <Textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} className="rounded-xl min-h-[100px] text-xs font-medium bg-white border-[#E4DFD1] resize-none" placeholder="Observações de campo..." />
                 <div className="flex gap-3 pt-4">
                    {editingInspecao && <Button type="button" variant="ghost" onClick={handleDelete} className="h-12 w-12 rounded-xl text-rose-500 bg-rose-50"><Trash2 className="h-5 w-5" /></Button>}
                    <Button type="submit" disabled={isSaving} className="flex-1 h-12 rounded-xl bg-primary text-white font-black uppercase text-[10px] tracking-widest shadow-lg">{isSaving ? <Loader2 className="animate-spin h-4 w-4" /> : "Confirmar"}</Button>
@@ -350,20 +350,20 @@ export default function AgendaPage() {
           </div>
         </div>
 
-        <div className="bg-slate-50/50 px-4 lg:px-10 py-1.5 border-t border-slate-100 flex items-center gap-2 overflow-x-auto no-scrollbar">
+        <div className="bg-[#FAF8F3] px-4 lg:px-10 py-1.5 border-t border-[#F1EEE4] flex items-center gap-2 overflow-x-auto no-scrollbar">
           {menuCategories.map((cat) => (
             <button
               key={cat.id}
               onClick={() => setActiveCategory(cat.id as CategoryFilter)}
               className={cn(
                 "flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all whitespace-nowrap border-2",
-                activeCategory === cat.id 
-                  ? "bg-white border-primary shadow-sm" 
-                  : "border-transparent text-slate-400 hover:text-slate-600"
+                activeCategory === cat.id
+                  ? "bg-white border-primary shadow-sm"
+                  : "border-transparent text-[#A39D8C] hover:text-[#6B6659]"
               )}
             >
               <cat.icon className={cn("h-3.5 w-3.5", activeCategory === cat.id ? cat.color : "text-current")} />
-              <span className={cn("text-[9px] font-black uppercase tracking-widest", activeCategory === cat.id && "text-slate-900")}>
+              <span className={cn("text-[9px] font-black uppercase tracking-widest", activeCategory === cat.id && "text-[#262420]")}>
                 {cat.label}
               </span>
             </button>
@@ -372,7 +372,7 @@ export default function AgendaPage() {
       </header>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
-        <main className="lg:col-span-8 bg-white flex flex-col border-r border-slate-100 overflow-hidden">
+        <main className="lg:col-span-8 bg-white flex flex-col border-r border-[#E4DFD1] overflow-hidden">
           <div className="flex-1 min-h-0 p-4 lg:p-6">
             <AgendaCalendar
               events={calendarEvents}
@@ -385,15 +385,15 @@ export default function AgendaPage() {
           </div>
         </main>
 
-        <aside className="lg:col-span-4 bg-slate-50 flex flex-col overflow-hidden">
-          <header className="p-6 border-b border-slate-200 bg-white shrink-0">
+        <aside className="lg:col-span-4 bg-[#F5F2EA] flex flex-col overflow-hidden">
+          <header className="p-6 border-b border-[#E4DFD1] bg-white shrink-0">
              <div className="flex items-center justify-between mb-1">
-                <p className="text-[9px] font-black uppercase text-slate-400 tracking-[0.3em]">Agenda do Dia</p>
+                <p className="text-[9px] font-black uppercase text-[#A39D8C] tracking-[0.3em]">Agenda do Dia</p>
                 <Badge className="bg-primary/10 text-primary border-none text-[9px] font-black px-3">
                    {format(selectedDate, "dd/MM/yyyy")}
                 </Badge>
              </div>
-             <h3 className="text-lg font-black uppercase italic tracking-tighter text-slate-900">
+             <h3 className="font-serif text-lg text-[#262420]">
                {format(selectedDate, "EEEE", { locale: ptBR })}
              </h3>
           </header>
@@ -403,54 +403,54 @@ export default function AgendaPage() {
                 dailyInspecoes.map((insp) => {
                   const cfg = getStatusConfig(insp.status);
                   return (
-                    <button 
+                    <button
                       key={insp.id}
                       onClick={() => { setEditingInspecao(insp); setIsDialogOpen(true); }}
-                      className="w-full bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-lg hover:border-primary/20 transition-all text-left group"
+                      className="w-full bg-white p-4 rounded-2xl shadow-sm border border-[#E4DFD1] hover:shadow-lg hover:border-primary/30 transition-all text-left group"
                     >
                       <div className="flex items-center justify-between gap-3 mb-2">
                         <div className="flex items-center gap-2">
-                           <Clock className="h-3 w-3 text-slate-300" />
-                           <span className="text-[11px] font-black text-slate-900 italic">{format(insp.data, "HH:mm")}</span>
+                           <Clock className="h-3 w-3 text-[#C9C2AC]" />
+                           <span className="text-[11px] font-black text-[#262420]">{format(insp.data, "HH:mm")}</span>
                         </div>
                         <Badge className={cn("text-[7px] font-black uppercase px-2 h-4 border-none", cfg.color)}>
                           {cfg.label}
                         </Badge>
                       </div>
-                      <h4 className="text-[11px] font-black uppercase tracking-tight text-slate-900 leading-tight group-hover:text-primary transition-colors">
+                      <h4 className="font-serif text-[13px] text-[#262420] leading-tight group-hover:text-primary transition-colors">
                         {insp.titulo}
                       </h4>
-                      <div className="pt-2.5 mt-2 border-t border-slate-50 flex items-center justify-between">
+                      <div className="pt-2.5 mt-2 border-t border-[#F1EEE4] flex items-center justify-between">
                          <div className="flex items-center gap-1.5">
-                            <Activity className="h-2.5 w-2.5 text-slate-300" />
-                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest truncate max-w-[120px]">
+                            <Activity className="h-2.5 w-2.5 text-[#C9C2AC]" />
+                            <span className="text-[8px] font-bold text-[#A39D8C] uppercase tracking-widest truncate max-w-[120px]">
                                {insp.fiscalNome}
                             </span>
                          </div>
-                         <ChevronRight className="h-3 w-3 text-slate-300 group-hover:translate-x-0.5 transition-transform" />
+                         <ChevronRight className="h-3 w-3 text-[#C9C2AC] group-hover:translate-x-0.5 transition-transform" />
                       </div>
                     </button>
                   )
                 })
              ) : (
-                <div className="py-20 flex flex-col items-center justify-center text-center opacity-40">
-                   <ListTodo className="h-8 w-8 text-slate-300 mb-3" />
-                   <p className="text-[9px] font-black uppercase text-slate-400 tracking-[0.2em]">Sem vistorias no dia</p>
+                <div className="py-20 flex flex-col items-center justify-center text-center opacity-70">
+                   <ListTodo className="h-8 w-8 text-[#D8D2C0] mb-3" />
+                   <p className="text-[9px] font-black uppercase text-[#A39D8C] tracking-[0.2em]">Sem vistorias no dia</p>
                 </div>
              )}
           </div>
 
-          <div className="p-5 bg-white border-t border-slate-100 shrink-0">
-             <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-xl flex items-center justify-between">
+          <div className="p-5 bg-white border-t border-[#E4DFD1] shrink-0">
+             <div className="bg-[#262420] text-white p-5 rounded-2xl shadow-xl flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                   <div className="p-2 bg-primary/20 rounded-lg"><Activity className="h-4 w-4 text-primary" /></div>
+                   <div className="p-2 bg-white/10 rounded-lg"><Activity className="h-4 w-4 text-[#9FD8CF]" /></div>
                    <div>
-                      <p className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Registros Totais</p>
+                      <p className="text-[8px] font-black uppercase text-white/50 tracking-widest">Registros Totais</p>
                       <p className="text-[10px] font-bold uppercase">{filteredInspecoes.length} Na Visão Atual</p>
                    </div>
                 </div>
                 <div className="h-9 w-9 rounded-xl bg-white/10 flex items-center justify-center">
-                   <span className="text-xs font-black italic">{inspecoes.length}</span>
+                   <span className="text-xs font-black">{inspecoes.length}</span>
                 </div>
              </div>
           </div>

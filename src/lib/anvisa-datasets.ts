@@ -75,11 +75,14 @@ export const ANVISA_DATASETS: AnvisaDataset[] = [
       { key: 'NU_REGISTRO_PRODUTO', label: 'Nº Registro' },
       { key: 'NO_RAZAO_SOCIAL_EMPRESA', label: 'Empresa' },
       { key: 'NU_CNPJ_EMPRESA', label: 'CNPJ' },
-      { key: 'SITUACAO_ASSUNTO', label: 'Situação' },
+      { key: 'VALIDADE_SITUACAO', label: 'Situação' },
       { key: 'DT_VENCIMENTO_PRODUTO', label: 'Vencimento' },
     ],
-    statusField: 'SITUACAO_ASSUNTO',
-    statusActiveValues: ['VÁLIDO', 'VALIDO', 'DEFERIDO'],
+    // SITUACAO_ASSUNTO (usado antes) vem vazio em ~99% das linhas do CSV real
+    // — confirmado rodando o sync de verdade e amostrando o arquivo direto.
+    // Quem realmente carrega "Ativo"/"Inativo" é VALIDADE_SITUACAO.
+    statusField: 'VALIDADE_SITUACAO',
+    statusActiveValues: ['ATIVO'],
   },
   {
     key: 'saneantes',

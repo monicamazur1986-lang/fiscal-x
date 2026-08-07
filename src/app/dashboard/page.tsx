@@ -20,7 +20,6 @@ import {
   HelpCircle,
 } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
-import { cn } from "@/lib/utils"
 import { useInspecoes } from "@/hooks/use-inspecoes"
 import { useIntimacoes } from "@/hooks/use-intimacoes"
 import { calculateDeadline } from "@/lib/prazo"
@@ -28,6 +27,18 @@ import { usePendingAlerts } from "@/hooks/use-pending-alerts"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { AlertCard } from "@/components/alert-card"
 import { isSameDay, format } from "date-fns"
+import { ptBR } from "date-fns/locale"
+
+// Escurece uma cor hex em `amount` (0-255) por canal — usado só pra gerar o
+// 2º ponto do gradiente de cada cartão do menu a partir da cor-base já
+// escolhida, sem precisar cadastrar um par de tons pra cada item à mão.
+function darkenHex(hex: string, amount: number): string {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.max(0, (num >> 16) - amount);
+  const g = Math.max(0, ((num >> 8) & 0x00ff) - amount);
+  const b = Math.max(0, (num & 0x0000ff) - amount);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}
 
 export default function Dashboard() {
   const { profile } = useAuth()
@@ -81,46 +92,52 @@ export default function Dashboard() {
       ? `${pendingUserNames[0]} e mais ${pendingUserNames.length - 1} aguardando aprovação`
       : "";
 
-  // Cartões coloridos de volta (fundo sólido, como era antes), mas com tons
-  // adaptados à paleta institucional — mais profundos/abatidos que as cores
-  // puras do Tailwind, pra não destoar do papel/verde-petróleo/latão do
-  // resto do sistema, mantendo a distinção visual rápida entre os itens.
+  // Cartões coloridos (mantendo a distinção visual rápida entre os itens),
+  // com tons abatidos/profundos adaptados à paleta institucional — não os
+  // puros do Tailwind, pra não destoar do papel/verde-petróleo/latão do
+  // resto do sistema. Cada cor vira um gradiente sutil de dois tons (ver
+  // darkenHex abaixo) em vez de um preenchimento chapado.
   const menuItems = [
-    { href: "/intimacoes/nova", label: "Nova Autuação", description: "Termo de intimação ou auto de infração", icon: FileText, bg: "bg-[#1F7A5C]" },
-    { href: "/rascunho", label: "Fiscal AI", description: "Assistente de redação com inteligência artificial", icon: Sparkles, bg: "bg-[#9C7A3C]" },
-    { href: "/agenda", label: "Agenda", description: "Compromissos e inspeções do dia", icon: CalendarDays, bg: "bg-[#3D5A73]" },
-    { href: "/intimacoes", label: "Documentos", description: "Autuações emitidas e rascunhos", icon: Archive, bg: "bg-[#524E45]" },
-    { href: "/roteiros", label: "Roteiros", description: "Checklists técnicos de inspeção", icon: ClipboardList, bg: "bg-[#6B4C80]" },
-    { href: "/biblioteca", label: "Biblioteca", description: "Legislação e normas aplicáveis", icon: Library, bg: "bg-[#8A4B5C]" },
-    { href: "/consulta-anvisa", label: "Consulta ANVISA", description: "Registros e processos sanitários", icon: Landmark, bg: "bg-[#2F6668]" },
-    { href: "/docfacil", label: "Docfacil", description: "Modelos e documentos administrativos", icon: FileSignature, bg: "bg-[#454680]" },
-    { href: "/suporte", label: "Suporte Técnico", description: "Abrir chamado com a equipe", icon: LifeBuoy, bg: "bg-[#A15437]" },
+    { href: "/intimacoes/nova", label: "Nova Autuação", description: "Termo de intimação ou auto de infração", icon: FileText, color: "#1F7A5C" },
+    { href: "/rascunho", label: "Fiscal AI", description: "Assistente de redação com inteligência artificial", icon: Sparkles, color: "#9C7A3C" },
+    { href: "/agenda", label: "Agenda", description: "Compromissos e inspeções do dia", icon: CalendarDays, color: "#3D5A73" },
+    { href: "/intimacoes", label: "Documentos", description: "Autuações emitidas e rascunhos", icon: Archive, color: "#524E45" },
+    { href: "/roteiros", label: "Roteiros", description: "Checklists técnicos de inspeção", icon: ClipboardList, color: "#6B4C80" },
+    { href: "/biblioteca", label: "Biblioteca", description: "Legislação e normas aplicáveis", icon: Library, color: "#8A4B5C" },
+    { href: "/consulta-anvisa", label: "Consulta ANVISA", description: "Registros e processos sanitários", icon: Landmark, color: "#2F6668" },
+    { href: "/docfacil", label: "Docfacil", description: "Modelos e documentos administrativos", icon: FileSignature, color: "#454680" },
+    { href: "/suporte", label: "Suporte Técnico", description: "Abrir chamado com a equipe", icon: LifeBuoy, color: "#A15437" },
   ];
 
   return (
     <div className="flex-1 flex flex-col min-h-screen bg-[#F5F2EA] p-4 sm:p-6 lg:p-8">
       <div className="max-w-3xl mx-auto w-full space-y-8">
 
-        <section className="flex items-center gap-4 rounded-lg border border-[#E4DFD1] bg-white p-5 shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
-          <Avatar className="h-14 w-14 border-2 border-[#E4EEEC] shadow-sm">
+        <section className="flex items-center gap-4 rounded-2xl border border-[#E4DFD1] bg-white p-5 shadow-[0_1px_2px_rgba(38,36,32,0.04),0_12px_28px_-14px_rgba(38,36,32,0.18)] relative overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#0E4A44] to-[#9C7A3C]" />
+          <Avatar className="h-14 w-14 ring-2 ring-white shadow-md border border-[#0E4A44]/10">
             <AvatarImage src={profile?.photoURL} className="object-cover" />
-            <AvatarFallback className="bg-[#E4EEEC] text-[#0E4A44] font-black text-lg uppercase">
+            <AvatarFallback className="bg-[#0E4A44] text-white font-black text-lg uppercase">
               {userName[0]}
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-[#A39D8C]">{greeting},</p>
+            <p className="text-xs font-semibold text-[#6B6659]">{greeting},</p>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="font-serif text-lg text-[#262420] truncate">{userName}</h1>
+              <h1 className="font-serif text-xl font-bold text-[#262420] truncate">{userName}</h1>
               {isGestor && (
-                <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-[#9C7A3C] bg-[#F1E9D6] px-2 py-0.5 rounded-full">Gestor</span>
+                <span className="shrink-0 text-[9px] font-black uppercase tracking-wide text-white bg-[#9C7A3C] px-2 py-0.5 rounded-full">Gestor</span>
               )}
             </div>
           </div>
-          <span className="shrink-0 text-xs font-medium text-[#A39D8C] tabular-nums">{currentTime}</span>
+          <div className="shrink-0 text-right">
+            <p className="text-sm font-black text-[#0E4A44] tabular-nums">{currentTime}</p>
+            <p className="text-[10px] font-semibold text-[#6B6659] capitalize">{format(new Date(), "dd 'de' MMMM", { locale: ptBR })}</p>
+          </div>
         </section>
 
         <section className="space-y-2">
+          <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Avisos</h2>
           {agendaHoje.length > 0 && (
             <AlertCard
               icon={CalendarClock}
@@ -160,26 +177,30 @@ export default function Dashboard() {
             />
           )}
           {!temAlertas && (
-            <p className="text-xs text-[#A39D8C] px-1">Nenhum alerta por agora.</p>
+            <div className="rounded-lg border border-dashed border-[#E4DFD1] px-4 py-3">
+              <p className="text-xs text-[#A39D8C]">Nenhum alerta por agora — tudo em dia.</p>
+            </div>
           )}
         </section>
 
-        <section className="space-y-2 pb-20">
+        <section className="space-y-2">
           <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Menu</h2>
           <nav className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {menuItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className={cn(
-                  "group flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-lg p-4 text-center shadow-[0_8px_20px_-10px_rgba(38,36,32,0.35)] transition-transform duration-200 hover:-translate-y-0.5",
-                  item.bg
-                )}
+                className="group flex min-h-[124px] flex-col items-center justify-center gap-2 rounded-lg p-4 text-center shadow-[0_10px_24px_-12px_rgba(38,36,32,0.4)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_16px_32px_-14px_rgba(38,36,32,0.45)] active:scale-[0.98] active:duration-75"
+                style={{
+                  background: `linear-gradient(135deg, ${item.color} 0%, ${darkenHex(item.color, 28)} 100%)`,
+                }}
               >
-                <item.icon className="h-6 w-6 text-white/85" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/15">
+                  <item.icon className="h-5 w-5 text-white" />
+                </div>
                 <div className="min-w-0">
-                  <p className="font-serif text-base font-semibold text-white leading-tight">{item.label}</p>
-                  <p className="text-[11px] text-white/70 mt-1 leading-snug opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-active:opacity-100 group-focus-visible:opacity-100">
+                  <p className="font-serif text-[15px] font-semibold text-white leading-tight">{item.label}</p>
+                  <p className="text-[10.5px] text-white/75 mt-1 leading-snug opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-active:opacity-100 group-focus-visible:opacity-100">
                     {item.description}
                   </p>
                 </div>
@@ -188,7 +209,7 @@ export default function Dashboard() {
           </nav>
         </section>
 
-        <div className="flex justify-center pb-10 -mt-12">
+        <div className="flex justify-center pb-10">
           <Link
             href="/ajuda"
             className="flex items-center gap-1.5 text-xs font-medium text-[#A39D8C] hover:text-[#0E4A44] transition-colors"

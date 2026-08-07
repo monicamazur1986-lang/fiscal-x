@@ -43,21 +43,21 @@ function CustomToolbar({ label, view, views, onNavigate, onView }: ToolbarProps<
   const viewList = Array.isArray(views) ? views : Object.keys(views);
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-4 no-print">
-      <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-2xl border border-slate-200">
-        <button type="button" onClick={() => onNavigate('PREV')} className="h-9 w-9 rounded-xl hover:bg-white flex items-center justify-center text-slate-400 transition-all">
+      <div className="flex items-center gap-2 bg-[#FAF8F3] p-1 rounded-2xl border border-[#E4DFD1]">
+        <button type="button" onClick={() => onNavigate('PREV')} className="h-9 w-9 rounded-xl hover:bg-white flex items-center justify-center text-[#A39D8C] transition-all">
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <span className="text-[10px] font-black uppercase text-slate-900 px-4 min-w-[140px] text-center tracking-widest">{label}</span>
-        <button type="button" onClick={() => onNavigate('NEXT')} className="h-9 w-9 rounded-xl hover:bg-white flex items-center justify-center text-slate-400 transition-all">
+        <span className="font-serif text-sm text-[#262420] px-4 min-w-[140px] text-center">{label}</span>
+        <button type="button" onClick={() => onNavigate('NEXT')} className="h-9 w-9 rounded-xl hover:bg-white flex items-center justify-center text-[#A39D8C] transition-all">
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>
 
       <div className="flex items-center gap-2">
-        <button type="button" onClick={() => onNavigate('TODAY')} className="h-9 px-4 rounded-xl border border-slate-200 text-[9px] font-black uppercase tracking-widest text-slate-500 hover:bg-slate-50 flex items-center gap-1.5">
+        <button type="button" onClick={() => onNavigate('TODAY')} className="h-9 px-4 rounded-xl border border-[#E4DFD1] text-[9px] font-black uppercase tracking-widest text-[#6B6659] hover:bg-[#FAF8F3] flex items-center gap-1.5">
           <CalendarDays className="h-3.5 w-3.5" /> Hoje
         </button>
-        <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-2xl border border-slate-200">
+        <div className="flex items-center gap-1 bg-[#FAF8F3] p-1 rounded-2xl border border-[#E4DFD1]">
           {viewList.map((v) => (
             <button
               key={v}
@@ -65,7 +65,7 @@ function CustomToolbar({ label, view, views, onNavigate, onView }: ToolbarProps<
               onClick={() => onView(v as View)}
               className={cn(
                 "h-9 px-4 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
-                view === v ? "bg-primary text-white shadow-sm" : "text-slate-400 hover:text-slate-600"
+                view === v ? "bg-primary text-white shadow-sm" : "text-[#A39D8C] hover:text-[#6B6659]"
               )}
             >
               {VIEW_LABELS[v] || v}

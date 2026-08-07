@@ -119,36 +119,60 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(0,169,157,0.16),_transparent_35%),linear-gradient(135deg,_#0f172a_0%,_#111827_45%,_#0f766e_100%)] flex items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden">
-      <div className="absolute inset-0 pointer-events-none opacity-40">
-        <div className="absolute top-[-10%] left-[-8%] w-[45%] h-[45%] bg-emerald-400/30 blur-[140px] rounded-full" />
-        <div className="absolute bottom-[-8%] right-[-8%] w-[45%] h-[45%] bg-cyan-400/20 blur-[140px] rounded-full" />
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:28px_28px]" />
+    <div className="min-h-screen bg-[#F5F2EA] flex items-center justify-center p-4 sm:p-6 lg:p-10 font-sans relative overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none opacity-70">
+        <div className="absolute top-[-10%] left-[-8%] w-[45%] h-[45%] bg-[#0E4A44]/10 blur-[140px] rounded-full" />
+        <div className="absolute bottom-[-8%] right-[-8%] w-[45%] h-[45%] bg-[#9C7A3C]/10 blur-[140px] rounded-full" />
       </div>
 
-      <div className="w-full max-w-[430px] space-y-6 animate-in fade-in zoom-in duration-700 relative z-10">
-        <div className="flex flex-col items-center">
-          <div className="rounded-[2rem] bg-white/10 p-2 shadow-[0_10px_30px_rgba(0,0,0,0.25)] backdrop-blur-xl border border-white/20">
-            <SentinelaMascot width={220} height={220} className="rounded-[1.5rem]" />
-          </div>
-        </div>
+      <div className="w-full max-w-[980px] relative z-10 animate-in fade-in zoom-in duration-700">
+        <div className="lg:flex rounded-[2rem] sm:rounded-[2.5rem] overflow-hidden shadow-[0_30px_90px_-20px_rgba(38,36,32,0.35)] border border-[#E4DFD1] bg-white">
 
-        <div className="bg-white/95 backdrop-blur-xl rounded-[2rem] shadow-[0_30px_90px_-20px_rgba(0,0,0,0.45)] p-7 sm:p-8 border border-white/70 relative overflow-hidden">
-          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 via-cyan-500 to-slate-800" />
-
-          {(localLoading || authLoading) && (
-            <div className="absolute inset-0 z-20 bg-white/80 backdrop-blur-md flex flex-col items-center justify-center rounded-[2rem]">
-              <Loader2 className="h-12 w-12 animate-spin text-emerald-600" />
-              <p className="text-[9px] font-black uppercase tracking-[0.3em] mt-4 text-slate-500">Verificando Credenciais</p>
+          {/* Painel institucional — só desktop; a imagem cheia do mascote
+              carrega a marca sozinha, sem texto competindo com ela. */}
+          <div className="hidden lg:flex lg:w-[44%] flex-col items-center justify-center gap-7 p-10 relative overflow-hidden bg-gradient-to-br from-[#0E4A44] via-[#0C3F3A] to-[#082623] text-white text-center">
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute -top-16 -right-16 w-72 h-72 bg-[#9C7A3C]/25 blur-[100px] rounded-full" />
+              <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:28px_28px]" />
             </div>
-          )}
 
-          <form onSubmit={handleLogin} className="space-y-6">
+            <div className="relative z-10 rounded-[2rem] bg-white p-3 shadow-2xl">
+              <SentinelaMascot width={220} height={220} className="rounded-[1.5rem]" />
+            </div>
+
+            <div className="relative z-10">
+              <p className="font-black text-xl tracking-tight">FISCAL-X</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/50 mt-1.5">Vigilância Sanitária</p>
+            </div>
+
+            <div className="relative z-10 pt-6 mt-1 border-t border-white/10 w-full flex items-center justify-center">
+              <ShieldCheck className="h-4 w-4 text-white/40" />
+            </div>
+          </div>
+
+          {/* Formulário */}
+          <div className="w-full lg:w-[56%] p-7 sm:p-10 lg:p-12 relative">
+            <div className="flex lg:hidden flex-col items-center mb-8">
+              <div className="rounded-[2rem] bg-white p-2 shadow-[0_10px_30px_-8px_rgba(38,36,32,0.25)] border border-[#E4DFD1] mb-4">
+                <SentinelaMascot width={96} height={96} className="rounded-[1.5rem]" />
+              </div>
+              <p className="font-black text-[#262420] text-sm tracking-tight">FISCAL-X</p>
+              <p className="text-[9px] font-black uppercase tracking-[0.25em] text-[#A39D8C] mt-1.5">Vigilância Sanitária</p>
+            </div>
+
+            {(localLoading || authLoading) && (
+              <div className="absolute inset-0 z-20 bg-white/85 backdrop-blur-md flex flex-col items-center justify-center">
+                <Loader2 className="h-12 w-12 animate-spin text-[#0E4A44]" />
+                <p className="text-[9px] font-black uppercase tracking-[0.3em] mt-4 text-[#6B6659]">Verificando Credenciais</p>
+              </div>
+            )}
+
+            <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-[0.25em]">E-mail</Label>
+                <Label className="text-[10px] font-black uppercase text-[#6B6659] ml-2 tracking-[0.25em]">E-mail</Label>
                 <div className="relative group">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-emerald-600 transition-colors">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A39D8C] group-focus-within:text-[#0E4A44] transition-colors">
                     <User className="w-full h-full" />
                   </div>
                   <input
@@ -156,16 +180,16 @@ export default function LoginPage() {
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                     placeholder="exemplo@municipio.pr.gov.br"
-                    className="w-full h-14 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all text-sm font-semibold shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]"
+                    className="w-full h-14 pl-12 pr-4 bg-[#FAF8F3] border border-[#E4DFD1] rounded-2xl outline-none focus:bg-white focus:border-[#0E4A44]/50 focus:ring-4 focus:ring-[#0E4A44]/10 transition-all text-sm font-semibold shadow-[inset_0_1px_2px_rgba(38,36,32,0.03)]"
                     required
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-[0.25em]">Senha</Label>
+                <Label className="text-[10px] font-black uppercase text-[#6B6659] ml-2 tracking-[0.25em]">Senha</Label>
                 <div className="relative group">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-emerald-600 transition-colors">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A39D8C] group-focus-within:text-[#0E4A44] transition-colors">
                     <Lock className="w-full h-full" />
                   </div>
                   <input
@@ -173,13 +197,13 @@ export default function LoginPage() {
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full h-14 pl-12 pr-12 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all text-sm font-semibold shadow-[inset_0_1px_2px_rgba(0,0,0,0.03)]"
+                    className="w-full h-14 pl-12 pr-12 bg-[#FAF8F3] border border-[#E4DFD1] rounded-2xl outline-none focus:bg-white focus:border-[#0E4A44]/50 focus:ring-4 focus:ring-[#0E4A44]/10 transition-all text-sm font-semibold shadow-[inset_0_1px_2px_rgba(38,36,32,0.03)]"
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 flex items-center justify-center rounded-full text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 h-9 w-9 flex items-center justify-center rounded-full text-[#A39D8C] hover:text-[#0E4A44] hover:bg-[#E4EEEC] transition-all"
                   >
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
@@ -188,7 +212,7 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={handleOpenReset}
-                    className="text-[10px] font-black uppercase text-slate-400 hover:text-emerald-600 transition-colors tracking-[0.2em]"
+                    className="text-[10px] font-black uppercase text-[#A39D8C] hover:text-[#0E4A44] transition-colors tracking-[0.2em]"
                   >
                     Esqueci minha senha
                   </button>
@@ -197,12 +221,12 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-3 pt-2">
-              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-black uppercase tracking-[0.25em] text-slate-600">
+              <label className="flex items-center gap-3 rounded-2xl border border-[#E4DFD1] bg-[#FAF8F3] px-4 py-3 text-[10px] font-black uppercase tracking-[0.25em] text-[#6B6659]">
                 <input
                   type="checkbox"
                   checked={keepConnected}
                   onChange={(e) => setKeepConnected(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  className="h-4 w-4 rounded border-[#C9C2AC] text-[#0E4A44] focus:ring-[#0E4A44]"
                 />
                 Manter conectado neste dispositivo
               </label>
@@ -210,37 +234,37 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 disabled={localLoading}
-                className="w-full h-14 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-2xl shadow-[0_12px_30px_-10px_rgba(16,185,129,0.45)] text-[11px] uppercase tracking-[0.25em] transition-all active:scale-[0.98]"
+                className="w-full h-14 bg-primary hover:bg-primary/90 text-white font-black rounded-2xl shadow-[0_12px_30px_-10px_rgba(14,74,68,0.45)] text-[11px] uppercase tracking-[0.25em] transition-all active:scale-[0.98]"
               >
                 Login <ChevronRight className="w-4 h-4 ml-2" />
               </Button>
             </div>
 
-            <div className="text-center pt-4 border-t border-slate-100 mt-6">
-              <Link href="/solicitar-acesso" className="text-[10px] font-black uppercase text-slate-500 hover:text-emerald-600 transition-colors tracking-[0.25em]">
+            <div className="text-center pt-4 border-t border-[#F1EEE4] mt-6">
+              <Link href="/solicitar-acesso" className="text-[10px] font-black uppercase text-[#6B6659] hover:text-[#0E4A44] transition-colors tracking-[0.25em]">
                 Solicitar Credencial Municipal
               </Link>
             </div>
-          </form>
+            </form>
+          </div>
         </div>
 
-        <div className="flex flex-col items-center gap-2 opacity-70 select-none">
-          <ShieldCheck className="h-5 w-5 text-white/80" />
-          <p className="text-[8px] font-black uppercase tracking-[0.4em] text-white/70">Sentinela Cloud Security V6</p>
+        <div className="flex lg:hidden items-center justify-center mt-6 opacity-80 select-none">
+          <ShieldCheck className="h-5 w-5 text-[#0E4A44]/70" />
         </div>
       </div>
 
       <Dialog open={isResetOpen} onOpenChange={setIsResetOpen}>
         <DialogContent className="rounded-[2rem] sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-black uppercase tracking-tighter text-xl italic">Redefinir Senha</DialogTitle>
+            <DialogTitle className="font-serif text-xl text-[#262420]">Redefinir Senha</DialogTitle>
             <DialogDescription>Informe o e-mail cadastrado. Vamos enviar um link para você criar uma nova senha.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSendReset} className="space-y-5 py-2">
             <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase text-slate-500 ml-2 tracking-[0.25em]">E-mail</Label>
+              <Label className="text-[10px] font-black uppercase text-[#6B6659] ml-2 tracking-[0.25em]">E-mail</Label>
               <div className="relative group">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-emerald-600 transition-colors">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A39D8C] group-focus-within:text-[#0E4A44] transition-colors">
                   <Mail className="w-full h-full" />
                 </div>
                 <input
@@ -248,7 +272,7 @@ export default function LoginPage() {
                   value={resetEmail}
                   onChange={e => setResetEmail(e.target.value)}
                   placeholder="exemplo@municipio.pr.gov.br"
-                  className="w-full h-14 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all text-sm font-semibold"
+                  className="w-full h-14 pl-12 pr-4 bg-[#FAF8F3] border border-[#E4DFD1] rounded-2xl outline-none focus:bg-white focus:border-[#0E4A44]/50 focus:ring-4 focus:ring-[#0E4A44]/10 transition-all text-sm font-semibold"
                   required
                   autoFocus
                 />
@@ -258,7 +282,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 disabled={isSendingReset}
-                className="w-full h-12 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-2xl text-[11px] uppercase tracking-[0.25em]"
+                className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-black rounded-2xl text-[11px] uppercase tracking-[0.25em]"
               >
                 {isSendingReset ? <Loader2 className="w-4 h-4 animate-spin" /> : "Enviar Link de Redefinição"}
               </Button>

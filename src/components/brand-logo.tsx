@@ -12,14 +12,21 @@ import { useAppConfig } from "@/hooks/use-app-config"
 export function SentinelaMascot({ className, width = 280, height = 280, simplified = false }: { className?: string, width?: number, height?: number, simplified?: boolean }) {
   const { systemLogo } = useAppConfig();
   const [imgError, setImgError] = useState(false);
-  const [fallbackSrc, setFallbackSrc] = useState("/fiscal_x_hq.png");
+  // `simplified` (usado em espaços pequenos, ex.: ícone do cabeçalho) mostra
+  // um recorte fechado no rosto/emblema em vez da arte cheia — mostrar a
+  // composição inteira (personagem + faixa "FISCAL-X") num espaço de ~36px
+  // deixa tudo ilegível; o recorte usa só a parte que ainda se reconhece
+  // nesse tamanho. Ver public/fiscal_x_icon.png.
+  const defaultFallback = simplified ? "/fiscal_x_icon.png" : "/fiscal_x_hq.png";
+  const [fallbackSrc, setFallbackSrc] = useState(defaultFallback);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     setImgError(false);
-    setFallbackSrc("/fiscal_x_hq.png");
-  }, [systemLogo]);
+    setFallbackSrc(defaultFallback);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [systemLogo, simplified]);
 
   const containerStyle = { width: `${width}px`, height: `${height}px` };
   const containerClasses = cn("relative flex items-center justify-center select-none bg-transparent overflow-hidden rounded-[2rem] shadow-[0_15px_40px_-20px_rgba(0,0,0,0.35)] border border-white/70", className);
