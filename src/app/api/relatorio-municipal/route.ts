@@ -12,7 +12,7 @@ if (!getApps().length) {
     console.error("FIREBASE_ADMIN_SDK_PRIVATE_KEY_JSON environment variable is not set.");
     throw new Error("Firebase Admin SDK credentials not found.");
   }
-  initializeApp({ credential: cert(JSON.parse(serviceAccountKey)) });
+  initializeApp({ credential: cert(JSON.parse(serviceAccountKey)), storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET });
 }
 
 const db = getFirestore();

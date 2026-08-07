@@ -15,6 +15,57 @@
         { "fieldPath": "municipioId", "order": "ASCENDING" },
         { "fieldPath": "codigo", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "inspecoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "municipioId", "order": "ASCENDING" },
+        { "fieldPath": "data", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "inspecoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "municipioId", "order": "ASCENDING" },
+        { "fieldPath": "fiscalId", "order": "ASCENDING" },
+        { "fieldPath": "data", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "intimacoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "municipioId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "intimacoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "municipioId", "order": "ASCENDING" },
+        { "fieldPath": "createdBy", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "chamados",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "municipioId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "chamados",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "municipioId", "order": "ASCENDING" },
+        { "fieldPath": "createdBy", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

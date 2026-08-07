@@ -76,6 +76,27 @@ function saveLastUsedEmail(email: string) {
   window.localStorage.setItem(LAST_EMAIL_KEY, email);
 }
 
+// Todo cache local (agenda, documentos, mural, config, e-mail lembrado etc.)
+// usa chaves fixas em localStorage — nenhuma delas leva o uid de quem
+// gravou. Em computador/tablet compartilhado entre fiscais, sair de uma
+// conta sem limpar isso deixava tanto o e-mail preenchido quanto os dados
+// (inspeções, autuações, recados) do usuário anterior visíveis pro próximo
+// que fizesse login no mesmo aparelho, até o Firestore sincronizar por
+// cima. Varre por prefixo (em vez de uma lista fixa de chaves) porque
+// algumas são compostas em tempo de execução (ex.: fiscal_x_folders_...,
+// fiscal_x_docfacil_modelos_v1_<municipioId>).
+function clearLocalAppCache() {
+  if (typeof window === "undefined") return;
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i);
+    if (key && (key.startsWith("fiscal_x_") || key.startsWith("fiscal-x-"))) {
+      keysToRemove.push(key);
+    }
+  }
+  keysToRemove.forEach((key) => window.localStorage.removeItem(key));
+}
+
 function mapAuthError(code: string | undefined): string {
   switch (code) {
     case 'auth/invalid-credential':
@@ -103,6 +124,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
+        // Precisa entrar em `loading` já nesta mesma atualização — se
+        // `setUser` disparasse sozinho, existia um instante entre esse
+        // render e o efeito que busca o perfil (mais abaixo) em que `user`
+        // já estava preenchido mas `loading` ainda lia o valor antigo
+        // (false) e `profile` ainda era o da sessão anterior (ou null).
+        // Nessa brecha, o toast de resultado do login em login/page.tsx
+        // (que só espera `authLoading` virar false) chegava a rodar com
+        // `profile` vazio e mostrava "aguardando aprovação" pra uma conta
+        // já aprovada, mesmo o dashboard renderizando certo alguns instantes
+        // depois.
+        setLoading(true);
         setUser({ uid: firebaseUser.uid, email: firebaseUser.email });
       } else {
         setUser(null);
@@ -196,6 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await signOut(auth);
+    clearLocalAppCache();
   };
 
   const updateProfileData = async (data: Partial<UserProfile>) => {

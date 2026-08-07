@@ -65,7 +65,8 @@ export function useChamados(options?: { municipioIdOverride?: string }) {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
         setChamados(items);
         setLoading(false);
-      }, () => {
+      }, (err) => {
+        console.error("Falha ao sincronizar chamados com o Firestore:", err);
         setLoading(false);
       });
       return () => unsubscribe();

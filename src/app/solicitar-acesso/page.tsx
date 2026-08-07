@@ -40,7 +40,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import municipiosPR from "@/lib/municipios-pr.json"
 import { cn, normalizeId } from "@/lib/utils"
 import { storage } from "@/lib/firebase"
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
+import { ref, uploadBytes } from "firebase/storage"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 function SolicitarAcessoForm() {
@@ -87,10 +87,6 @@ function SolicitarAcessoForm() {
     }
 
     if (role === 'admin') {
-      const isInstitutional = formData.email.toLowerCase().trim().endsWith('.pr.gov.br');
-      if (!isInstitutional) {
-        return setErrorMsg("Gestores devem utilizar obrigatoriamente um e-mail institucional .pr.gov.br.")
-      }
       if (!documentFile) {
         return setErrorMsg("O decreto de nomeação é obrigatório para cadastros de gestor.")
       }
@@ -119,8 +115,12 @@ function SolicitarAcessoForm() {
         toast({ title: "Enviando Documento...", description: "Quase lá, salvando decreto de nomeação." });
         try {
           const storageRef = ref(storage, `decretos/${Date.now()}_${formData.cpf}`);
+          // Só envia — a URL de download não é usada em lugar nenhum, e
+          // storage.rules restringe a LEITURA de decretos/ ao root, então um
+          // getDownloadURL() aqui (conta recém-criada, ainda pendente) sempre
+          // falharia com storage/unauthorized e mascararia falhas reais do
+          // upload dentro deste mesmo catch.
           await uploadBytes(storageRef, documentFile);
-          const url = await getDownloadURL(storageRef);
         } catch (storageErr) {
           console.warn("Upload falhou mas conta criada", storageErr);
         }
@@ -249,7 +249,6 @@ function SolicitarAcessoForm() {
             <div className="space-y-1">
               <Label className="text-[11px] font-black uppercase text-slate-500 ml-1">E-mail para Login</Label>
               <Input type="email" placeholder="seu@email.com" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="h-14 rounded-2xl bg-slate-50 border-none font-bold" required />
-              {role === 'admin' && <p className="text-[9px] font-black text-blue-600 uppercase mt-1 ml-1">Obrigatório uso de e-mail .pr.gov.br para gestores.</p>}
             </div>
 
             {role === 'admin' && (

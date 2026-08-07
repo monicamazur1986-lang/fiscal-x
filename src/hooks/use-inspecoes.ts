@@ -112,11 +112,28 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
       const mid = profile.role === 'root'
         ? normalizeId(options!.municipioIdOverride!)
         : normalizeId(profile.municipioId);
-      const q = query(
-        collection(db, "inspecoes"),
-        where("municipioId", "==", mid),
-        orderBy("data", "asc")
-      );
+
+      // Mesmo padrão de use-intimacoes.ts/use-chamados.ts: fiscal comum só
+      // pode LER as próprias inspeções (firestore.rules: fiscalId ==
+      // request.auth.uid) — sem o where("fiscalId", ...) aqui, a query
+      // pedia TODAS as inspeções do município, o que o Firestore recusa
+      // inteiro (FAILED_PRECONDITION/permission-denied) assim que outro
+      // fiscal ou o gestor também tem inspeção salva. O onSnapshot abaixo
+      // engolia esse erro sem avisar — por fora, parecia que os dados
+      // "sumiam", quando na verdade nunca chegavam a sincronizar de volta.
+      const isGestor = profile.role === 'admin' || profile.role === 'root';
+      const q = isGestor
+        ? query(
+            collection(db, "inspecoes"),
+            where("municipioId", "==", mid),
+            orderBy("data", "asc")
+          )
+        : query(
+            collection(db, "inspecoes"),
+            where("municipioId", "==", mid),
+            where("fiscalId", "==", user.uid),
+            orderBy("data", "asc")
+          );
 
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const items = snapshot.docs.map(doc => {
@@ -157,6 +174,11 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
         setInspecoes(merged);
         setLoading(false);
       }, (err) => {
+        // Antes esse erro era engolido em silêncio — foi assim que o bug do
+        // índice/query faltando (ver comentário acima) passou despercebido:
+        // a tela seguia mostrando só o cache local, sem nenhum aviso de que
+        // a sincronização com o servidor tinha parado.
+        console.error("Falha ao sincronizar inspeções com o Firestore:", err);
         setLoading(false)
       });
       return () => unsubscribe();

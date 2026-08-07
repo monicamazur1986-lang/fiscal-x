@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useAuth } from "@/hooks/use-auth"
+import { auth } from "@/lib/firebase"
 import { 
   User, 
   Camera, 
@@ -54,11 +55,15 @@ export function ProfileEditDialog({ isOpen, onOpenChange }: ProfileEditDialogPro
 
     setIsUploading(true)
     try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) throw new Error("Sessão expirada. Faça login novamente.");
+
       const formData = new FormData();
       formData.append("file", file);
 
       const response = await fetch("/api/upload", {
         method: "POST",
+        headers: { Authorization: `Bearer ${idToken}` },
         body: formData,
       });
 

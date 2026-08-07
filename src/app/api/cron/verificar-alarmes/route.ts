@@ -12,7 +12,7 @@ if (!getApps().length) {
     throw new Error("Firebase Admin SDK credentials not found.");
   }
   const serviceAccount = JSON.parse(serviceAccountKey);
-  initializeApp({ credential: cert(serviceAccount) });
+  initializeApp({ credential: cert(serviceAccount), storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET });
 }
 
 const db = getFirestore();

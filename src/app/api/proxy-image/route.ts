@@ -3,6 +3,19 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
+// SSRF: esta rota fazia fetch() de QUALQUER url= informada pelo cliente, sem
+// autenticação nem restrição de domínio, devolvendo o conteúdo de volta com
+// CORS liberado — um proxy aberto que permitia usar o servidor pra acessar
+// endereços internos/privados (metadados de nuvem, rede interna, etc.) ou só
+// abusar da infraestrutura como redirecionador anônimo. Essa rota só existe
+// pra buscar brasões municipais já hospedados no Firebase Storage (ver
+// admin/configuracoes/page.tsx — o upload sempre gera uma getDownloadURL()
+// desses domínios), então restringimos ao host esperado.
+const ALLOWED_IMAGE_HOSTS = new Set([
+  'firebasestorage.googleapis.com',
+  'storage.googleapis.com',
+]);
+
 /**
  * FALLBACK "EM BRANCO" — pixel transparente, não uma imagem/marca real.
  * Este proxy só é chamado quando o cliente JÁ tem um brasão municipal
@@ -47,6 +60,17 @@ export async function GET(request: Request) {
     }
 
     if (!targetUrl) return fallbackImage();
+
+    let parsed: URL;
+    try {
+      parsed = new URL(targetUrl);
+    } catch {
+      return fallbackImage();
+    }
+    if (parsed.protocol !== 'https:' || !ALLOWED_IMAGE_HOSTS.has(parsed.hostname)) {
+      console.warn('Proxy de imagem recusado — host fora da lista permitida:', parsed.hostname);
+      return fallbackImage();
+    }
 
     return await fetchImage(targetUrl);
   } catch (error) {

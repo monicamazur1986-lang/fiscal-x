@@ -1,17 +1,48 @@
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 
 export const dynamic = 'force-dynamic';
+
+// Mesmo padrão de inicialização e autenticação já usado em
+// src/app/api/municipio/tem-gestor/route.ts.
+const serviceAccountKey = process.env.FIREBASE_ADMIN_SDK_PRIVATE_KEY_JSON;
+
+if (!getApps().length) {
+  if (!serviceAccountKey) {
+    console.error("FIREBASE_ADMIN_SDK_PRIVATE_KEY_JSON environment variable is not set.");
+    throw new Error("Firebase Admin SDK credentials not found.");
+  }
+  initializeApp({ credential: cert(JSON.parse(serviceAccountKey)), storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET });
+}
+
+const auth = getAuth();
 
 /**
  * Rota de Proxy para Consulta de CNPJ via BrasilAPI
  * Retorna dados formatados e a lista bruta de CNAEs para seleção.
+ *
+ * Exige login: sem isso, qualquer um na internet (nem precisava estar
+ * logado no sistema) conseguia usar esse endpoint como um serviço gratuito
+ * de consulta de CNPJ às custas da nossa infraestrutura/limite na BrasilAPI.
  */
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ cnpj: string }> }
 ) {
   try {
+    const authHeader = request.headers.get('authorization');
+    const idToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!idToken) {
+      return NextResponse.json({ message: 'Não autenticado.' }, { status: 401 });
+    }
+    try {
+      await auth.verifyIdToken(idToken);
+    } catch {
+      return NextResponse.json({ message: 'Sessão inválida.' }, { status: 401 });
+    }
+
     const { cnpj: rawCnpj } = await params;
     const cnpj = rawCnpj.replace(/\D/g, '');
 

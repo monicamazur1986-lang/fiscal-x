@@ -3,8 +3,11 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { normalizeText } from './text-normalize';
 
 const serviceAccountKey = process.env.FIREBASE_ADMIN_SDK_PRIVATE_KEY_JSON;
+// storageBucket incluído mesmo sem uso de Storage aqui — ver justificativa
+// em src/app/api/upload/route.ts (initializeApp() é global por processo;
+// o primeiro módulo a rodar decide a config pra todos os outros).
 if (!getApps().length && serviceAccountKey) {
-  initializeApp({ credential: cert(JSON.parse(serviceAccountKey)) });
+  initializeApp({ credential: cert(JSON.parse(serviceAccountKey)), storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET });
 }
 
 /** Similaridade simples por sobreposição de palavras (Jaccard sobre o menor

@@ -36,8 +36,15 @@ export async function GET(req: NextRequest) {
     }, { status: 400 });
   }
 
+  // Permite ajustar o teto de gravações por chamada (ex.: ?maxWrites=5000 pra
+  // testar com um corte menor) — sem o parâmetro, usa o padrão seguro dentro
+  // da cota diária gratuita do Firestore (ver DEFAULT_MAX_WRITES_PER_RUN).
+  const maxWritesParam = req.nextUrl.searchParams.get('maxWrites');
+  const parsedMaxWrites = maxWritesParam ? parseInt(maxWritesParam, 10) : NaN;
+  const maxWrites = Number.isFinite(parsedMaxWrites) && parsedMaxWrites > 0 ? parsedMaxWrites : undefined;
+
   try {
-    const stats = await syncDataset(dataset);
+    const stats = await syncDataset(dataset, { maxWrites });
     return NextResponse.json(stats);
   } catch (err: any) {
     console.error(`Erro no sync ANVISA (${dataset.key}):`, err);

@@ -44,9 +44,47 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (
         request.auth.uid == userId || isRoot() || (isAdmin() && resource.data.municipioId == getUserData().municipioId)
       );
-      allow write: if isAuthenticated() && (
-        request.auth.uid == userId || isRoot() || (isAdmin() && (resource == null || resource.data.municipioId == getUserData().municipioId))
+
+      // Auto-cadastro (solicitar-acesso) grava o próprio doc direto do client
+      // (registerWithEmailPassword/rootProfile em use-auth.tsx) — sem
+      // restringir os campos aqui, bastava um setDoc manual (devtools) pro
+      // próprio usuário nascer com role:'root', isAuthorized:true e
+      // status:'approved', pulando toda a aprovação do gestor. Isso não
+      // depende do client: só é bloqueado aqui, nas regras.
+      // Nenhum fluxo do app cria doc de OUTRO usuário (nem admin faz isso —
+      // ver admin/usuarios/page.tsx: só updateDoc em conta já existente), por
+      // isso não existe mais um branch "isAdmin() cria para outro uid" aqui.
+      allow create: if isAuthenticated() && (
+        isRoot() ||
+        (
+          request.auth.uid == userId &&
+          request.resource.data.role in ['admin', 'fiscal'] &&
+          request.resource.data.isAuthorized == false &&
+          request.resource.data.status == 'pending'
+        )
       );
+
+      // Mesmo raciocínio pro update: sem travar os campos, um updateDoc
+      // manual no próprio doc (OU no de outro usuário do mesmo município,
+      // pelo branch de admin) bastava pra promover role a 'root' ou mudar
+      // municipioId — nada na UI de admin/usuarios/page.tsx jamais toca
+      // nesses dois campos, só em isAuthorized/status/fiscalCode/adminFeedback.
+      allow update: if isAuthenticated() && (
+        isRoot() ||
+        (
+          isAdmin() &&
+          resource.data.municipioId == getUserData().municipioId &&
+          request.resource.data.municipioId == resource.data.municipioId &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isAuthorized', 'status', 'fiscalCode', 'adminFeedback', 'updatedAt'])
+        ) ||
+        (
+          request.auth.uid == userId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL', 'fcmTokens'])
+        )
+      );
+
+      allow delete: if isRoot() || (isAdmin() && resource.data.municipioId == getUserData().municipioId);
     }
     
     match /adminRequests/{requestId} {
@@ -59,7 +97,13 @@ service cloud.firestore {
     match /folders/{id} {
       allow read: if belongsToMyMunicipio(resource.data);
       allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
-      allow update, delete: if isAuthenticated() && (
+      // municipioId travado no update: sem isso, o próprio criador podia
+      // "mudar de município" um documento já existente (escapar da
+      // supervisão do próprio gestor ou plantar algo no espaço de outro).
+      allow update: if isAuthenticated() && (
+        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()) && request.resource.data.municipioId == resource.data.municipioId)
+      );
+      allow delete: if isAuthenticated() && (
         isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()))
       );
     }
@@ -95,7 +139,13 @@ service cloud.firestore {
         (resource.data.createdBy == request.auth.uid)
       );
       allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
-      allow update, delete: if isAuthenticated() && (
+      // municipioId travado no update — mesmo motivo de folders/{id} acima:
+      // impede o dono (ou um admin) de reatribuir a autuação pra outro
+      // município via update, o que furaria o isolamento por tenant.
+      allow update: if isAuthenticated() && (
+        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()) && request.resource.data.municipioId == resource.data.municipioId)
+      );
+      allow delete: if isAuthenticated() && (
         isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()))
       );
     }
@@ -111,7 +161,7 @@ service cloud.firestore {
       // atualizar (responder, mudar status) — mesmo isolamento por município
       // já usado em intimações e inspeções.
       allow update: if isAuthenticated() && (
-        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()))
+        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()) && request.resource.data.municipioId == resource.data.municipioId)
       );
     }
 
@@ -121,7 +171,10 @@ service cloud.firestore {
     match /docfacilModelos/{id} {
       allow read: if belongsToMyMunicipio(resource.data);
       allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
-      allow update, delete: if isAuthenticated() && (
+      allow update: if isAuthenticated() && (
+        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()) && request.resource.data.municipioId == resource.data.municipioId)
+      );
+      allow delete: if isAuthenticated() && (
         isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()))
       );
     }
@@ -129,7 +182,10 @@ service cloud.firestore {
     match /docfacilDocumentos/{id} {
       allow read: if belongsToMyMunicipio(resource.data);
       allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
-      allow update, delete: if isAuthenticated() && (
+      allow update: if isAuthenticated() && (
+        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()) && request.resource.data.municipioId == resource.data.municipioId)
+      );
+      allow delete: if isAuthenticated() && (
         isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()))
       );
     }
@@ -156,7 +212,10 @@ service cloud.firestore {
         (resource.data.fiscalId == request.auth.uid)
       );
       allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
-      allow update, delete: if isAuthenticated() && (
+      allow update: if isAuthenticated() && (
+        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.fiscalId == request.auth.uid || isAdmin()) && request.resource.data.municipioId == resource.data.municipioId)
+      );
+      allow delete: if isAuthenticated() && (
         isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.fiscalId == request.auth.uid || isAdmin()))
       );
     }

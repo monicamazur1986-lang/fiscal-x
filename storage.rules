@@ -62,12 +62,19 @@ service firebase.storage {
       allow write: if isAuthenticated() && (request.auth.uid == uid || isRoot());
     }
 
-    // TODO(seguranca): decretos/{timestamp}_{cpf} não carrega uid nem
-    // município no caminho — enviado durante o auto-cadastro (conta recém
-    // criada, ainda sem doc em users/ garantido). Precisa de uma revisão
-    // própria antes de restringir, pra não quebrar o cadastro de fiscais.
+    // decretos/{timestamp}_{cpf} não carrega uid nem município no caminho —
+    // enviado durante o auto-cadastro (conta recém-criada em
+    // solicitar-acesso/page.tsx, antes do doc em users/ estar garantido),
+    // por isso a escrita continua exigindo só "estar autenticado" (não dá
+    // pra restringir por dono sem mudar a estrutura do caminho). Leitura,
+    // porém, nenhuma tela do app usa — nada exibe/baixa o decreto depois do
+    // upload — então fica restrita ao root, para não deixar qualquer conta
+    // autenticada (de outro fiscal, outro município) ler ou baixar o
+    // decreto/CPF de nomeação de terceiros.
     match /decretos/{allPaths=**} {
-      allow read, write: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow read: if isRoot();
+      allow update, delete: if false;
     }
 
     match /{allPaths=**} {
