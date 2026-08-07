@@ -90,15 +90,26 @@ export type Inspecao = {
   alertaMinutosAntes?: number;
   alertaEnviadoEm?: string;
   checklistData?: {
-    answers: Record<string, 'SIM' | 'NAO' | 'ND'>;
+    /** SIM/NÃO/ND nos roteiros comuns; '0'..'5' nos roteiros ROI da ANVISA, que são avaliados por nota (ver src/lib/roteiro-roi-radiologia.ts). */
+    answers: Record<string, 'SIM' | 'NAO' | 'ND' | '0' | '1' | '2' | '3' | '4' | '5'>;
     observations: Record<string, string>;
     itemPhotos: Record<string, any[]>;
     /** Não conformidades incluídas manualmente pelo fiscal, fora do roteiro oficial. */
     customItems?: { id: string; text: string; crit: 'I' | 'N' | 'R' }[];
-    /** Anexa o texto fixo de recomendações de CME (Central de Material Esterilizado) ao relatório final. */
-    incluirCME?: boolean;
     idData: any;
+    /**
+     * Todas as atividades econômicas (CNAE) que a consulta de CNPJ trouxe da
+     * BrasilAPI — principal e secundárias. Guardado junto da inspeção porque
+     * um estabelecimento pode ter dezenas delas e o fiscal marca só as que
+     * foram efetivamente inspecionadas (as marcadas ficam em idData.cnae);
+     * sem persistir a lista, ao reabrir o rascunho não haveria mais como
+     * revisar ou mudar a seleção sem consultar o CNPJ de novo.
+     */
+    cnaesDisponiveis?: string[];
     roteiroId: string;
+    /** Textos editáveis de "Considerações Gerais" e "Conclusão e Prazo Legal" do relatório (HTML). */
+    introducaoHtml?: string;
+    conclusaoHtml?: string;
   };
 };
 

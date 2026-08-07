@@ -41,15 +41,15 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Checkbox } from "@/components/ui/checkbox"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { useToast } from "@/hooks/use-toast"
-import { storage } from "@/lib/firebase"
+import { storage, auth as firebaseAuth } from "@/lib/firebase"
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useAuth } from "@/hooks/use-auth"
 import { useInspecoes } from "@/hooks/use-inspecoes"
+import { setChecklistExitGuard } from "@/hooks/use-checklist-exit-guard"
 import { SelecionarAutoridadeParaFormulario } from "@/components/selecionar-autoridade-dialog"
 import { SignaturePad } from "@/components/signature-pad"
 import type { Autoridade, Inspecao } from "@/lib/types"
@@ -58,10 +58,31 @@ import { useRouter } from "next/navigation"
 import { Textarea } from "@/components/ui/textarea"
 import { polishObservationsBatch } from "@/ai/flows/polish-observations-batch"
 import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from "@/components/ui/alert-dialog"
 import { compressImage, blobToDataUrl } from "@/lib/compress-image"
+import { RichTextEditor } from "@/components/rich-text-editor"
+import { getDefaultIntroHtml, getDefaultConclusaoHtml, fillRoteiroTextoTokens } from "@/lib/roteiro-textos-padrao"
+import { sanitizeHtml } from "@/lib/sanitize-html"
+import { ROI_RADIOGRAFIA_MEDICA, NOTA_CONFORME, type RoiIndicador } from "@/lib/roteiro-roi-radiologia"
+import { useSearchParams } from "next/navigation"
 
 type Criticality = 'I' | 'N' | 'R'
+
+/** SIM/NÃO/ND nos roteiros comuns; '0'..'5' nos roteiros ROI da ANVISA. */
+type NotaRoi = '0' | '1' | '2' | '3' | '4' | '5'
+type RespostaItem = 'SIM' | 'NAO' | 'ND' | NotaRoi
+
+/**
+ * Um item é não conformidade quando foi respondido "NÃO" (roteiros comuns) ou
+ * recebeu nota abaixo de NOTA_CONFORME (roteiros ROI) — nos dois casos é o que
+ * entra no relatório como exigência a regularizar.
+ */
+function ehNaoConformidade(resposta: RespostaItem | undefined): boolean {
+  if (resposta === undefined) return false;
+  if (resposta === 'NAO') return true;
+  return /^\d$/.test(resposta) && Number(resposta) < NOTA_CONFORME;
+}
 
 type PhotoSize = 'P' | 'M' | 'G';
 
@@ -97,6 +118,18 @@ interface ChecklistItem {
   crit: Criticality;
   /** Linha de agrupamento (ex.: "Sistema de sucção.") sem resposta própria — vem do roteiro oficial para organizar os itens seguintes, sem SIM/NÃO/ND. */
   isHeader?: boolean;
+  /**
+   * Presente só nos roteiros ROI da ANVISA, que não se respondem com
+   * SIM/NÃO/ND e sim com uma nota de 0 a 5, cada uma com a descrição do que
+   * caracteriza aquele nível. Quando existe, a tela troca os três botões pela
+   * lista de alternativas — ver src/lib/roteiro-roi-radiologia.ts.
+   */
+  roi?: {
+    numero: number;
+    indicador: string;
+    baseLegal: string;
+    alternativas: string[];
+  };
 }
 
 interface ChecklistSection {
@@ -112,6 +145,13 @@ interface ChecklistData {
   lei: string;
   /** Especialidade exibida no cabeçalho do relatório (ex.: "ODONTOLOGIA"). */
   especialidade: string;
+  /**
+   * Roteiro Objetivo de Inspeção da ANVISA: respondido por nota 0–5 e SEM os
+   * textos narrativos de "Considerações Gerais"/"Conclusão e Prazo Legal" —
+   * o ROI é um instrumento de pontuação por indicador, a redação corrida dos
+   * demais roteiros não se aplica a ele.
+   */
+  roi?: boolean;
   secoes: ChecklistSection[];
 }
 
@@ -1025,23 +1065,82 @@ const clinicaEsteticaPrudentopolisChecklist: ChecklistData = {
   ]
 }
 
+/**
+ * Converte os indicadores do ROI da ANVISA no mesmo ChecklistData dos demais
+ * roteiros — assim relatório, PDF, fotos, observações e polimento por IA
+ * continuam funcionando sem tratamento especial. O que muda é só a forma de
+ * responder (nota 0–5 em vez de SIM/NÃO/ND), carregada no campo `roi`.
+ *
+ * `text` recebe a redação da nota 3 (o cumprimento da norma) somada à base
+ * legal, porque é esse o texto que vira exigência no relatório quando o
+ * indicador fica abaixo do corte — mesmo formato dos itens dos outros
+ * roteiros, que já trazem "Base legal: ..." embutido.
+ *
+ * Criticidade: 'C' (crítico) vira 'I' (imprescindível) e 'NC' vira 'N'
+ * (necessário), que são os grupos que o relatório já sabe separar.
+ */
+function checklistDoRoi(
+  titulo: string,
+  subtitulo: string,
+  lei: string,
+  especialidade: string,
+  indicadores: RoiIndicador[]
+): ChecklistData {
+  return {
+    titulo,
+    subtitulo,
+    categoria: 'Saúde',
+    lei,
+    especialidade,
+    roi: true,
+    secoes: [
+      {
+        id: 'roi',
+        titulo: 'Indicadores do Roteiro Objetivo de Inspeção',
+        itens: indicadores.map((ind) => ({
+          id: `roi-${ind.numero}`,
+          text: `${ind.alternativas[NOTA_CONFORME]} Base legal: ${ind.baseLegal}.`,
+          crit: (ind.criticidade === 'C' ? 'I' : 'N') as Criticality,
+          roi: {
+            numero: ind.numero,
+            indicador: ind.indicador,
+            baseLegal: ind.baseLegal,
+            alternativas: ind.alternativas,
+          },
+        })),
+      },
+    ],
+  };
+}
+
 const CHECKLISTS: Record<string, ChecklistData> = {
   odontologia: odontologiaChecklist,
   'odontologia-prudentopolis': odontologiaPrudentopolisChecklist,
   alimentacao: alimentacaoChecklist,
   farmacia: farmaciaChecklist,
   'clinica-estetica-prudentopolis': clinicaEsteticaPrudentopolisChecklist,
+  'roi-radiografia-medica': checklistDoRoi(
+    'Roteiro Objetivo de Inspeção — Radiografia Médica',
+    'ANVISA — documento 9.1, versão 1.2',
+    'RDC nº 611/2022 e RDC nº 63/2011',
+    'RADIOGRAFIA MÉDICA',
+    ROI_RADIOGRAFIA_MEDICA
+  ),
 };
 
 export default function DynamicChecklistPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params); // Resolve a Promise para obter o id (usado como roteiroId no rascunho salvo)
   const checklist = CHECKLISTS[id] || odontologiaChecklist;
+  // ROI da ANVISA: sem "Considerações Gerais"/"Conclusão e Prazo Legal" — nem
+  // no formulário, nem no relatório, nem gerados em memória.
+  const isRoi = !!checklist.roi;
   const { toast } = useToast()
   const { profile } = useAuth()
   const { config } = useAppConfig()
   const router = useRouter()
   const { saveInspecao, deleteInspecao, inspecoes, loading: loadingInspecoes } = useInspecoes()
   const reportRef = useRef<HTMLDivElement>(null)
+  const searchParams = useSearchParams()
 
   // Roteiro exclusivo de Prudentópolis — mesmo que alguém digite a URL direto,
   // fiscais/gestores de outros municípios são levados de volta pra lista.
@@ -1051,7 +1150,10 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     }
   }, [id, profile, router]);
 
-  const [idData, setIdData] = useState(() => ({
+  // Estado inicial (inspeção nova, em branco) — extraído numa função porque
+  // também é usado por resetToBlank() ("Nova Inspeção"/excluir sem ter salvo
+  // ainda), não só no useState de montagem.
+  const buildInitialIdData = useCallback(() => ({
     fantasia: '',
     cnpj: '',
     endereco: '',
@@ -1078,10 +1180,20 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
           : id === 'clinica-estetica-prudentopolis'
             ? 'Decreto Estadual nº 5.711/2002 e RDC nº 63/2011 da Anvisa'
             : '',
-  }))
+  }), [id]);
+
+  const [idData, setIdData] = useState(buildInitialIdData)
 
   const [currentInspecaoId, setCurrentInspecaoId] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<Record<string, 'SIM' | 'NAO' | 'ND'>>({})
+  // Status da inspeção carregada — null enquanto é uma inspeção nova/em
+  // branco, ainda sem nenhum save. Controla, na visualização do relatório, se
+  // mostra "Finalizar e Baixar PDF" (rascunho) ou só "Baixar PDF Novamente"
+  // (já concluída, reaberta pra conferir/rebaixar).
+  const [inspecaoStatus, setInspecaoStatus] = useState<'rascunho' | 'concluido' | null>(null);
+  // Nos roteiros ROI a resposta é a nota da escala, guardada como string
+  // ('0'..'5') no mesmo mapa — evita um segundo estado só pra isso e faz o
+  // rascunho/relatório continuarem lendo de um lugar só.
+  const [answers, setAnswers] = useState<Record<string, RespostaItem>>({})
   const [observations, setObservations] = useState<Record<string, string>>({})
   const [showObsInput, setShowObsInput] = useState<Record<string, boolean>>({})
   const [itemPhotos, setItemPhotos] = useState<Record<string, PhotoEvidence[]>>({})
@@ -1093,9 +1205,16 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // podia mais ser alterada depois, então isso reaproveita o mesmo
   // formulário pra editar um item já existente.
   const [editingCustomItemId, setEditingCustomItemId] = useState<string | null>(null)
-  // Anexo opcional do relatório — texto técnico fixo sobre Central de
-  // Material Esterilizado, só entra na versão final se o fiscal marcar.
-  const [incluirCME, setIncluirCME] = useState(false)
+  // Textos de "Considerações Gerais" (introdução) e "Conclusão e Prazo Legal"
+  // do relatório — editáveis pelo fiscal. Até o fiscal editar manualmente
+  // (introTravadaRef/conclusaoTravadaRef), ficam sincronizados automaticamente
+  // com o padrão do município (ou o fixo do código, na falta de um) e com os
+  // dados já preenchidos (nome do estabelecimento, CNPJ, prazo etc.) — a
+  // primeira edição manual "trava" o texto, que passa a ser conteúdo livre.
+  const [introducaoHtml, setIntroducaoHtml] = useState("")
+  const [conclusaoHtml, setConclusaoHtml] = useState("")
+  const introTravadaRef = useRef(false)
+  const conclusaoTravadaRef = useRef(false)
   const [uploadingItem, setUploadingItem] = useState<string | null>(null)
   const [view, setView] = useState<'checklist' | 'report'>('checklist')
   const [isSearchingCnpj, setIsSearchingCnpj] = useState(false)
@@ -1106,10 +1225,27 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   const [isSavingDraft, setIsSavingDraft] = useState(false)
   const [isFinalizing, setIsFinalizing] = useState(false)
   const [isDeletingDraft, setIsDeletingDraft] = useState(false)
+  // Diálogo de saída (clique em "Início"/logo no cabeçalho com uma vistoria em
+  // andamento) — ver registro do guard mais abaixo e src/hooks/use-checklist-exit-guard.ts.
+  const [showExitDialog, setShowExitDialog] = useState(false)
+  const [pendingExitHref, setPendingExitHref] = useState<string | null>(null)
+  const [isExitSaving, setIsExitSaving] = useState(false)
+  const [isExitDeleting, setIsExitDeleting] = useState(false)
+  // Lista completa vinda da consulta de CNPJ (BrasilAPI), salva junto da
+  // inspeção — ver cnaesDisponiveis em src/lib/types.ts.
   const [foundCnaes, setFoundCnaes] = useState<string[]>([]);
+  // Quais dessas atividades o fiscal marcou como inspecionadas. A fonte é
+  // idData.cnae (string separada por ";"), que é o que vai pro relatório.
+  const cnaesSelecionados = useMemo(
+    () => (idData.cnae || "").split(';').map((s: string) => s.trim()).filter(Boolean),
+    [idData.cnae]
+  );
   const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
-  const [draftToResume, setDraftToResume] = useState<Inspecao | null>(null);
-  const [isResumeDialogOpen, setIsResumeDialogOpen] = useState(false);
+  // Seletor de inspeções deste roteiro (rascunhos em andamento + já
+  // finalizadas) — substitui o antigo popup de "um único rascunho recuperável"
+  // (que usava .find() e só enxergava a mais recente).
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const jaAutoAbriuPickerRef = useRef(false);
   const isDirtyRef = useRef(false);
   // Sempre aponta para a versão mais recente de handleSaveDraft — sem isso, o
   // heartbeat abaixo (que só recria o intervalo quando answers/idData mudam)
@@ -1143,16 +1279,121 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [view]);
 
-  // Carregar rascunho vinculado ao Login e Roteiro
+  // Registra o guard de saída (ver src/hooks/use-checklist-exit-guard.ts) —
+  // enquanto há uma vistoria em andamento (rascunho salvo ou algo já
+  // preenchido), clicar em "Início"/logo no cabeçalho não navega direto: abre
+  // o diálogo de salvar rascunho ou excluir. Sem nada preenchido, não há o
+  // que perguntar — navega normal.
   useEffect(() => {
-    if (!loadingInspecoes && profile && !currentInspecaoId) {
-      const draft = inspecoes.find(i => i.status === 'rascunho' && i.checklistData?.roteiroId === id && i.fiscalId === profile.uid);
-      if (draft && draft.checklistData) {
-        setDraftToResume(draft);
-        setIsResumeDialogOpen(true);
+    setChecklistExitGuard((targetHref) => {
+      const temAlgoParaDecidir = view === 'checklist' && (
+        !!currentInspecaoId || isDirtyRef.current || Object.keys(answers).length > 0 || !!idData.fantasia
+      );
+      if (temAlgoParaDecidir) {
+        setPendingExitHref(targetHref);
+        setShowExitDialog(true);
+      } else {
+        router.push(targetHref);
       }
+    });
+    return () => setChecklistExitGuard(null);
+  }, [view, currentInspecaoId, answers, idData.fantasia, router]);
+
+  // Todas as inspeções deste fiscal neste roteiro — em vez de só a mais
+  // recente (era o que o antigo .find() enxergava), separadas por status e
+  // ordenadas pela última atualização. Base do seletor (item 2 do plano).
+  const minhasInspecoesDoRoteiro = useMemo(() => {
+    if (!profile) return { emAndamento: [] as Inspecao[], finalizadas: [] as Inspecao[] };
+    const minhas = inspecoes.filter(i => i.checklistData?.roteiroId === id && i.fiscalId === profile.uid);
+    const porAtualizacao = (a: Inspecao, b: Inspecao) =>
+      new Date(b.updatedAt || b.data).getTime() - new Date(a.updatedAt || a.data).getTime();
+    return {
+      emAndamento: minhas.filter(i => i.status === 'rascunho').sort(porAtualizacao),
+      finalizadas: minhas.filter(i => i.status === 'concluido').sort(porAtualizacao),
+    };
+  }, [inspecoes, id, profile]);
+
+  // Carrega uma inspeção específica (rascunho ou já finalizada) no
+  // formulário — usada tanto pelo seletor quanto por ?inspecaoId= na URL.
+  const carregarInspecao = useCallback((inspecao: Inspecao) => {
+    if (!inspecao.checklistData) return;
+    const cd = inspecao.checklistData;
+    const carregadaIdData = cd.idData || {};
+    setAnswers(cd.answers || {});
+    setObservations(cd.observations || {});
+    setItemPhotos(cd.itemPhotos || {});
+    setCustomItems(cd.customItems || []);
+    setFoundCnaes(cd.cnaesDisponiveis || []);
+    setIdData(carregadaIdData);
+    // "Trava" antes de setar — sem isso, os efeitos de sincronização (que
+    // rodam a cada mudança de idData) recalculariam por cima do texto
+    // carregado assim que setIdData disparasse o próximo render.
+    introTravadaRef.current = true;
+    conclusaoTravadaRef.current = true;
+    if (isRoi) {
+      // ROI não tem esses textos — nem os do padrão municipal, nem os do
+      // código. Zera pra não ressuscitar texto de uma inspeção antiga salva
+      // antes de o roteiro passar a ser ROI.
+      setIntroducaoHtml("");
+      setConclusaoHtml("");
+    } else {
+      setIntroducaoHtml(cd.introducaoHtml || fillRoteiroTextoTokens(config.roteiroTextos?.[id]?.introducaoHtml || getDefaultIntroHtml(id), carregadaIdData));
+      setConclusaoHtml(cd.conclusaoHtml || fillRoteiroTextoTokens(config.roteiroTextos?.[id]?.conclusaoHtml || getDefaultConclusaoHtml(id), carregadaIdData));
     }
-  }, [loadingInspecoes, inspecoes, id, profile, currentInspecaoId]);
+    setCurrentInspecaoId(inspecao.id);
+    setInspecaoStatus(inspecao.status === 'concluido' ? 'concluido' : 'rascunho');
+    // Concluída reabre direto na visualização do relatório (é o que dá pra
+    // fazer com ela agora — rever/baixar o PDF de novo); rascunho volta pro
+    // formulário de preenchimento.
+    setView(inspecao.status === 'concluido' ? 'report' : 'checklist');
+    isDirtyRef.current = false;
+    router.replace(`/roteiros/${id}?inspecaoId=${inspecao.id}`, { scroll: false });
+    setIsPickerOpen(false);
+  }, [config, id, isRoi, router]);
+
+  // Reseta pra uma inspeção nova em branco — nem toca no que já está salvo
+  // (diferente do antigo "Novo Zero", que apagava o rascunho anterior; agora
+  // várias inspeções do mesmo roteiro coexistem, então "começar nova" nunca
+  // deveria apagar outra).
+  const resetToBlank = useCallback(() => {
+    setAnswers({}); setObservations({}); setItemPhotos({}); setCustomItems([]); setFoundCnaes([]);
+    setIdData(buildInitialIdData());
+    introTravadaRef.current = false;
+    conclusaoTravadaRef.current = false;
+    setCurrentInspecaoId(null);
+    setInspecaoStatus(null);
+    setView('checklist');
+    isDirtyRef.current = false;
+    router.replace(`/roteiros/${id}`, { scroll: false });
+    setIsPickerOpen(false);
+  }, [id, router, buildInitialIdData]);
+
+  // Abre uma inspeção específica vinda da URL (?inspecaoId=) — link direto,
+  // recarregar a página, ou voltar depois de sair. Só entra em ação uma vez;
+  // depois disso é o usuário quem decide trocar (pelo seletor).
+  const jaCarregouPorUrlRef = useRef(false);
+  useEffect(() => {
+    if (jaCarregouPorUrlRef.current || loadingInspecoes) return;
+    const inspecaoId = searchParams.get('inspecaoId');
+    if (!inspecaoId) return;
+    const inspecao = inspecoes.find(i => i.id === inspecaoId);
+    if (inspecao) {
+      carregarInspecao(inspecao);
+      jaCarregouPorUrlRef.current = true;
+    }
+  }, [searchParams, inspecoes, loadingInspecoes, carregarInspecao]);
+
+  // Abertura automática do seletor ao entrar na página sem ?inspecaoId= — só
+  // uma vez, e só se não veio nada pela URL (evita abrir por cima de uma
+  // inspeção que acabou de ser carregada) nem já estiver editando uma.
+  useEffect(() => {
+    if (jaAutoAbriuPickerRef.current || loadingInspecoes || !profile || currentInspecaoId) return;
+    if (searchParams.get('inspecaoId')) return;
+    if (minhasInspecoesDoRoteiro.emAndamento.length > 0) {
+      setIsPickerOpen(true);
+    }
+    jaAutoAbriuPickerRef.current = true;
+  }, [loadingInspecoes, profile, currentInspecaoId, searchParams, minhasInspecoesDoRoteiro]);
 
   // Marca alterações pendentes para o heartbeat/beforeunload saberem que há
   // algo ainda não confirmado como salvo na nuvem.
@@ -1160,32 +1401,42 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   useEffect(() => {
     if (isFirstDirtyCheckRef.current) { isFirstDirtyCheckRef.current = false; return; }
     isDirtyRef.current = true;
-  }, [answers, observations, itemPhotos, idData]);
+  }, [answers, observations, itemPhotos, idData, introducaoHtml, conclusaoHtml]);
 
-  const handleResumeDraft = () => {
-    if (draftToResume && draftToResume.checklistData) {
-        setAnswers(draftToResume.checklistData.answers || {});
-        setObservations(draftToResume.checklistData.observations || {});
-        setItemPhotos(draftToResume.checklistData.itemPhotos || {});
-        setCustomItems(draftToResume.checklistData.customItems || []);
-        setIncluirCME((draftToResume.checklistData as any).incluirCME || false);
-        setIdData(draftToResume.checklistData.idData || {});
-        setCurrentInspecaoId(draftToResume.id);
-        toast({ title: "Vistoria Retomada" });
-    }
-    setIsResumeDialogOpen(false);
+  // Sincroniza a introdução/conclusão com o padrão do município (ou o fixo do
+  // código) e com os dados já preenchidos, até o fiscal editar manualmente —
+  // a partir daí, introTravadaRef/conclusaoTravadaRef "trava" o texto (ver
+  // handleIntroducaoChange/handleConclusaoChange) e essa sincronização para.
+  useEffect(() => {
+    if (isRoi || introTravadaRef.current) return;
+    const base = config.roteiroTextos?.[id]?.introducaoHtml || getDefaultIntroHtml(id);
+    setIntroducaoHtml(fillRoteiroTextoTokens(base, idData));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, id, isRoi, idData.fantasia, idData.cnpj, idData.dataHorario]);
+
+  useEffect(() => {
+    if (isRoi || conclusaoTravadaRef.current) return;
+    const base = config.roteiroTextos?.[id]?.conclusaoHtml || getDefaultConclusaoHtml(id);
+    setConclusaoHtml(fillRoteiroTextoTokens(base, idData));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, id, isRoi, idData.prazoDias, idData.baseLegalPrazo]);
+
+  const handleIntroducaoChange = (html: string) => {
+    introTravadaRef.current = true;
+    setIntroducaoHtml(html);
   };
 
-  const handleStartFresh = async () => {
-    if (draftToResume?.id) {
-        try {
-          await deleteInspecao(draftToResume.id);
-        } catch (e) {
-          toast({ variant: "destructive", title: "Erro ao excluir rascunho anterior" });
-        }
-    }
-    setIsResumeDialogOpen(false);
-    toast({ title: "Nova Vistoria", description: "Iniciando do zero." });
+  const handleConclusaoChange = (html: string) => {
+    conclusaoTravadaRef.current = true;
+    setConclusaoHtml(html);
+  };
+
+  // Atalho do cabeçalho ("Minhas Inspeções") — reabre o seletor a qualquer
+  // momento, não só automaticamente ao entrar na página. Salva antes de abrir
+  // pra garantir que nada da edição atual se perca ao trocar de inspeção.
+  const handleAbrirSeletor = async () => {
+    if (isDirtyRef.current) await handleSaveDraft(false);
+    setIsPickerOpen(true);
   };
 
   const handleSaveDraft = useCallback(async (showToast = true) => {
@@ -1198,10 +1449,16 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         data: new Date(),
         fiscalId: profile.uid,
         fiscalNome: profile.displayName || "Fiscal",
-        checklistData: { answers, observations, itemPhotos, customItems, incluirCME, idData, roteiroId: id }
+        checklistData: { answers, observations, itemPhotos, customItems, idData, cnaesDisponiveis: foundCnaes, roteiroId: id, introducaoHtml, conclusaoHtml }
       };
       const res = await saveInspecao(data, currentInspecaoId || undefined);
-      if (res?.id) setCurrentInspecaoId(res.id);
+      if (res?.id) {
+        setCurrentInspecaoId(res.id);
+        setInspecaoStatus(prev => prev ?? 'rascunho');
+        // Primeiro save de uma inspeção nova (sem ?inspecaoId= ainda) — reflete
+        // o id na URL pra sobreviver a um refresh ou ser reaberta pelo link.
+        if (!currentInspecaoId) router.replace(`/roteiros/${id}?inspecaoId=${res.id}`, { scroll: false });
+      }
       isDirtyRef.current = false;
       // saveInspecao nunca lança erro — se a gravação na nuvem falhou de
       // verdade (ex.: documento grande demais por causa de fotos em base64),
@@ -1218,7 +1475,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     } finally {
       setIsSavingDraft(false);
     }
-  }, [profile, idData, answers, observations, itemPhotos, id, saveInspecao, currentInspecaoId, toast]);
+  }, [profile, idData, answers, observations, itemPhotos, id, saveInspecao, currentInspecaoId, toast, introducaoHtml, conclusaoHtml, foundCnaes, router]);
 
   const [savingObsItem, setSavingObsItem] = useState<string | null>(null)
   const [isPolishingBatch, setIsPolishingBatch] = useState(false)
@@ -1273,18 +1530,77 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     }
   }
 
+  // Confirmação vem de um AlertDialog no botão (ver cabeçalho) — chega aqui só
+  // depois de confirmado. Sem inspeção salva ainda, não há o que confirmar:
+  // só reseta o formulário em branco.
   const handleDeleteDraft = async () => {
     if (!currentInspecaoId) {
-        setAnswers({}); setObservations({}); setItemPhotos({}); setCustomItems([]); setIncluirCME(false); setIdData(prev => ({...prev, fantasia: '', cnpj: '', cnae: ''}));
+        resetToBlank();
         return;
     }
-    if (!window.confirm("CONFIRMAR EXCLUSÃO DESTE RASCUNHO?")) return;
     setIsDeletingDraft(true);
     try {
         await deleteInspecao(currentInspecaoId);
         toast({ title: "Rascunho Excluído" });
         router.push("/roteiros");
-    } catch (e) { toast({ variant: "destructive", title: "Erro ao excluir" }); } finally { setIsDeletingDraft(false); }
+    } catch (e: any) {
+      // Mostra o motivo real (ex.: falha de permissão) em vez de um erro
+      // genérico — sem isso, uma exclusão que falha silenciosamente no
+      // servidor parece ter dado certo (o item some da tela local mesmo
+      // assim) e só reaparece depois, num recarregamento.
+      console.error("Erro ao excluir rascunho:", e);
+      toast({ variant: "destructive", title: "Erro ao excluir", description: e?.message || "Verifique sua conexão e tente novamente." });
+    } finally { setIsDeletingDraft(false); }
+  };
+
+  // As duas ações do diálogo de saída (ver registro do guard acima e o
+  // AlertDialog no fim do componente). "Salvar e Sair" reaproveita
+  // handleSaveDraft; "Excluir e Sair" NÃO salva nada antes — corta a edição
+  // atual e apaga de vez (se já existia um rascunho salvo na nuvem).
+  const handleExitSaveAndLeave = async () => {
+    setIsExitSaving(true);
+    try {
+      await handleSaveDraft(false);
+      toast({ title: "Rascunho Salvo" });
+      setShowExitDialog(false);
+      router.push(pendingExitHref || "/dashboard");
+    } finally {
+      setIsExitSaving(false);
+    }
+  };
+
+  const handleExitDeleteAndLeave = async () => {
+    setIsExitDeleting(true);
+    try {
+      if (currentInspecaoId) await deleteInspecao(currentInspecaoId);
+      isDirtyRef.current = false;
+      toast({ title: "Rascunho Excluído" });
+      setShowExitDialog(false);
+      router.push(pendingExitHref || "/dashboard");
+    } catch (e: any) {
+      console.error("Erro ao excluir rascunho:", e);
+      toast({ variant: "destructive", title: "Erro ao excluir", description: e?.message || "Verifique sua conexão e tente novamente." });
+    } finally {
+      setIsExitDeleting(false);
+    }
+  };
+
+  // Exclusão direto da lista do seletor — sem precisar abrir a inspeção
+  // primeiro. Se for a que está carregada no formulário agora, reseta pra
+  // não deixar o formulário apontando pra algo que acabou de ser apagado.
+  const [deletandoDaListaId, setDeletandoDaListaId] = useState<string | null>(null);
+  const handleDeleteInspecaoDaLista = async (inspecao: Inspecao) => {
+    setDeletandoDaListaId(inspecao.id);
+    try {
+      await deleteInspecao(inspecao.id);
+      toast({ title: "Excluído Permanentemente" });
+      if (inspecao.id === currentInspecaoId) resetToBlank();
+    } catch (e: any) {
+      console.error("Erro ao excluir inspeção:", e);
+      toast({ variant: "destructive", title: "Erro ao excluir", description: e?.message || "Verifique sua conexão e tente novamente." });
+    } finally {
+      setDeletandoDaListaId(null);
+    }
   };
 
   const handleCnpjLookup = async () => {
@@ -1292,12 +1608,20 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     if (val.length !== 14) return;
     setIsSearchingCnpj(true);
     try {
-      const res = await fetch(`/api/cnpj/${val}`);
+      // A rota /api/cnpj exige token (senão qualquer um na internet usaria o
+      // endpoint como consulta grátis de CNPJ às nossas custas) — sem este
+      // header a consulta voltava 401 e nenhum CNAE chegava à tela. Mesmo
+      // padrão já usado em src/components/intimacao-form.tsx.
+      const idToken = await firebaseAuth?.currentUser?.getIdToken();
+      const res = await fetch(`/api/cnpj/${val}`, {
+        headers: idToken ? { Authorization: `Bearer ${idToken}` } : undefined,
+      });
       if (res.ok) {
         const data = await res.json();
+        const cnaesDaConsulta: string[] = data.cnaes_list || [];
         const updated = { ...idData, fantasia: data.razao_social, endereco: `${data.logradouro}, ${data.numero}`, bairro: data.bairro, responsavel: data.responsavel_legal, telefone: data.telefone || "", cnae: data.cnae || "" };
         setIdData(updated);
-        setFoundCnaes(data.cnaes_list || []);
+        setFoundCnaes(cnaesDaConsulta);
         toast({ title: "Empresa Localizada" });
         // Trigger save with new data
         setIsSavingDraft(true);
@@ -1307,9 +1631,17 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             data: new Date(),
             fiscalId: profile!.uid,
             fiscalNome: profile!.displayName || "Fiscal",
-            checklistData: { answers, observations, itemPhotos, customItems, incluirCME, idData: updated, roteiroId: id }
+            // Usa a lista que ACABOU de chegar, não o estado: setFoundCnaes
+            // acima só vale no próximo render, então `foundCnaes` aqui ainda
+            // seria o valor anterior (vazio na primeira consulta) e o rascunho
+            // era gravado sem nenhum CNAE.
+            checklistData: { answers, observations, itemPhotos, customItems, idData: updated, cnaesDisponiveis: cnaesDaConsulta, roteiroId: id, introducaoHtml, conclusaoHtml }
         }, currentInspecaoId || undefined);
-        if (resSave?.id) setCurrentInspecaoId(resSave.id);
+        if (resSave?.id) {
+          setCurrentInspecaoId(resSave.id);
+          setInspecaoStatus(prev => prev ?? 'rascunho');
+          if (!currentInspecaoId) router.replace(`/roteiros/${id}?inspecaoId=${resSave.id}`, { scroll: false });
+        }
         setIsSavingDraft(false);
       } else {
         const errData = await res.json().catch(() => null);
@@ -1398,11 +1730,12 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // Baixa o PDF oficial (mesma rotina de downloadPdf) e só then encerra a
   // vistoria no sistema (status: 'concluido') — assim nunca existe um
   // relatório marcado como finalizado sem o PDF correspondente já ter sido
-  // gerado. Depois de finalizado, some da lista de rascunhos retomáveis
-  // (handleResumeDraft só busca status === 'rascunho').
+  // gerado. Confirmação vem de um AlertDialog no botão (ver visualização do
+  // relatório), não mais de window.confirm. Depois de finalizada, a inspeção
+  // continua acessível pelo seletor (aba "Finalizadas") ou por
+  // ?inspecaoId= — não fica mais órfã.
   const handleFinalizarRelatorio = async () => {
     if (!profile) return;
-    if (!window.confirm("Finalizar este relatório? O PDF será baixado e a vistoria será encerrada no sistema, sem opção de continuar editando por aqui.")) return;
     setIsFinalizing(true);
     try {
       await downloadPdf();
@@ -1412,10 +1745,11 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         data: new Date(),
         fiscalId: profile.uid,
         fiscalNome: profile.displayName || "Fiscal",
-        checklistData: { answers, observations, itemPhotos, customItems, incluirCME, idData, roteiroId: id }
+        checklistData: { answers, observations, itemPhotos, customItems, idData, cnaesDisponiveis: foundCnaes, roteiroId: id, introducaoHtml, conclusaoHtml }
       };
       const res = await saveInspecao(data, currentInspecaoId || undefined);
       if (res?.id) setCurrentInspecaoId(res.id);
+      setInspecaoStatus('concluido');
       toast({ title: "Relatório Finalizado", description: "O PDF foi baixado e a vistoria foi encerrada." });
       router.push('/roteiros');
     } catch (e) {
@@ -1427,7 +1761,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
 
   const nonConformities = useMemo(() => {
     const all = checklist.secoes.flatMap(s => s.itens);
-    const filtered = all.filter(i => answers[i.id] === 'NAO');
+    const filtered = all.filter(i => ehNaoConformidade(answers[i.id]));
     // Itens manuais entram ao final do grupo de criticidade escolhido — depois
     // dos itens do roteiro oficial, nunca misturados no meio deles.
     const byCrit = (crit: Criticality) => [
@@ -1510,9 +1844,31 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         <header className="flex flex-wrap items-center justify-between no-print mb-10 gap-4 w-full max-w-[210mm] px-4">
             <Button onClick={() => setView('checklist')} variant="outline" className="rounded-xl h-11 font-black uppercase text-[10px] bg-white shadow-sm"><ArrowLeft className="h-4 w-4 mr-2" /> Voltar à Edição</Button>
             <div className="flex items-center gap-3">
-              <Button onClick={handlePolishAllObservations} disabled={isPolishingBatch || !hasUnreviewedObservations} variant="outline" className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-violet-50 text-violet-600 border-violet-100 shadow-sm hover:bg-violet-100">{isPolishingBatch ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />} Revisar Observações com IA</Button>
-              <Button onClick={downloadPdf} disabled={isGeneratingPdf || isFinalizing} variant="outline" className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-white shadow-sm">{isGeneratingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />} Baixar PDF Oficial</Button>
-              <Button onClick={handleFinalizarRelatorio} disabled={isGeneratingPdf || isFinalizing} className="bg-primary text-white rounded-xl h-11 px-8 font-black uppercase text-[10px] shadow-xl">{isFinalizing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />} Finalizar Relatório</Button>
+              {inspecaoStatus !== 'concluido' && (
+                <Button onClick={handlePolishAllObservations} disabled={isPolishingBatch || !hasUnreviewedObservations} variant="outline" className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-violet-50 text-violet-600 border-violet-100 shadow-sm hover:bg-violet-100">{isPolishingBatch ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />} Revisar Observações com IA</Button>
+              )}
+              {inspecaoStatus === 'concluido' ? (
+                <Button onClick={downloadPdf} disabled={isGeneratingPdf} className="bg-primary text-white rounded-xl h-11 px-8 font-black uppercase text-[10px] shadow-xl">{isGeneratingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />} Baixar PDF Novamente</Button>
+              ) : (
+                <>
+                  <Button onClick={downloadPdf} disabled={isGeneratingPdf || isFinalizing} variant="outline" title="Gera o PDF sem encerrar a vistoria" className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-white shadow-sm">{isGeneratingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />} Baixar Prévia</Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button disabled={isGeneratingPdf || isFinalizing} className="bg-primary text-white rounded-xl h-11 px-8 font-black uppercase text-[10px] shadow-xl">{isFinalizing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />} Finalizar e Baixar PDF</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="rounded-[2rem]">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="font-black uppercase tracking-tighter text-xl italic">Finalizar este relatório?</AlertDialogTitle>
+                        <AlertDialogDescription>O PDF será baixado e a vistoria será encerrada no sistema — só finalizar de fato conta como concluída. Depois disso ainda dá pra reabrir e baixar o PDF de novo pela lista de inspeções deste roteiro, mas não pra continuar editando.</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleFinalizarRelatorio} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-primary hover:bg-primary/90">Finalizar</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </>
+              )}
             </div>
         </header>
 
@@ -1527,7 +1883,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                     )}
                   </div>
                   <div className="flex-1 text-center">
-                    {config.headerRichText ? (<div style={{ fontFamily: "'Times New Roman', Times, serif" }} dangerouslySetInnerHTML={{ __html: config.headerRichText }} />) : (<><p className="text-[10pt] font-black uppercase text-black">PREFEITURA MUNICIPAL DE {config.municipioNome || "PRUDENTÓPOLIS"}</p><h2 className="text-[12pt] font-black uppercase leading-tight">{config.secretaria || "SECRETARIA MUNICIPAL DE SAÚDE"}</h2><h3 className="text-[10pt] font-bold uppercase text-zinc-700">{config.departamento || "VIGILÂNCIA SANITÁRIA"}</h3></>)}
+                    {config.headerRichText ? (<div style={{ fontFamily: "'Times New Roman', Times, serif" }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(config.headerRichText) }} />) : (<><p className="text-[10pt] font-black uppercase text-black">PREFEITURA MUNICIPAL DE {config.municipioNome || "PRUDENTÓPOLIS"}</p><h2 className="text-[12pt] font-black uppercase leading-tight">{config.secretaria || "SECRETARIA MUNICIPAL DE SAÚDE"}</h2><h3 className="text-[10pt] font-bold uppercase text-zinc-700">{config.departamento || "VIGILÂNCIA SANITÁRIA"}</h3></>)}
                     <p className="text-[14pt] font-black uppercase text-center tracking-tighter mt-2 border-y border-zinc-200 py-1">RELATÓRIO DE INSPEÇÃO SANITÁRIA</p>
                     {checklist.especialidade && <p className="text-[10pt] font-bold uppercase tracking-widest text-zinc-600 mt-1">{checklist.especialidade}</p>}
                   </div>
@@ -1548,50 +1904,21 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   </table>
               </div>
 
+              {!isRoi && (
               <div data-pdf-block className="mb-6">
                   <div className="sub-header-row">2. CONSIDERAÇÕES GERAIS</div>
-                  <div className="border border-[#171717] p-4 bg-zinc-50/50 space-y-3">
-                    {id === 'alimentacao' ? (
-                      // Bloco próprio e completo (mesma estrutura dedicada usada pro
-                      // guia de Prudentópolis) — cita as duas RDCs que embasam este
-                      // roteiro (275/2002 e 216/2004), não só uma.
-                      <>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">No dia {idData.dataHorario ? format(new Date(idData.dataHorario), "dd/MM/yyyy") : "____/____/____"} a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {idData.fantasia || "---"}, CNPJ/CPF {idData.cnpj || "---"}, com a finalidade de verificar as condições sanitárias e proceder à renovação da licença sanitária, conforme protocolo.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">O funcionamento do estabelecimento está condicionado à posse de licença sanitária válida, nos termos do Código de Saúde do Estado do Paraná (Lei Estadual nº 13.331/2001), com renovação anual.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">A inspeção observou os critérios estabelecidos pela RDC nº 216/2004 da Anvisa (Boas Práticas para Serviços de Alimentação) e pela RDC nº 275/2002 da Anvisa (Procedimentos Operacionais Padronizados), além das demais normas sanitárias aplicáveis.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">Durante a vistoria, foram identificadas inconformidades que necessitam de correção para garantir o cumprimento da legislação e a proteção da saúde de usuários e profissionais.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">Para a emissão da licença sanitária, o estabelecimento deverá regularizar integralmente as recomendações apontadas, conforme os itens a seguir.</p>
-                      </>
-                    ) : id === 'farmacia' ? (
-                      <>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">No dia {idData.dataHorario ? format(new Date(idData.dataHorario), "dd/MM/yyyy") : "____/____/____"} a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {idData.fantasia || "---"}, CNPJ/CPF {idData.cnpj || "---"}, com a finalidade de verificar as condições sanitárias e proceder à renovação da licença sanitária, conforme protocolo.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">O funcionamento de farmácias e drogarias está condicionado à posse de licença sanitária válida, nos termos do Código de Saúde do Estado do Paraná (Lei Estadual nº 13.331/2001) e da Lei Federal nº 5.991/1973, com renovação anual.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">A inspeção foi conduzida com base na RDC nº 44/2009 da Anvisa (Boas Práticas Farmacêuticas) e, quando aplicável ao estabelecimento, na Portaria nº 344/1998 (medicamentos sujeitos a controle especial) e na RDC nº 22/2014, além das demais normas sanitárias aplicáveis ao setor.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">Durante a vistoria, foram identificadas inconformidades que necessitam de correção para garantir o cumprimento da legislação e a proteção da saúde de usuários e profissionais.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">Para a emissão da licença sanitária, o estabelecimento deverá regularizar integralmente as recomendações apontadas, conforme os itens a seguir.</p>
-                      </>
-                    ) : id === 'clinica-estetica-prudentopolis' ? (
-                      <>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">No dia {idData.dataHorario ? format(new Date(idData.dataHorario), "dd/MM/yyyy") : "____/____/____"} a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {idData.fantasia || "---"}, CNPJ/CPF {idData.cnpj || "---"}, com a finalidade de verificar as condições sanitárias e proceder à renovação da licença sanitária, conforme protocolo.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">Considerando que se trata de clínica de estética que realiza procedimentos invasivos, atividade classificada como de risco sanitário, o funcionamento está condicionado à posse de licença sanitária válida, nos termos do Código de Saúde do Estado do Paraná (Lei Estadual nº 13.331/2001) e do Decreto Estadual nº 5.711/2002, com renovação anual.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">A inspeção foi conduzida com base na RDC nº 63/2011 da Anvisa (Boas Práticas de Funcionamento de Serviços de Saúde), na RDC nº 15/2012 (processamento de produtos para saúde) e na RDC nº 222/2018 (gerenciamento de resíduos de serviços de saúde), além das demais normas de biossegurança aplicáveis a procedimentos invasivos.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">Durante a vistoria, foram identificadas inconformidades que necessitam de correção para garantir o cumprimento da legislação e a proteção da saúde de usuários, profissionais e pacientes.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">Para a emissão da licença sanitária, o estabelecimento deverá regularizar integralmente as recomendações apontadas, conforme os itens a seguir.</p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">No dia {idData.dataHorario ? format(new Date(idData.dataHorario), "dd/MM/yyyy") : "____/____/____"} a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {idData.fantasia || "---"}, CNPJ/CPF {idData.cnpj || "---"}, com a finalidade de verificar as condições sanitárias do estabelecimento e proceder à renovação da licença sanitária, conforme protocolo.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">Considerando que se trata de atividade classificada como de alto risco sanitário, nos termos da Resolução SESA nº 1024/2020, o funcionamento está condicionado à posse de licença sanitária válida, cuja renovação deve ser realizada anualmente.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">A inspeção foi conduzida de acordo com os critérios legais e técnicos estabelecidos pela RDC 1002/25 da Anvisa, além das demais normas sanitárias e protocolos de biossegurança aplicáveis aos serviços de saúde.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">Durante a vistoria realizada, foram identificadas algumas inconformidades que necessitam de correção, a fim de garantir o cumprimento da legislação vigente e assegurar a proteção da saúde de usuários e profissionais.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">Dessa forma, para que seja possível a emissão da licença sanitária, o estabelecimento deverá promover a regularização integral das recomendações e ajustes apontados, conforme os itens descritos a seguir.</p>
-                      </>
-                    )}
-                  </div>
+                  <div
+                    className="border border-[#171717] p-4 bg-zinc-50/50"
+                    style={{ fontSize: '10pt', lineHeight: 1.6, textAlign: 'justify', fontWeight: 500, color: '#18181b' }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(introducaoHtml) }}
+                  />
               </div>
+              )}
 
               <div className="mb-6">
-                  <div data-pdf-block className="sub-header-row">3. NÃO CONFORMIDADES DETECTADAS</div>
+                  {/* No ROI não existem as seções 2 e 4, então as seguintes
+                      sobem de número em vez de deixar buraco na sequência. */}
+                  <div data-pdf-block className="sub-header-row">{isRoi ? 2 : 3}. NÃO CONFORMIDADES DETECTADAS</div>
                   {Object.keys(nonConformities).some(k => nonConformities[k as Criticality].length > 0) ? (
                       (['I', 'N', 'R'] as Criticality[]).map(crit => (
                           nonConformities[crit].length > 0 && (
@@ -1661,53 +1988,17 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   ) : <div data-pdf-block className="py-12 text-center border-2 border-dashed border-zinc-100 rounded-2xl mx-2"><CheckCircle2 className="h-10 w-10 text-emerald-100 mx-auto mb-2" /><p className="font-black text-zinc-300 uppercase text-[10pt] tracking-widest italic">Nenhuma irregularidade detectada.</p></div>}
               </div>
 
-              {incluirCME && (
-                <div data-pdf-block className="mb-6">
-                    <div className="sub-header-row">RECOMENDAÇÕES GERAIS PARA CENTRAL DE MATERIAL ESTERILIZADO (CME)</div>
-                    <div className="border border-[#171717] p-4 bg-zinc-50/50 space-y-3">
-                      <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900"><strong className="font-black">Etapas do processamento:</strong> O transporte dos dispositivos médicos (DM) destinados ao processamento (material sujo) deve ser realizado em recipiente exclusivo para este fim, devidamente identificado, de material rígido e liso, com sistema de fechamento estanque que impeça vazamentos, e que seja passível de limpeza e desinfecção (Art. 103 da RDC nº 1.002/2025).</p>
-                      <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900"><strong className="font-black">Pré-limpeza (DM):</strong> A pré-limpeza deve ser realizada imediatamente após o atendimento (Art. 59), com remoção mecânica da sujidade visível — sangue, saliva e resíduos orgânicos — das superfícies internas e externas dos instrumentais. O objetivo é evitar que os resíduos sequem e dificultem a limpeza posterior.</p>
-                      <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900"><strong className="font-black">Limpeza (DM):</strong> É etapa obrigatória antes da esterilização (Art. 61) e deve ser feita de forma manual (Art. 62). Nos casos de DM complexos, é necessário complementar com cuba ultrassônica ou equipamento indicado pelo fabricante (Art. 62, parágrafo único). Os objetos de limpeza não podem ser abrasivos, devem ser mantidos limpos e secos e substituídos quando desgastados (Art. 65). É indicado o uso de escovas específicas para esterilização, evitando itens inadequados como esponjas de louça, que podem danificar os instrumentais, soltar partículas e comprometer sua integridade após a esterilização.</p>
-                      <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900"><strong className="font-black">Secagem (DM):</strong> A etapa de secagem deve ser realizada imediatamente após a limpeza, utilizando métodos seguros e validados, como secadoras específicas, ar comprimido medicinal, gás inerte ou materiais absorventes descartáveis não recicláveis, por exemplo papel toalha não reciclado (Art. 70). Após a secagem, os instrumentais devem ser embalados sem demora, evitando que fiquem expostos sobre a bancada, pois isso pode resultar em acúmulo de sujidades, umidade ou contaminação cruzada.</p>
-                      <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900"><strong className="font-black">Monitoramento biológico da esterilização:</strong> O uso de indicador biológico deve ser realizado uma vez por semana, garantindo a verificação da eficácia do processo de esterilização (Art. 89 da RDC nº 1.002/2025 – Anvisa). Esse teste deve ser feito em pacote teste no primeiro ciclo de esterilização do dia, assegurando rastreabilidade e confiabilidade dos resultados (atualizar POP).</p>
-                      <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900"><strong className="font-black">Monitoramento químico da esterilização:</strong> Todas as cargas submetidas à esterilização devem conter, obrigatoriamente, um pacote teste com integrador químico tipo 5 ou 6 (Art. 90 da RDC nº 1.002/2025 – Anvisa).</p>
-                      <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900"><strong className="font-black">Identificação da embalagem:</strong> Todo pacote submetido à esterilização deve ser identificado por etiqueta (Art. 79), aplicada diretamente sobre a embalagem ou na face plástica do papel grau cirúrgico. Quando utilizada caneta específica para esterilização, a identificação pode ser feita diretamente na embalagem de papel grau cirúrgico, desde que a caneta seja aprovada para esse uso e a identificação ocorra antes do processo de esterilização. A etiqueta deve permanecer legível e afixada até o uso (Art. 80) e conter data da esterilização, nome do responsável pelo preparo e lote da carga para rastreabilidade (Art. 81).</p>
-                      <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900"><strong className="font-black">Registros do monitoramento da esterilização:</strong> Conforme o Art. 92 da RDC nº 1.002/2025 – Anvisa, os registros do monitoramento do processo de esterilização dos dispositivos médicos devem ser arquivados por um prazo mínimo de 5 anos, garantindo rastreabilidade e a comprovação da eficácia dos ciclos realizados.</p>
-                      <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900"><strong className="font-black">Validade da esterilidade:</strong> O prazo deve ser estabelecido com validação científica (Art. 82). Na ausência de validação, aplica-se 6 meses, desde que a embalagem esteja íntegra e armazenada adequadamente (Art. 82, §1º). O prazo deve ser registrado no POP de processamento e a data limite de uso não pode exceder a validade da embalagem (Art. 82, §1º e §2º).</p>
-                      <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900"><strong className="font-black">Transporte:</strong> O transporte de DM processado (material pronto para uso) deve ser feito em recipiente fechado, identificado e em condições que garantam a integridade da embalagem e a manutenção da identificação (Art. 104). O transporte tanto do material sujo quanto do limpo deve ser feito em recipiente fechado e identificado para a finalidade.</p>
-                    </div>
-                </div>
-              )}
 
+              {!isRoi && (
               <div data-pdf-block className="mb-8">
                   <div className="sub-header-row">4. CONCLUSÃO E PRAZO LEGAL</div>
-                  <div className="border border-[#171717] p-4 bg-zinc-50/50 space-y-3">
-                    {id === 'farmacia' ? (
-                      <>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">O estabelecimento deverá sanar todas as não conformidades apontadas neste relatório no prazo máximo de {idData.prazoDias || '15'} dias, contados a partir do recebimento do documento{idData.baseLegalPrazo ? `, conforme previsto na ${idData.baseLegalPrazo}` : ''}.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">O fato de determinada exigência não constar neste roteiro não exime o estabelecimento de observar as demais obrigações previstas na legislação sanitária vigente, em especial a Lei Federal nº 5.991/1973 e a RDC nº 44/2009 da Anvisa.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">Para a concessão ou renovação da licença sanitária, o estabelecimento deve manter, de forma permanente, condições higiênico-sanitárias e estruturais em conformidade com a legislação vigente, além de toda a documentação pertinente ao desenvolvimento de suas atividades.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">Caso o estabelecimento não cumpra o prazo estipulado ou não formalize pedido de prorrogação, será lavrado um Termo de Intimação ou de Infração, fundamentado na legislação vigente, determinando a regularização das situações de não conformidade, podendo, nos casos de maior gravidade, resultar em interdição total ou parcial do estabelecimento e/ou apreensão de produtos.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">A Vigilância Sanitária Municipal acompanhará a implementação das medidas corretivas e permanecerá disponível para prestar orientações técnicas. Em caso de dúvidas, estamos à disposição.</p>
-                      </>
-                    ) : id === 'clinica-estetica-prudentopolis' ? (
-                      <>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">O estabelecimento deverá sanar todas as não conformidades apontadas neste relatório no prazo máximo de {idData.prazoDias || '15'} dias, contados a partir do recebimento do documento{idData.baseLegalPrazo ? `, conforme previsto na ${idData.baseLegalPrazo}` : ''}.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">O fato de determinada exigência não constar neste roteiro não exime o estabelecimento de observar as demais obrigações previstas na legislação sanitária vigente, em especial a RDC nº 63/2011, a RDC nº 15/2012 e a RDC nº 222/2018 da Anvisa.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">Para a concessão ou renovação da licença sanitária, o estabelecimento deve manter, de forma permanente, condições de biossegurança, esterilização e infraestrutura compatíveis com os procedimentos invasivos realizados, além de toda a documentação técnica exigida.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">Caso o estabelecimento não cumpra o prazo estipulado ou não formalize pedido de prorrogação, será lavrado um Termo de Intimação ou de Infração, fundamentado na legislação vigente, determinando a regularização das situações de não conformidade, podendo, nos casos de risco à saúde do paciente ou do trabalhador, resultar em interdição total ou parcial do estabelecimento.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">A Vigilância Sanitária Municipal acompanhará a implementação das medidas corretivas e permanecerá disponível para prestar orientações técnicas. Em caso de dúvidas, estamos à disposição.</p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">O estabelecimento deverá sanar todas as não conformidades apontadas neste relatório no prazo máximo de {idData.prazoDias || '15'} dias, contados a partir do recebimento do documento{idData.baseLegalPrazo ? `, conforme previsto na ${idData.baseLegalPrazo}` : ''}.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">Caso o estabelecimento não cumpra o prazo estipulado ou não formalize pedido de prorrogação, será lavrado um Termo de Intimação ou de Infração, fundamentado na legislação vigente, determinando a regularização das situações de não conformidade.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">A Vigilância Sanitária Municipal acompanhará a implementação das medidas corretivas e permanecerá disponível para prestar orientações técnicas. Havendo necessidade devidamente justificada, o estabelecimento poderá solicitar prorrogação dos prazos, a qual será analisada e deliberada conforme a legislação aplicável.</p>
-                        <p className="text-[10pt] leading-relaxed text-justify font-medium text-zinc-900">Em caso de dúvidas, estamos à disposição.</p>
-                      </>
-                    )}
-                  </div>
+                  <div
+                    className="border border-[#171717] p-4 bg-zinc-50/50"
+                    style={{ fontSize: '10pt', lineHeight: 1.6, textAlign: 'justify', fontWeight: 500, color: '#18181b' }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(conclusaoHtml) }}
+                  />
               </div>
+              )}
 
               <div data-pdf-block className="mt-12 grid grid-cols-2 gap-8 text-center">
                   <div className="space-y-10 flex flex-col items-center">
@@ -1730,7 +2021,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                 className="pt-2 mt-4 border-t border-black/20 text-center text-[8pt] text-black"
                 style={{ fontFamily: "'Times New Roman', Times, serif" }}
               >
-                {config.footerRichText && <div dangerouslySetInnerHTML={{ __html: config.footerRichText }} />}
+                {config.footerRichText && <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(config.footerRichText) }} />}
                 <p data-pdf-pagenum className="mt-1">Página 1 de 1</p>
               </div>
           </div>
@@ -1741,37 +2032,110 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="max-w-4xl mx-auto w-full p-4 md:p-8 space-y-6 md:space-y-8 pb-40 font-sans">
-      <header className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 md:p-6 rounded-[2rem] border border-slate-200 shadow-xl no-print">
+      <header className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 md:p-6 rounded-lg border border-[#E4DFD1] shadow-sm no-print">
         <div className="flex items-center gap-4">
-          <div className="p-4 rounded-2xl bg-opacity-10 bg-emerald-500 text-emerald-600"><ClipboardList className="h-6 w-6" /></div>
+          <div className="p-4 rounded-xl bg-[#E4EEEC] text-[#0E4A44]"><ClipboardList className="h-6 w-6" /></div>
           <div>
-            <h1 className="text-xl md:text-2xl font-black text-slate-900 uppercase italic tracking-tighter leading-none">{checklist.titulo}</h1>
-            <p className="text-[11px] text-zinc-400 font-black uppercase tracking-[0.2em] mt-1">{checklist.subtitulo}</p>
+            <h1 className="font-serif text-xl md:text-2xl text-[#262420] leading-none">{checklist.titulo}</h1>
+            <p className="text-[11px] text-[#A39D8C] font-black uppercase tracking-[0.2em] mt-1">{checklist.subtitulo}</p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
-            {lastAutoSave && (<div className="hidden sm:flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100"><Cloud className="h-3 w-3" /><span className="text-[10px] font-black uppercase">Salvo às {format(lastAutoSave, "HH:mm")}</span></div>)}
-            <button onClick={handleDeleteDraft} className="h-12 w-12 rounded-xl text-rose-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-all">{isDeletingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-5 w-5" />}</button>
-            <Button onClick={() => handleSaveDraft()} disabled={isSavingDraft} variant="outline" className="h-12 rounded-xl font-black uppercase text-[11px] tracking-widest gap-2 border-zinc-200 shadow-sm">{isSavingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Salvar</Button>
+        <div className="flex items-center gap-3">
+            {lastAutoSave && (<div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100"><Cloud className="h-3 w-3" /><span className="text-[10px] font-black uppercase whitespace-nowrap">Salvo às {format(lastAutoSave, "HH:mm")}</span></div>)}
+            <button
+              type="button"
+              onClick={handleAbrirSeletor}
+              title="Minhas inspeções deste roteiro"
+              className="relative h-12 w-12 rounded-xl text-[#A39D8C] hover:text-primary hover:bg-primary/5 flex items-center justify-center transition-all"
+            >
+              <History className="h-5 w-5" />
+              {minhasInspecoesDoRoteiro.emAndamento.length > 0 && (
+                <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-primary text-white text-[10px] font-black flex items-center justify-center">{minhasInspecoesDoRoteiro.emAndamento.length}</span>
+              )}
+            </button>
+            {currentInspecaoId ? (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <button type="button" className="h-12 w-12 rounded-xl text-rose-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-all">{isDeletingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-5 w-5" />}</button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="rounded-lg">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="font-serif text-xl text-[#262420]">Excluir este rascunho?</AlertDialogTitle>
+                    <AlertDialogDescription>Isso apaga permanentemente esta inspeção — respostas, fotos e observações. Não é possível desfazer.</AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteDraft} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-rose-600 hover:bg-rose-700">Excluir</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : (
+              <button type="button" onClick={handleDeleteDraft} className="h-12 w-12 rounded-xl text-rose-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-all"><Trash2 className="h-5 w-5" /></button>
+            )}
         </div>
       </header>
 
       <div className="space-y-8 no-print">
-          <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-5">
+          <div className="bg-white p-6 md:p-8 rounded-lg border border-[#E4DFD1] shadow-sm space-y-5">
             <div className="space-y-3">
-                <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-zinc-400 flex items-center gap-3"><Building2 className="h-4 w-4 text-primary" /> Estabelecimento</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                   <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-black uppercase text-zinc-500">Razão Social</Label><Textarea value={idData.fantasia} onChange={e => setIdData({...idData, fantasia: e.target.value.toUpperCase()})} className="min-h-[40px] h-10 rounded-xl bg-slate-50 border-none font-bold uppercase resize-none py-2" /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-zinc-500">Telefone</Label><Input value={idData.telefone} onChange={e => setIdData({...idData, telefone: e.target.value})} placeholder="(00) 00000-0000" className="h-10 rounded-xl bg-slate-50 border-none font-bold" /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-zinc-500">CNPJ do Estabelecimento</Label><div className="flex gap-2"><Input value={idData.cnpj} onChange={e => setIdData({...idData, cnpj: e.target.value})} placeholder="00.000.000/0000-00" className="h-10 rounded-xl bg-slate-50 border-none font-bold" /><Button onClick={handleCnpjLookup} disabled={isSearchingCnpj} variant="secondary" className="h-10 w-10 rounded-xl shrink-0">{isSearchingCnpj ? <Loader2 className="animate-spin h-4 w-4" /> : <Search className="h-4 w-4" />}</Button></div></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-zinc-500">E-mail</Label><Input type="email" value={idData.email} onChange={e => setIdData({...idData, email: e.target.value})} placeholder="contato@estabelecimento.com" className="h-10 rounded-xl bg-slate-50 border-none font-bold" /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-zinc-500">Bairro</Label><Input value={idData.bairro} onChange={e => setIdData({...idData, bairro: e.target.value.toUpperCase()})} className="h-10 rounded-xl bg-slate-50 border-none font-bold uppercase" /></div>
-                   <div className="space-y-1.5 md:col-span-3"><Label className="text-[10px] font-black uppercase text-zinc-500">Endereço</Label><Input value={idData.endereco} onChange={e => setIdData({...idData, endereco: e.target.value.toUpperCase()})} className="h-10 rounded-xl bg-slate-50 border-none font-bold uppercase" /></div>
+                <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Building2 className="h-4 w-4 text-primary" /> Estabelecimento</h2>
+                <div className="rounded-lg bg-[#FAF8F3] border border-[#E4DFD1] divide-y divide-[#E4DFD1] overflow-hidden">
+                   <div className="flex items-center gap-3 px-4 h-11">
+                      <Label className="w-32 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Razão Social</Label>
+                      <Input value={idData.fantasia} onChange={e => setIdData({...idData, fantasia: e.target.value.toUpperCase()})} className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold uppercase focus-visible:ring-0 focus-visible:ring-offset-0" />
+                   </div>
+                   <div className="flex items-center gap-3 px-4 h-11">
+                      <Label className="w-32 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">CNPJ / CPF</Label>
+                      <Input value={idData.cnpj} onChange={e => setIdData({...idData, cnpj: e.target.value})} placeholder="00.000.000/0000-00" className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
+                      <Button onClick={handleCnpjLookup} disabled={isSearchingCnpj} variant="ghost" size="icon" className="h-8 w-8 rounded-lg shrink-0 text-primary hover:bg-primary/10">{isSearchingCnpj ? <Loader2 className="animate-spin h-4 w-4" /> : <Search className="h-4 w-4" />}</Button>
+                   </div>
+                   <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-[#E4DFD1]">
+                      <div className="flex items-center gap-3 px-4 h-11">
+                         <Label className="w-32 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Telefone</Label>
+                         <Input value={idData.telefone} onChange={e => setIdData({...idData, telefone: e.target.value})} placeholder="(00) 00000-0000" className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
+                      </div>
+                      <div className="flex items-center gap-3 px-4 h-11">
+                         <Label className="w-32 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">E-mail</Label>
+                         <Input type="email" value={idData.email} onChange={e => setIdData({...idData, email: e.target.value})} placeholder="contato@estabelecimento.com" className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
+                      </div>
+                   </div>
+                   <div className="flex items-center gap-3 px-4 h-11">
+                      <Label className="w-32 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Bairro</Label>
+                      <Input value={idData.bairro} onChange={e => setIdData({...idData, bairro: e.target.value.toUpperCase()})} className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold uppercase focus-visible:ring-0 focus-visible:ring-offset-0" />
+                   </div>
+                   <div className="flex items-center gap-3 px-4 h-11">
+                      <Label className="w-32 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Endereço</Label>
+                      <Input value={idData.endereco} onChange={e => setIdData({...idData, endereco: e.target.value.toUpperCase()})} className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold uppercase focus-visible:ring-0 focus-visible:ring-offset-0" />
+                   </div>
                 </div>
 
                 {foundCnaes.length > 0 && (
                   <div className="p-6 bg-blue-50 border border-blue-100 rounded-3xl space-y-4">
-                    <div className="flex items-center justify-between px-1"><Label className="text-[11px] font-black uppercase text-blue-600 tracking-widest flex items-center gap-2"><ListFilter className="h-3 w-3" /> Selecionar Atividades (CNAE)</Label></div>
+                    {/* Um estabelecimento pode ter dezenas de atividades e
+                        raramente todas são objeto da inspeção — daí a seleção
+                        manual, com atalho pra marcar/limpar todas de uma vez
+                        em vez de clicar uma a uma. */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                      <Label className="text-[11px] font-black uppercase text-blue-600 tracking-widest flex items-center gap-2">
+                        <ListFilter className="h-3 w-3" /> Atividades inspecionadas ({cnaesSelecionados.length}/{foundCnaes.length})
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { setIdData({ ...idData, cnae: foundCnaes.map(c => c.toUpperCase()).join('; ') }); handleSaveDraft(false); }}
+                          className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-blue-600 hover:bg-blue-100 transition-colors"
+                        >
+                          Marcar todas
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setIdData({ ...idData, cnae: '' }); handleSaveDraft(false); }}
+                          className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-[#6B6659] hover:bg-blue-100 transition-colors"
+                        >
+                          Limpar
+                        </button>
+                      </div>
+                    </div>
                     <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
                       {foundCnaes.map((c, i) => {
                         // Antes comparava idData.cnae (sempre salvo em MAIÚSCULAS)
@@ -1779,7 +2143,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                         // quase nunca batiam, a seleção nunca "desmarcava" e cada
                         // clique só ia empilhando o mesmo CNAE de novo.
                         const cUpper = c.toUpperCase();
-                        const items = (idData.cnae || "").split(';').map((s) => s.trim()).filter(Boolean);
+                        const items = cnaesSelecionados;
                         const isSelected = items.includes(cUpper);
                         return (
                           <button
@@ -1801,53 +2165,122 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                 )}
             </div>
 
-            <div className="h-px bg-slate-100" />
+            <div className="h-px bg-[#F1EEE4]" />
 
             <div className="space-y-3">
-                <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-zinc-400 flex items-center gap-3"><Building2 className="h-4 w-4 text-primary" /> Responsáveis e Data da Inspeção</h2>
+                <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Building2 className="h-4 w-4 text-primary" /> Responsáveis e Data da Inspeção</h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                   <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-black uppercase text-zinc-500">Responsável Legal (acompanhou a inspeção)</Label><Input value={idData.responsavel} onChange={e => setIdData({...idData, responsavel: e.target.value.toUpperCase()})} className="h-10 rounded-xl bg-slate-50 border-none font-bold uppercase" /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-zinc-500">CPF do Responsável Legal</Label><Input value={idData.responsavelCpf} onChange={e => setIdData({...idData, responsavelCpf: e.target.value})} placeholder="000.000.000-00" className="h-10 rounded-xl bg-slate-50 border-none font-bold" /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-zinc-500">Responsável Técnico</Label><Input value={idData.responsavelTecnico} onChange={e => setIdData({...idData, responsavelTecnico: e.target.value.toUpperCase()})} placeholder="NOME DO RESPONSÁVEL TÉCNICO" className="h-10 rounded-xl bg-slate-50 border-none font-bold uppercase" /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-zinc-500">Registro Profissional (ex.: CRO)</Label><Input value={idData.responsavelTecnicoRegistro} onChange={e => setIdData({...idData, responsavelTecnicoRegistro: e.target.value})} placeholder="CRO-PR 00000" className="h-10 rounded-xl bg-slate-50 border-none font-bold" /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-zinc-500">Data e Horário da Inspeção</Label><Input type="datetime-local" value={idData.dataHorario} onChange={e => setIdData({...idData, dataHorario: e.target.value})} className="h-10 rounded-xl bg-slate-50 border-none font-bold" /></div>
+                   <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-black uppercase text-[#6B6659]">Responsável Legal (acompanhou a inspeção)</Label><Input value={idData.responsavel} onChange={e => setIdData({...idData, responsavel: e.target.value.toUpperCase()})} className="h-10 rounded-xl bg-[#FAF8F3] border-none font-bold uppercase" /></div>
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-[#6B6659]">CPF do Responsável Legal</Label><Input value={idData.responsavelCpf} onChange={e => setIdData({...idData, responsavelCpf: e.target.value})} placeholder="000.000.000-00" className="h-10 rounded-xl bg-[#FAF8F3] border-none font-bold" /></div>
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-[#6B6659]">Responsável Técnico</Label><Input value={idData.responsavelTecnico} onChange={e => setIdData({...idData, responsavelTecnico: e.target.value.toUpperCase()})} placeholder="NOME DO RESPONSÁVEL TÉCNICO" className="h-10 rounded-xl bg-[#FAF8F3] border-none font-bold uppercase" /></div>
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-[#6B6659]">Registro Profissional (ex.: CRO)</Label><Input value={idData.responsavelTecnicoRegistro} onChange={e => setIdData({...idData, responsavelTecnicoRegistro: e.target.value})} placeholder="CRO-PR 00000" className="h-10 rounded-xl bg-[#FAF8F3] border-none font-bold" /></div>
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-[#6B6659]">Data e Horário da Inspeção</Label><Input type="datetime-local" value={idData.dataHorario} onChange={e => setIdData({...idData, dataHorario: e.target.value})} className="h-10 rounded-xl bg-[#FAF8F3] border-none font-bold" /></div>
                 </div>
             </div>
 
-            <div className="h-px bg-slate-100" />
+            {/* ROI da ANVISA não usa os textos narrativos — ver checklist.roi. */}
+            {!isRoi && (
+            <>
+            <div className="h-px bg-[#F1EEE4]" />
 
             <div className="space-y-3">
-                <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-zinc-400 flex items-center gap-3"><Clock className="h-4 w-4 text-primary" /> Prazo para Regularização e Anexos</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-zinc-500">Prazo (dias)</Label><Input type="number" min="1" value={idData.prazoDias} onChange={e => setIdData({...idData, prazoDias: e.target.value})} className="h-10 rounded-xl bg-slate-50 border-none font-bold" /></div>
-                   <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-black uppercase text-zinc-500">Base Legal do Prazo</Label><Input value={idData.baseLegalPrazo} onChange={e => setIdData({...idData, baseLegalPrazo: e.target.value})} placeholder="Ex.: Lei Municipal nº 0000/0000" className="h-10 rounded-xl bg-slate-50 border-none font-bold" /></div>
+                <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><FileText className="h-4 w-4 text-primary" /> Texto de Abertura do Relatório</h2>
+                <p className="text-[11px] font-medium text-[#6B6659] -mt-1">Texto que abre o relatório final ("Considerações Gerais") — editável. Pré-preenchido com o padrão do município e os dados acima.</p>
+                <div className="p-2 bg-[#FAF8F3] rounded-lg border border-[#E4DFD1] font-serif">
+                  <RichTextEditor value={introducaoHtml} onChange={handleIntroducaoChange} fontSize="10.5pt" minHeight="140px" />
                 </div>
-                <label className="flex items-center gap-3 p-4 rounded-2xl bg-slate-50 cursor-pointer">
-                    <Checkbox checked={incluirCME} onCheckedChange={(v) => setIncluirCME(!!v)} />
-                    <span className="text-[11px] font-bold text-zinc-600">Incluir no relatório as recomendações gerais para Central de Material Esterilizado (CME)</span>
-                </label>
             </div>
+            </>
+            )}
 
-            <div className="h-px bg-slate-100" />
+            {/* ROI da ANVISA: formulario de alimentacao da base da ANVISA,
+                nao gera exigencia de adequacao — logo, nao tem prazo nem
+                base legal de prazo a preencher. */}
+            {!isRoi && (
+            <>
+            <div className="h-px bg-[#F1EEE4]" />
+
+            <div className="space-y-3">
+                <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Clock className="h-4 w-4 text-primary" /> Prazo para Regularização e Anexos</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-[#6B6659]">Prazo (dias)</Label><Input type="number" min="1" value={idData.prazoDias} onChange={e => setIdData({...idData, prazoDias: e.target.value})} className="h-10 rounded-xl bg-[#FAF8F3] border-none font-bold" /></div>
+                   <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-black uppercase text-[#6B6659]">Base Legal do Prazo</Label><Input value={idData.baseLegalPrazo} onChange={e => setIdData({...idData, baseLegalPrazo: e.target.value})} placeholder="Ex.: Lei Municipal nº 0000/0000" className="h-10 rounded-xl bg-[#FAF8F3] border-none font-bold" /></div>
+                </div>
+            </div>
+            </>
+            )}
+
+            <div className="h-px bg-[#F1EEE4]" />
 
             <div className="space-y-10">
-              <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-zinc-400 flex items-center gap-3"><FileSearch className="h-4 w-4 text-primary" /> Avaliação Técnica (SESA)</h2>
+              {/* Rótulo sem citar a SESA: este cabeçalho vale pra qualquer
+                  roteiro, e nem todos são estaduais (farmácia é lei federal,
+                  os ROI são da ANVISA). */}
+              <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><FileSearch className="h-4 w-4 text-primary" /> Avaliação Técnica</h2>
               {checklist.secoes.map((secao) => (
                 <div key={secao.id} className="space-y-6">
-                  <h3 className="text-sm font-black text-slate-900 border-l-4 border-primary pl-4 uppercase">{secao.titulo}</h3>
+                  <h3 className="text-sm font-black text-[#262420] border-l-4 border-primary pl-4 uppercase">{secao.titulo}</h3>
                   <div className="space-y-4">
                     {secao.itens.map((item) => (
                       item.isHeader ? (
-                        <p key={item.id} className="pt-2 text-[11px] font-black uppercase tracking-widest text-zinc-500">{item.text}</p>
+                        <p key={item.id} className="pt-2 text-[11px] font-black uppercase tracking-widest text-[#6B6659]">{item.text}</p>
                       ) : (
-                      <div key={item.id} className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-5">
-                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-                          <div className="flex-1 space-y-2"><div className="flex items-center gap-3"><Badge className={cn("text-[10px] font-black uppercase px-2", item.crit === 'I' ? "bg-red-100 text-red-600" : item.crit === 'N' ? "bg-amber-100 text-amber-600" : "bg-sky-100 text-sky-600")}>{item.crit === 'I' ? "IMPRESCINDÍVEL" : item.crit === 'N' ? "NECESSÁRIO" : "RECOMENDÁVEL"}</Badge><span className="text-[11px] font-black text-slate-400">ITEM {item.id}</span></div><p className="text-[15px] font-bold text-slate-800 leading-relaxed uppercase">{item.text}</p></div>
-                          <RadioGroup value={answers[item.id]} onValueChange={(v: any) => { setAnswers(prev => ({ ...prev, [item.id]: v })); handleSaveDraft(false); }} className="flex items-center gap-2 bg-white p-1 rounded-2xl border border-slate-200">{['SIM', 'NAO', 'ND'].map(opt => (<label key={opt} className={cn("flex items-center justify-center h-10 px-5 rounded-xl text-[11px] font-black cursor-pointer transition-all", answers[item.id] === opt ? "bg-primary text-white" : "text-slate-400 hover:bg-slate-100")}><RadioGroupItem value={opt} className="sr-only" /> {opt}</label>))}</RadioGroup>
+                      <div key={item.id} className="p-6 bg-[#FAF8F3] rounded-lg border border-[#E4DFD1] space-y-5">
+                        {/* No ROI as alternativas são textos longos: empilha
+                            sempre, em vez de dividir em duas colunas. */}
+                        <div className={cn("flex gap-6", item.roi ? "flex-col" : "flex-col md:flex-row md:items-start justify-between")}>
+                          <div className="flex-1 space-y-2"><div className="flex items-center gap-3"><Badge className={cn("text-[10px] font-black uppercase px-2", item.crit === 'I' ? "bg-red-100 text-red-600" : item.crit === 'N' ? "bg-amber-100 text-amber-600" : "bg-sky-100 text-sky-600")}>{item.crit === 'I' ? "IMPRESCINDÍVEL" : item.crit === 'N' ? "NECESSÁRIO" : "RECOMENDÁVEL"}</Badge><span className="text-[11px] font-black text-[#A39D8C]">{item.roi ? `INDICADOR ${item.roi.numero}` : `ITEM ${item.id}`}</span></div><p className="text-[15px] font-bold text-[#262420] leading-relaxed uppercase">{item.roi ? item.roi.indicador : item.text}</p>{item.roi && <p className="text-[11px] font-bold text-[#A39D8C]">{item.roi.baseLegal}</p>}</div>
+                          {item.roi ? (
+                            // Escala 0–5: cada nota tem a descrição do que a
+                            // caracteriza, então vira uma lista de opções
+                            // legíveis em vez dos três botões curtos. A faixa
+                            // colorida à esquerda separa à distância o que é
+                            // não conformidade (abaixo de NOTA_CONFORME) do
+                            // que já cumpre a norma.
+                            <RadioGroup
+                              value={answers[item.id]}
+                              onValueChange={(v: any) => { setAnswers(prev => ({ ...prev, [item.id]: v })); handleSaveDraft(false); }}
+                              className="flex flex-col gap-2"
+                            >
+                              {item.roi.alternativas.map((alternativa, nota) => {
+                                const valor = String(nota);
+                                const selecionada = answers[item.id] === valor;
+                                const abaixoDoCorte = nota < NOTA_CONFORME;
+                                return (
+                                  <label
+                                    key={valor}
+                                    className={cn(
+                                      "flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-all bg-white",
+                                      selecionada
+                                        ? abaixoDoCorte ? "border-red-300 bg-red-50/60 ring-1 ring-red-200" : "border-primary bg-[#E4EEEC]/50 ring-1 ring-primary/30"
+                                        : "border-[#E4DFD1] hover:bg-[#FAF8F3]"
+                                    )}
+                                  >
+                                    <RadioGroupItem value={valor} className="sr-only" />
+                                    <span
+                                      className={cn(
+                                        "flex items-center justify-center shrink-0 h-8 w-8 rounded-lg text-[13px] font-black transition-all",
+                                        selecionada
+                                          ? abaixoDoCorte ? "bg-red-500 text-white" : "bg-primary text-white"
+                                          : abaixoDoCorte ? "bg-red-50 text-red-400" : "bg-[#E4EEEC] text-[#0E4A44]"
+                                      )}
+                                    >
+                                      {nota}
+                                    </span>
+                                    <span className={cn("text-[13px] leading-relaxed", selecionada ? "text-[#262420] font-medium" : "text-[#6B6659]")}>
+                                      {alternativa}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </RadioGroup>
+                          ) : (
+                          <RadioGroup value={answers[item.id]} onValueChange={(v: any) => { setAnswers(prev => ({ ...prev, [item.id]: v })); handleSaveDraft(false); }} className="flex items-center gap-2 bg-white p-1 rounded-lg border border-[#E4DFD1]">{['SIM', 'NAO', 'ND'].map(opt => (<label key={opt} className={cn("flex items-center justify-center h-10 px-5 rounded-xl text-[11px] font-black cursor-pointer transition-all", answers[item.id] === opt ? "bg-primary text-white" : "text-[#6B6659] hover:bg-[#F1EEE4]")}><RadioGroupItem value={opt} className="sr-only" /> {opt}</label>))}</RadioGroup>
+                          )}
                         </div>
-                        <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-slate-200/50">
-                          <button type="button" onClick={() => setShowObsInput(prev => ({ ...prev, [item.id]: !prev[item.id] }))} className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase transition-all", (observations[item.id] || showObsInput[item.id]) ? "bg-primary/10 text-primary" : "text-slate-400")}><MessageSquare className="h-3.5 w-3.5" /> {showObsInput[item.id] ? "Fechar Nota" : observations[item.id] ? "Ver Nota" : "Observação"}</button>
-                          <label className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase transition-all cursor-pointer", (itemPhotos[item.id]?.length ?? 0) > 0 ? "bg-primary/10 text-primary" : "text-slate-400 hover:bg-slate-100")}>
+                        <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-[#E4DFD1]">
+                          <button type="button" onClick={() => setShowObsInput(prev => ({ ...prev, [item.id]: !prev[item.id] }))} className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase transition-all", (observations[item.id] || showObsInput[item.id]) ? "bg-primary/10 text-primary" : "text-[#6B6659] hover:bg-[#F1EEE4]")}><MessageSquare className="h-3.5 w-3.5" /> {showObsInput[item.id] ? "Fechar Nota" : observations[item.id] ? "Ver Nota" : "Observação"}</button>
+                          <label className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase transition-all cursor-pointer", (itemPhotos[item.id]?.length ?? 0) > 0 ? "bg-primary/10 text-primary" : "text-[#6B6659] hover:bg-[#F1EEE4]")}>
                             {uploadingItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
                             {(itemPhotos[item.id]?.length ?? 0) > 0 ? `Fotos (${itemPhotos[item.id].length})` : "Anexar Foto"}
                             <input type="file" accept="image/*" capture="environment" className="hidden" disabled={uploadingItem === item.id} onChange={(e) => handlePhotoUpload(item.id, e)} />
@@ -1858,10 +2291,14 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                             {itemPhotos[item.id].map((photo, pIdx) => {
                               const size = photo.size || 'M';
                               return (
-                              <div key={pIdx} className={cn("relative group/photo rounded-xl overflow-hidden border border-slate-200 bg-white", size === 'G' && "col-span-2")}>
+                              <div key={pIdx} className={cn("relative group/photo rounded-xl overflow-hidden border border-[#E4DFD1] bg-white", size === 'G' && "col-span-2")}>
                                 <img src={photo.url} alt={`Evidência ${pIdx + 1}`} className={cn("block mx-auto w-full h-auto", PHOTO_SIZE_MAX_WIDTH[size])} />
-                                <button type="button" onClick={() => handleRemovePhoto(item.id, pIdx)} className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover/photo:opacity-100 transition-opacity"><X className="h-3.5 w-3.5" /></button>
-                                <div className="absolute bottom-1 left-1 flex gap-0.5 opacity-0 group-hover/photo:opacity-100 transition-opacity">
+                                {/* Sempre visíveis por padrão — em toque (celular/tablet, o uso
+                                    predominante em campo) não existe estado de :hover pra revelar
+                                    esses controles, então ficavam invisíveis e intocáveis. Some só
+                                    em telas md+ (mouse), onde o hover pra revelar faz sentido. */}
+                                <button type="button" onClick={() => handleRemovePhoto(item.id, pIdx)} className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-100 md:opacity-0 md:group-hover/photo:opacity-100 transition-opacity"><X className="h-3.5 w-3.5" /></button>
+                                <div className="absolute bottom-1 left-1 flex gap-0.5 opacity-100 md:opacity-0 md:group-hover/photo:opacity-100 transition-opacity">
                                   {(['P', 'M', 'G'] as PhotoSize[]).map(s => (
                                     <button
                                       key={s}
@@ -1878,7 +2315,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                             })}
                           </div>
                         )}
-                        {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => { setObservations(prev => ({ ...prev, [item.id]: e.target.value })); }} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-2xl bg-white border-slate-200 text-sm font-medium" /><Button onClick={() => handleSaveObservation(item.id)} disabled={savingObsItem === item.id} size="sm" className="h-9 px-5 rounded-xl bg-primary text-white font-black text-[10px] uppercase gap-2">{savingObsItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Salvar</Button></div>)}
+                        {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => { setObservations(prev => ({ ...prev, [item.id]: e.target.value })); }} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><Button onClick={() => handleSaveObservation(item.id)} disabled={savingObsItem === item.id} size="sm" className="h-9 px-5 rounded-xl bg-primary text-white font-black text-[10px] uppercase gap-2">{savingObsItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Salvar</Button></div>)}
                       </div>
                       )
                     ))}
@@ -1887,22 +2324,22 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
               ))}
             </div>
 
-            <div className="h-px bg-slate-100" />
+            <div className="h-px bg-[#F1EEE4]" />
 
             <div className="space-y-6">
-              <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-zinc-400 flex items-center gap-3"><Plus className="h-4 w-4 text-primary" /> Não Conformidade Adicional</h2>
-              <p className="text-xs text-zinc-400 -mt-4">Para fatos constatados que não estão previstos em nenhum item do roteiro oficial — entra no relatório junto com os demais, ao final do grupo de criticidade escolhido.</p>
-              <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 space-y-4">
+              <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Plus className="h-4 w-4 text-primary" /> Não Conformidade Adicional</h2>
+              <p className="text-xs text-[#6B6659] -mt-4">Para fatos constatados que não estão previstos em nenhum item do roteiro oficial — entra no relatório junto com os demais, ao final do grupo de criticidade escolhido.</p>
+              <div className="p-6 bg-[#FAF8F3] rounded-lg border border-[#E4DFD1] space-y-4">
                 <Textarea
                   value={newCustomText}
                   onChange={e => setNewCustomText(e.target.value)}
                   placeholder="Descreva o fato constatado..."
-                  className="min-h-[80px] rounded-2xl bg-white border-slate-200 text-sm font-medium"
+                  className="min-h-[80px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium"
                 />
                 <div className="flex flex-wrap items-center gap-3">
-                  <RadioGroup value={newCustomCrit} onValueChange={(v: any) => setNewCustomCrit(v)} className="flex items-center gap-2 bg-white p-1 rounded-2xl border border-slate-200">
+                  <RadioGroup value={newCustomCrit} onValueChange={(v: any) => setNewCustomCrit(v)} className="flex items-center gap-2 bg-white p-1 rounded-lg border border-[#E4DFD1]">
                     {(['I', 'N', 'R'] as Criticality[]).map(c => (
-                      <label key={c} className={cn("flex items-center justify-center h-10 px-4 rounded-xl text-[10px] font-black cursor-pointer transition-all", newCustomCrit === c ? "bg-primary text-white" : "text-slate-400 hover:bg-slate-100")}>
+                      <label key={c} className={cn("flex items-center justify-center h-10 px-4 rounded-xl text-[10px] font-black cursor-pointer transition-all", newCustomCrit === c ? "bg-primary text-white" : "text-[#6B6659] hover:bg-[#F1EEE4]")}>
                         <RadioGroupItem value={c} className="sr-only" /> {c === 'I' ? 'IMPRESCINDÍVEL' : c === 'N' ? 'NECESSÁRIO' : 'RECOMENDÁVEL'}
                       </label>
                     ))}
@@ -1911,7 +2348,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                     {editingCustomItemId ? <><Pencil className="h-4 w-4" /> Salvar Alteração</> : <><Plus className="h-4 w-4" /> Adicionar</>}
                   </Button>
                   {editingCustomItemId && (
-                    <Button type="button" onClick={handleCancelEditCustomItem} variant="ghost" className="h-10 px-4 rounded-xl text-slate-400 font-black text-[11px] uppercase">
+                    <Button type="button" onClick={handleCancelEditCustomItem} variant="ghost" className="h-10 px-4 rounded-xl text-[#A39D8C] font-black text-[11px] uppercase">
                       Cancelar
                     </Button>
                   )}
@@ -1921,20 +2358,20 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
               {customItems.length > 0 && (
                 <div className="space-y-4">
                   {customItems.map((item) => (
-                    <div key={item.id} className={cn("p-6 bg-slate-50 rounded-3xl border space-y-5", editingCustomItemId === item.id ? "border-primary/40 ring-2 ring-primary/20" : "border-slate-100")}>
+                    <div key={item.id} className={cn("p-6 bg-[#FAF8F3] rounded-lg border space-y-5", editingCustomItemId === item.id ? "border-primary/40 ring-2 ring-primary/20" : "border-[#E4DFD1]")}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 space-y-2">
                           <Badge className={cn("text-[10px] font-black uppercase px-2", item.crit === 'I' ? "bg-red-100 text-red-600" : item.crit === 'N' ? "bg-amber-100 text-amber-600" : "bg-sky-100 text-sky-600")}>{item.crit === 'I' ? "IMPRESCINDÍVEL" : item.crit === 'N' ? "NECESSÁRIO" : "RECOMENDÁVEL"}</Badge>
-                          <p className="text-[15px] font-bold text-slate-800 leading-relaxed">{item.text}</p>
+                          <p className="text-[15px] font-bold text-[#262420] leading-relaxed">{item.text}</p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <Button type="button" onClick={() => handleEditCustomItem(item)} variant="ghost" size="icon" className="h-8 w-8 rounded-full text-slate-400 hover:bg-slate-200"><Pencil className="h-4 w-4" /></Button>
+                          <Button type="button" onClick={() => handleEditCustomItem(item)} variant="ghost" size="icon" className="h-8 w-8 rounded-full text-[#A39D8C] hover:bg-[#F1EEE4]"><Pencil className="h-4 w-4" /></Button>
                           <Button type="button" onClick={() => handleRemoveCustomItem(item.id)} variant="ghost" size="icon" className="h-8 w-8 rounded-full text-rose-500 hover:bg-rose-50"><Trash2 className="h-4 w-4" /></Button>
                         </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-slate-200/50">
-                        <button type="button" onClick={() => setShowObsInput(prev => ({ ...prev, [item.id]: !prev[item.id] }))} className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase transition-all", (observations[item.id] || showObsInput[item.id]) ? "bg-primary/10 text-primary" : "text-slate-400")}><MessageSquare className="h-3.5 w-3.5" /> {showObsInput[item.id] ? "Fechar Nota" : observations[item.id] ? "Ver Nota" : "Observação"}</button>
-                        <label className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase transition-all cursor-pointer", (itemPhotos[item.id]?.length ?? 0) > 0 ? "bg-primary/10 text-primary" : "text-slate-400 hover:bg-slate-100")}>
+                      <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-[#E4DFD1]">
+                        <button type="button" onClick={() => setShowObsInput(prev => ({ ...prev, [item.id]: !prev[item.id] }))} className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase transition-all", (observations[item.id] || showObsInput[item.id]) ? "bg-primary/10 text-primary" : "text-[#6B6659] hover:bg-[#F1EEE4]")}><MessageSquare className="h-3.5 w-3.5" /> {showObsInput[item.id] ? "Fechar Nota" : observations[item.id] ? "Ver Nota" : "Observação"}</button>
+                        <label className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase transition-all cursor-pointer", (itemPhotos[item.id]?.length ?? 0) > 0 ? "bg-primary/10 text-primary" : "text-[#6B6659] hover:bg-[#F1EEE4]")}>
                           {uploadingItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
                           {(itemPhotos[item.id]?.length ?? 0) > 0 ? `Fotos (${itemPhotos[item.id].length})` : "Anexar Foto"}
                           <input type="file" accept="image/*" capture="environment" className="hidden" disabled={uploadingItem === item.id} onChange={(e) => handlePhotoUpload(item.id, e)} />
@@ -1945,10 +2382,10 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                           {itemPhotos[item.id].map((photo, pIdx) => {
                             const size = photo.size || 'M';
                             return (
-                            <div key={pIdx} className={cn("relative group/photo rounded-xl overflow-hidden border border-slate-200 bg-white", size === 'G' && "col-span-2")}>
+                            <div key={pIdx} className={cn("relative group/photo rounded-xl overflow-hidden border border-[#E4DFD1] bg-white", size === 'G' && "col-span-2")}>
                               <img src={photo.url} alt={`Evidência ${pIdx + 1}`} className={cn("block mx-auto w-full h-auto", PHOTO_SIZE_MAX_WIDTH[size])} />
-                              <button type="button" onClick={() => handleRemovePhoto(item.id, pIdx)} className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover/photo:opacity-100 transition-opacity"><X className="h-3.5 w-3.5" /></button>
-                              <div className="absolute bottom-1 left-1 flex gap-0.5 opacity-0 group-hover/photo:opacity-100 transition-opacity">
+                              <button type="button" onClick={() => handleRemovePhoto(item.id, pIdx)} className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-100 md:opacity-0 md:group-hover/photo:opacity-100 transition-opacity"><X className="h-3.5 w-3.5" /></button>
+                              <div className="absolute bottom-1 left-1 flex gap-0.5 opacity-100 md:opacity-0 md:group-hover/photo:opacity-100 transition-opacity">
                                 {(['P', 'M', 'G'] as PhotoSize[]).map(s => (
                                   <button key={s} type="button" onClick={() => handleSetPhotoSize(item.id, pIdx, s)} className={cn("h-6 w-6 rounded-md text-[9px] font-black flex items-center justify-center transition-colors", size === s ? "bg-primary text-white" : "bg-black/60 text-white/80 hover:bg-black/80")}>{s}</button>
                                 ))}
@@ -1958,18 +2395,32 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                           })}
                         </div>
                       )}
-                      {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => setObservations(prev => ({ ...prev, [item.id]: e.target.value }))} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-2xl bg-white border-slate-200 text-sm font-medium" /><Button onClick={() => handleSaveObservation(item.id)} disabled={savingObsItem === item.id} size="sm" className="h-9 px-5 rounded-xl bg-primary text-white font-black text-[10px] uppercase gap-2">{savingObsItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Salvar</Button></div>)}
+                      {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => setObservations(prev => ({ ...prev, [item.id]: e.target.value }))} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><Button onClick={() => handleSaveObservation(item.id)} disabled={savingObsItem === item.id} size="sm" className="h-9 px-5 rounded-xl bg-primary text-white font-black text-[10px] uppercase gap-2">{savingObsItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Salvar</Button></div>)}
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
-            <div className="h-px bg-slate-100" />
+            {!isRoi && (
+            <>
+            <div className="h-px bg-[#F1EEE4]" />
+
+            <div className="space-y-3">
+                <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Scale className="h-4 w-4 text-primary" /> Texto de Conclusão do Relatório</h2>
+                <p className="text-[11px] font-medium text-[#6B6659] -mt-1">Texto que fecha o relatório final ("Conclusão e Prazo Legal") — editável. Pré-preenchido com o padrão do município e o prazo acima.</p>
+                <div className="p-2 bg-[#FAF8F3] rounded-lg border border-[#E4DFD1] font-serif">
+                  <RichTextEditor value={conclusaoHtml} onChange={handleConclusaoChange} fontSize="10.5pt" minHeight="140px" />
+                </div>
+            </div>
+            </>
+            )}
+
+            <div className="h-px bg-[#F1EEE4]" />
 
             <div className="space-y-10 pt-4">
-                <div className="bg-slate-900 text-white p-8 rounded-[3rem] shadow-2xl space-y-8">
-                    <div className="flex items-center justify-between border-b border-white/10 pb-4"><div className="flex items-center gap-3"><div className="p-2.5 rounded-2xl bg-primary/20"><ClipboardList className="h-5 w-5 text-primary" /></div><div><h3 className="text-xl font-black uppercase italic tracking-tighter">Resumo da Vistoria</h3></div></div><Badge className="bg-primary text-white border-none text-[10px] font-black px-4 h-8">{Object.keys(answers).length} ITENS</Badge></div>
+                <div className="bg-[#262420] text-white p-8 rounded-lg shadow-2xl space-y-8">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-4"><div className="flex items-center gap-3"><div className="p-2.5 rounded-2xl bg-primary/20"><ClipboardList className="h-5 w-5 text-primary" /></div><div><h3 className="font-serif text-xl">Resumo da Vistoria</h3></div></div><Badge className="bg-primary text-white border-none text-[10px] font-black px-4 h-8">{Object.keys(answers).length} ITENS</Badge></div>
                     <div className="space-y-4">
                         <div className="flex items-center justify-between px-1"><p className="text-[10px] font-black uppercase text-white/60">Assinaturas</p><SelecionarAutoridadeParaFormulario onSelect={(f) => { setFiscais(prev => [...prev, f]); handleSaveDraft(false); }} /></div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1982,46 +2433,140 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
           </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-[100] no-print px-4 pb-8 pt-4 bg-white/90 backdrop-blur-xl border-t border-zinc-200 shadow-[0_-25px_50px_rgba(0,0,0,0.15)]">
+      <div className="fixed bottom-0 left-0 right-0 z-[100] no-print px-4 pb-8 pt-4 bg-white/90 backdrop-blur-xl border-t border-[#E4DFD1] shadow-[0_-25px_50px_rgba(0,0,0,0.15)]">
           <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center gap-4">
-              <Button type="button" onClick={() => handleSaveDraft()} disabled={isSavingDraft} variant="outline" className="w-full sm:w-auto h-16 px-10 rounded-2xl border-zinc-300 text-zinc-600 font-black uppercase text-[11px] tracking-widest gap-3 shadow-md">{isSavingDraft ? <Loader2 className="animate-spin h-5 w-5" /> : <Save className="h-5 w-5" />} Salvar Rascunho</Button>
+              <Button type="button" onClick={() => handleSaveDraft()} disabled={isSavingDraft} variant="outline" className="w-full sm:w-auto h-16 px-10 rounded-2xl border-[#E4DFD1] text-[#6B6659] font-black uppercase text-[11px] tracking-widest gap-3 shadow-md">{isSavingDraft ? <Loader2 className="animate-spin h-5 w-5" /> : <Save className="h-5 w-5" />} Salvar Rascunho</Button>
               <Button type="button" onClick={async () => { await handleSaveDraft(false); setView('report'); window.scrollTo(0,0); }} disabled={Object.keys(answers).length === 0} className="flex-1 w-full h-16 bg-primary hover:bg-primary/90 text-white gap-4 rounded-2xl shadow-2xl transition-all active:scale-95"><FileText className="h-6 w-6" /><div className="flex flex-col items-start leading-none text-left"><span className="text-lg font-black uppercase tracking-tighter italic">VISUALIZAR RELATÓRIO</span><span className="text-[8px] font-bold opacity-70 uppercase tracking-widest mt-0.5">Sincronizar e gerar PDF</span></div></Button>
           </div>
       </div>
 
-      <Dialog open={isResumeDialogOpen} onOpenChange={setIsResumeDialogOpen}>
-        <DialogContent className="rounded-[2.5rem] sm:max-w-md border-none shadow-2xl bg-white overflow-hidden p-0">
-            <DialogHeader className="p-8 bg-zinc-900 text-white border-b border-white/5">
+      <Dialog open={isPickerOpen} onOpenChange={setIsPickerOpen}>
+        <DialogContent className="rounded-lg sm:max-w-md border-none shadow-2xl bg-white overflow-hidden p-0">
+            <DialogHeader className="p-8 bg-[#0E4A44] text-white border-b border-white/10">
                 <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-2xl bg-primary/20 text-primary"><History className="h-6 w-6" /></div>
+                    <div className="p-2.5 rounded-2xl bg-white/10 text-white"><History className="h-6 w-6" /></div>
                     <div>
-                        <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Retomar Vistoria?</DialogTitle>
-                        <DialogDescription className="text-zinc-400 text-[10px] font-bold uppercase tracking-widest mt-1">Existe um roteiro em andamento seu</DialogDescription>
+                        <DialogTitle className="font-serif text-xl">Minhas Inspeções</DialogTitle>
+                        <DialogDescription className="text-white/60 text-[10px] font-bold uppercase tracking-widest mt-1">{checklist.titulo}</DialogDescription>
                     </div>
                 </div>
             </DialogHeader>
-            <div className="p-8 space-y-4">
-                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
-                     <p className="text-[9px] font-black uppercase text-zinc-400 tracking-widest">Estabelecimento:</p>
-                     <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-primary" />
-                        <span className="text-xs font-bold text-slate-800 uppercase truncate">{draftToResume?.titulo || "VISTORIA SEM NOME"}</span>
-                     </div>
-                     <p className="text-[10px] font-medium text-slate-500 italic">Preenchido até às {draftToResume?.updatedAt ? format(new Date(draftToResume.
-                      
-                     updatedAt), "HH:mm") : "..."}</p>
-                </div>
-                <p className="text-[11px] font-bold text-slate-500 text-center leading-relaxed">Deseja continuar exatamente de onde parou ou iniciar um novo formulário?</p>
+            <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                <Button onClick={resetToBlank} variant="outline" className="w-full h-12 rounded-xl font-black uppercase text-[11px] tracking-widest gap-2 border-primary/30 text-primary hover:bg-primary/5">
+                  <Eraser className="h-4 w-4" /> Nova Inspeção
+                </Button>
+
+                {minhasInspecoesDoRoteiro.emAndamento.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[9px] font-black uppercase text-amber-600 tracking-widest px-1">Em Andamento</p>
+                    <div className="space-y-2">
+                      {minhasInspecoesDoRoteiro.emAndamento.map((insp) => (
+                        <div
+                          key={insp.id}
+                          className={cn(
+                            "rounded-2xl border transition-colors flex items-center gap-1 pr-2",
+                            insp.id === currentInspecaoId ? "bg-primary/5 border-primary/30" : "bg-[#FAF8F3] border-[#E4DFD1]"
+                          )}
+                        >
+                          <button type="button" onClick={() => carregarInspecao(insp)} className="flex-1 min-w-0 text-left p-4 rounded-2xl hover:bg-[#F1EEE4]/70 transition-colors flex items-center gap-3">
+                            <Building2 className="h-4 w-4 text-amber-600 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-bold text-[#262420] uppercase truncate">{insp.titulo || "VISTORIA SEM NOME"}</p>
+                              <p className="text-[10px] font-medium text-[#6B6659] italic">Salvo às {insp.updatedAt ? format(new Date(insp.updatedAt), "HH:mm 'de' dd/MM") : "..."}</p>
+                            </div>
+                          </button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <button type="button" className="h-9 w-9 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center shrink-0 transition-colors">
+                                {deletandoDaListaId === insp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                              </button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="rounded-lg">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle className="font-serif text-xl text-[#262420]">Excluir permanentemente?</AlertDialogTitle>
+                                <AlertDialogDescription>Apaga "{insp.titulo || "vistoria sem nome"}" — respostas, fotos e observações. Não é possível desfazer.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteInspecaoDaLista(insp)} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-rose-600 hover:bg-rose-700">Excluir</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {minhasInspecoesDoRoteiro.finalizadas.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[9px] font-black uppercase text-emerald-600 tracking-widest px-1">Finalizadas</p>
+                    <div className="space-y-2">
+                      {minhasInspecoesDoRoteiro.finalizadas.map((insp) => (
+                        <div
+                          key={insp.id}
+                          className={cn(
+                            "rounded-2xl border transition-colors flex items-center gap-1 pr-2",
+                            insp.id === currentInspecaoId ? "bg-primary/5 border-primary/30" : "bg-[#FAF8F3] border-[#E4DFD1]"
+                          )}
+                        >
+                          <button type="button" onClick={() => carregarInspecao(insp)} className="flex-1 min-w-0 text-left p-4 rounded-2xl hover:bg-[#F1EEE4]/70 transition-colors flex items-center gap-3">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-bold text-[#262420] uppercase truncate">{insp.titulo || "VISTORIA SEM NOME"}</p>
+                              <p className="text-[10px] font-medium text-[#6B6659] italic">Concluída {insp.updatedAt ? format(new Date(insp.updatedAt), "dd/MM/yyyy") : ""}</p>
+                            </div>
+                          </button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <button type="button" className="h-9 w-9 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center shrink-0 transition-colors">
+                                {deletandoDaListaId === insp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                              </button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="rounded-lg">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle className="font-serif text-xl text-[#262420]">Excluir permanentemente?</AlertDialogTitle>
+                                <AlertDialogDescription>Apaga "{insp.titulo || "vistoria sem nome"}" — inclusive o histórico do relatório finalizado. Não é possível desfazer.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteInspecaoDaLista(insp)} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-rose-600 hover:bg-rose-700">Excluir</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {minhasInspecoesDoRoteiro.emAndamento.length === 0 && minhasInspecoesDoRoteiro.finalizadas.length === 0 && (
+                  <p className="text-[11px] font-bold text-[#A39D8C] text-center py-2">Nenhuma outra inspeção deste roteiro ainda.</p>
+                )}
             </div>
-            <DialogFooter className="p-8 bg-zinc-50 border-t border-zinc-100 flex gap-3">
-                <Button variant="ghost" onClick={handleStartFresh} className="flex-1 h-12 rounded-xl font-black uppercase text-[10px] text-rose-500 hover:bg-rose-50 gap-2"><Eraser className="h-3.5 w-3.5" /> Novo Zero</Button>
-                <Button onClick={handleResumeDraft} className="flex-[2] h-12 rounded-xl bg-primary hover:bg-primary/90 text-white font-black text-[10px] uppercase tracking-widest shadow-xl">Retomar Agora</Button>
-            </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <SignaturePad isOpen={signingFiscalIndex !== null} onOpenChange={(open) => !open && setSigningFiscalIndex(null)} onSave={(sig) => { if (signingFiscalIndex !== null) { const updated = [...fiscais]; updated[signingFiscalIndex] = { ...updated[signingFiscalIndex], signature: sig }; setFiscais(updated); handleSaveDraft(false); } }} title="Assinatura Fiscal" />
       <SignaturePad isOpen={signingResponsavel} onOpenChange={setSigningResponsavel} onSave={(sig) => { setIdData({...idData, signatureResponsavel: sig}); handleSaveDraft(false); }} title="Ciência Inspecionado" />
+
+      <AlertDialog open={showExitDialog} onOpenChange={(open) => { if (!isExitSaving && !isExitDeleting) setShowExitDialog(open); }}>
+        <AlertDialogContent className="rounded-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-serif text-xl text-[#262420]">Sair sem finalizar?</AlertDialogTitle>
+            <AlertDialogDescription>Esta vistoria ainda não foi finalizada. Salve como rascunho para continuar depois, ou exclua permanentemente se não quer mantê-la.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+            <Button type="button" onClick={handleExitSaveAndLeave} disabled={isExitSaving || isExitDeleting} className="w-full h-11 rounded-xl font-black uppercase text-[11px] tracking-widest gap-2 bg-primary hover:bg-primary/90 text-white">
+              {isExitSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Salvar Rascunho e Sair
+            </Button>
+            <Button type="button" onClick={handleExitDeleteAndLeave} disabled={isExitSaving || isExitDeleting} variant="outline" className="w-full h-11 rounded-xl font-black uppercase text-[11px] tracking-widest gap-2 border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700">
+              {isExitDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Excluir e Sair
+            </Button>
+            <AlertDialogCancel disabled={isExitSaving || isExitDeleting} className="w-full mt-0 rounded-xl font-black uppercase text-[10px] tracking-widest text-[#6B6659] border-none shadow-none hover:bg-[#F1EEE4]">Continuar Editando</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

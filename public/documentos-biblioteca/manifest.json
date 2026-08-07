@@ -1,5 +1,5 @@
 {
-  "version": "2.0.0",
+  "version": "2.1.0",
   "documents": [
     {
       "id": "codigo-sanitario-estadual-pr",
@@ -18,6 +18,15 @@
       "categoria": "RDC",
       "descricao": "Resolução da Diretoria Colegiada da ANVISA que estabelece requisitos de boas práticas para serviços de assistência odontológica e laboratórios de prótese dentária em todo o país.",
       "keywords": "rdc 1002, anvisa, odontologia, boas praticas, biosseguranca, clinica odontologica, protese dentaria"
+    },
+    {
+      "id": "roi-9-1-radiografia-medica",
+      "titulo": "ROI 9.1 — Radiografia Médica (ANVISA)",
+      "path": "/documentos-biblioteca/roi-9-1-radiografia-medica.pdf",
+      "esfera": "federal",
+      "categoria": "Roteiro",
+      "descricao": "Roteiro Objetivo de Inspeção da ANVISA para serviços de radiografia médica (documento 9.1, versão 1.2). É a fonte dos 36 indicadores do roteiro de mesmo nome disponível em Roteiros, avaliados por nota de 0 a 5.",
+      "keywords": "roi, anvisa, radiografia medica, radiologia, raios x, rdc 611, rdc 63, inspecao, indicadores, protecao radiologica, dosimetria"
     }
   ]
 }

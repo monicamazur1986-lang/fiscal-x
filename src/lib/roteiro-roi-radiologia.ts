@@ -1,0 +1,538 @@
+/**
+ * ROI — Roteiro Objetivo de Inspeção da ANVISA: RADIOGRAFIA MÉDICA
+ * (documento 9.1, versão 1.2, de 07/12/2022).
+ *
+ * Estrutura DIFERENTE dos demais roteiros do app: em vez de SIM/NÃO/ND por
+ * item, cada indicador é avaliado numa escala de 0 a 5, e cada nota tem uma
+ * descrição própria do que caracteriza aquele nível. A nota 3 é o cumprimento
+ * da norma; 4 e 5 são práticas acima do exigido; 0 a 2 são graus de não
+ * conformidade — por isso NOTA_CONFORME abaixo.
+ *
+ * Conteúdo extraído do PDF oficial e conferido indicador a indicador (36 no
+ * total, 13 críticos e 23 não críticos). Não editar à mão sem conferir com o
+ * PDF: os textos são a redação legal usada como fundamentação no relatório.
+ */
+
+export interface RoiIndicador {
+  numero: number;
+  /** Nome curto do indicador — é o que o fiscal vê como título na tela. */
+  indicador: string;
+  /** 'C' = crítico, 'NC' = não crítico, conforme a coluna "Crítica" do ROI. */
+  criticidade: 'C' | 'NC';
+  baseLegal: string;
+  /** Índice = nota. Sempre 6 posições (0 a 5). */
+  alternativas: string[];
+}
+
+/**
+ * Nota a partir da qual o indicador é considerado conforme. Abaixo disso o
+ * item entra no relatório como exigência a regularizar.
+ */
+export const NOTA_CONFORME = 3;
+
+export const ROI_RADIOGRAFIA_MEDICA: RoiIndicador[] = [
+  {
+    numero: 1,
+    indicador: 'Alvará Sanitário',
+    criticidade: 'NC',
+    baseLegal: 'Art. 10 da RDC 63/2011',
+    alternativas: [
+      'Não possui Alvará Sanitário.',
+      'Alvará Sanitário vencido, sem pedido de renovação.',
+      'Alvará Sanitário vencido, com pedido de renovação ou em processo inicial de licenciamento.',
+      'Alvará Sanitário atualizado.',
+      'Alvará Sanitário atualizado, com pedido de renovação.',
+      'Solicitou renovação do Alvará Sanitário antes do vencimento nos últimos dois anos.',
+    ],
+  },
+  {
+    numero: 2,
+    indicador: 'Projeto Básico de Arquitetura (PBA) e Projeto de Blindagem',
+    criticidade: 'NC',
+    baseLegal: 'Art. 6º e Art. 7º da RDC 611/2022',
+    alternativas: [
+      'Não possui PBA ou projeto de blindagem.',
+      'O serviço realizou modificações, sem solicitar a VISA e atualizar o PBA.',
+      'O serviço possui PBA atualizado e protocolado na VISA para avaliação.',
+      'O serviço possui Projeto Básico de Arquitetura (PBA) atualizado e aprovado pela Vigilância Sanitária e projeto de blindagem.',
+      'PBA revisado anualmente para verificação de possíveis adequações.',
+      'Existe procedimento interno estabelecendo a necessidade de atualização e aprovação do PBA na VISA antes de qualquer intervenção no serviço.',
+    ],
+  },
+  {
+    numero: 3,
+    indicador: 'Levantamento Radiométrico (LR)',
+    criticidade: 'NC',
+    baseLegal: 'Art. 62, Art. 63 e Art. 64 da RDC 611/2022',
+    alternativas: [
+      'Não dispõe de levantamento radiométrico.',
+      'Levantamento radiométrico com prazo de validade expirado ou apresentando não conformidades sem indicar adequações.',
+      'Levantamento radiométrico realizado, porém a estrutura representada no croquis não coincide com a encontrada no serviço ou houve modificação de equipamento/carga de trabalho ou não atende a qualquer outro requisito.',
+      'Realizado a cada 04 anos ou sempre que houver modificações na infraestrutura, nos equipamentos ou nos processos de trabalho, com assentamentos indicando: croquis da instalação e vizinhanças; identificação do equipamento de raios X; descrição da instrumentação utilizada e da calibração; descrição dos parâmetros utilizados no LR (fatores de uso, carga de trabalho); conclusões; data, identificação, qualificação profissional e assinatura do responsável pelo laudo de LR, e assinatura do responsável legal.',
+      'Realizado em periodicidade inferior a 04 anos.',
+      'Realizado no mínimo a cada 04 anos e obteve resultado da leitura em todos os pontos compatível com níveis de área livre.',
+    ],
+  },
+  {
+    numero: 4,
+    indicador: 'Serviços Itinerantes',
+    criticidade: 'C',
+    baseLegal: 'Art. 75 e Art. 76 da 611/2022',
+    alternativas: [
+      'O serviço não está formalmente vinculado a serviço de radiologia com instalações fixas ou não possui testes de constância.',
+      'Serviço está formalmente vinculado a serviço de radiologia com instalações fixas porém não realizou os testes de constância em todos os locais de parada para atendimento.',
+      'O serviço realizou os testes de constância em todos os locais de parada para atendimento e está vinculado a serviço de radiologia com instalações fixas porém, o instrumento de formalização está vencido.',
+      'O serviço itinerante está formalmente vinculado a serviço de radiologia com instalações fixas e os testes de constância são realizados em cada local de parada para atendimento, antes do início das atividades. Os documentos comprobatórios da realização dos testes são mantidos por cinco anos.',
+      'O serviço itinerante realiza testes de constância em periodicidade definida, dentro do período de cada parada.',
+      'Mesma situação anterior, além de registrar os testes em meio digital, com cópia de segurança (backup) e possibilitar acesso remoto à Vigilância Sanitária.',
+    ],
+  },
+  {
+    numero: 5,
+    indicador: 'Responsável Técnico (RT) pelo Serviço de Radiografia Médica',
+    criticidade: 'NC',
+    baseLegal: 'Art. 13 da RDC 611/2022',
+    alternativas: [
+      'Não possui RT e substituto.',
+      'RT e substituto são profissionais legalmente habilitados, porém não foram formalmente designados pelo responsável legal.',
+      'RT é legalmente habilitado e formalmente designado, mas não possui substituto.',
+      'RT e substituto são profissionais legalmente habilitados e formalmente designados pelo responsável legal.',
+      'RT possui pós lato ou graduação stricto sensu em radiografia médica.',
+      'RT e substituto possuem pós graduação lato ou stricto sensu em radiografia médica.',
+    ],
+  },
+  {
+    numero: 6,
+    indicador: 'Supervisor de Proteção Radiológica',
+    criticidade: 'NC',
+    baseLegal: 'Art. 14 da RDC lato ou 611/2022 em',
+    alternativas: [
+      'Não possui SPR e substituto.',
+      'SPR e substituto são profissionais legalmente habilitados, porém não foram formalmente designados pelo responsável legal.',
+      'SPR é legalmente habilitado e formalmente designado, mas não possui substituto.',
+      'SPR e substituto são profissionais legalmente habilitados designados formalmente pelo responsável legal para assumir a responsabilidade pelas ações relativas a proteção radiológica.',
+      'SPR possui pós lato ou graduação stricto sensu em radiografia médica.',
+      'SPR e substituto possuem pós graduação stricto sensu radiografia médica.',
+    ],
+  },
+  {
+    numero: 7,
+    indicador: 'Dimensionamento da Equipe',
+    criticidade: 'C',
+    baseLegal: 'Art. 12 da RDC 611/2022',
+    alternativas: [
+      'Equipe multiprofissional incompleta.',
+      'Equipe multiprofissional está subdimensionada, comprometendo a realização dos exames.',
+      'Dimensionamento é realizado apenas para a equipe que realiza os exames.',
+      'Possui equipe multiprofissional dimensionada de acordo com seu perfil de demanda.',
+      'Os profissionais que realizam os exames além de legalmente habilitados, possuem nível superior.',
+      'Todos os profissionais que realizam os exames e laudos são especialistas em radiografia médica.',
+    ],
+  },
+  {
+    numero: 8,
+    indicador: 'Gestão de Documentos',
+    criticidade: 'NC',
+    baseLegal: 'Art. 17 da RDC backup) 611/2022',
+    alternativas: [
+      'Os documentos não estão disponíveis ou os assentamentos não são realizados.',
+      'Alguns documentos não estão disponíveis.',
+      'Os documentos e assentamentos estão disponíveis, porém alguns desatualizados.',
+      'Mantém atualizados e disponíveis: PBA e memorial descritivo aprovados pela VISA; relação e registro de todos os procedimentos radiológicos realizados, normas, rotinas, protocolos, protocolos operacionais; inventário dos produtos sujeitos a regime de VISA e de proteção radiológica, com comprovação de regularização junto a ANVISA, quando couber; relação nominal de toda a equipe, suas atribuições, qualificações e cargas horárias; e assentamentos que evidenciam a execução dos Programas de Educação Permanente, de Garantia de Qualidade e de Proteção Radiológica.',
+      'Os documentos estão em meio digital, com cópia de backup). segurança (',
+      'Documentos em meio digital, com cópia de segurança (atualizados anualmente.',
+    ],
+  },
+  {
+    numero: 9,
+    indicador: 'Núcleo de Segurança do Paciente (NSP)',
+    criticidade: 'NC',
+    baseLegal: 'Artigos 4º e 7º inciso XI da RDC 36/2013',
+    alternativas: [
+      'Não possui Núcleo de Segurança do Paciente.',
+      'O Núcleo de Segurança do Paciente está em processo de implantação.',
+      'Possui Núcleo de Segurança do Paciente formalmente constituído pela direção, porém não possui Plano de Segurança do Paciente.',
+      'Possui Núcleo de Segurança do Paciente (NSP), formalmente constituído pela Direção. Possui Plano de Segurança do Paciente e protolocos de identificação do paciente e higienização das mãos.',
+      'Realiza a capacitação dos profissionais do serviço para a execução das atividades previstas nesses protocolos.',
+      'Monitora a adesão dos profissionais do serviço aos protocolos.',
+    ],
+  },
+  {
+    numero: 10,
+    indicador: 'Programa de Garantia de Qualidade-PGQ',
+    criticidade: 'NC',
+    baseLegal: 'Art. 5º e Art. 24 da backup) RDC 611/2022',
+    alternativas: [
+      'Não possui manual e qualquer implementação de PGQ.',
+      'Possui manual mas o PGQ não está implementado.',
+      'Possui manual e o PGQ está implementado parcialmente.',
+      'PGQ implementado e contemplando, no mínimo, o gerenciamento das tecnologias, dos processos e dos riscos inerentes ao serviço de radiografia médica.',
+      'Registros do PGQ em meio digital, com cópia de segurança (backup).',
+      'Registros em meio digital, com cópia de segurança (atualizados anualmente.',
+    ],
+  },
+  {
+    numero: 11,
+    indicador: 'Testes de Aceitação/Constância',
+    criticidade: 'C',
+    baseLegal: 'Art. 28 e Art. 33 da RDC 611/2022; Anexo I da IN 90/2021.',
+    alternativas: [
+      'Serviço não realiza nenhum dos testes de aceitação/const ância ou existe algum teste com resultado em nível de restrição.',
+      'Testes de constância estão com prazo expirado ou foram realizados parcialmente.',
+      'Testes de aceitação ou constância indicam não conformidade e não foram tomadas ações.',
+      'O serviço de radiografia médica realizou os testes de aceitação/constância previstos no Anexo I da IN 90/21, estabeleceu e implantou padrões de qualidade de imagem, garante a sua manutenção, e assegura que os equipamentos são operados apenas dentro das condições de uso estabelecidas nesta Resolução, nas demais normativas aplicáveis, e nas especificações dos fabricantes.',
+      'Realiza os testes de constância em periodicidade inferior ao exigido na norma.',
+      'Mesma situação anterior e suspende o funcionamento do equipamento quando os testes demonstram que está sendo operado nos limites das faixas de tolerância, mesmo antes de atingir o nível de restrição.',
+    ],
+  },
+  {
+    numero: 12,
+    indicador: 'Manutenções dos Equipamentos',
+    criticidade: 'NC',
+    baseLegal: 'Parágrafo único do Art. 28 e inciso IV do Art. 77 da RDC 611/2022; Inciso IX do Art. 23 da RDC 63/2011',
+    alternativas: [
+      'Não realiza manutenções.',
+      'Realiza apenas as manutenções corretivas.',
+      'Realiza manutenções preventivas e corretivas, porém os registros estão com dados incompletos.',
+      'O serviço realiza manutenções preventivas e corretivas e dispõe dos registros de todos os serviços executados no sistema de radiologia diagnóstica, contendo, no mínimo, a identificação do equipamento implicado, o detalhamento do serviço, a identificação do responsável pela execução e a assinatura do representante do serviço de saúde.',
+      'Possui registros das manutenções em meio digital, com cópia de segurança e relatórios mensais das programações e atividades.',
+      'Mesma situação anterior e realiza avaliação anual dos registros das manutenções com elaboração de plano de ação.',
+    ],
+  },
+  {
+    numero: 13,
+    indicador: 'Programa de Educação Permanente (PEP)',
+    criticidade: 'NC',
+    baseLegal: 'Art. 15 da RDC 611/2022',
+    alternativas: [
+      'Não possui Programa de Educação Permanente.',
+      'Possui Programa de Educação Permanente, porém as capacitações não são realizadas com a frequência mínima de um ano.',
+      'Realizam as capacitações com frequência mínima de um ano, porém não realizam avaliações para demonstrar a eficácia das ações de capacitação e treinamento.',
+      'Possui Programa de Educação Permanente implementado para toda a equipe contemplando: capacitações e treinamentos inicial e periódicos, com frequência mínima anual; capacitações e treinamentos teóricos e práticos, baseados em abordagem de riscos, sempre que novos processos, técnicas ou tecnologias forem implementados, ou antes de novas pessoas integrarem os processos; e metodologia de avaliação de forma a demonstrar a eficácia das ações de capacitação e treinamento. As capacitações contemplam, no mínimo as normas, rotinas e procedimentos operacionais; segurança do paciente; gerenciamento de riscos inerentes às tecnologias utilizadas; PGQ; PPR; normas aplicáveis e são registradas contendo data, horário e CH, conteúdo ministrado, nome e a formação do instrutor e dos trabalhadores envolvidos.',
+      'O serviço incentiva a participação dos profissionais em cursos e eventos científicos externos na área de atuação.',
+      'Mesma situação anterior e o PEP é valorizado dentro da instituição sendo item determinante na avaliação de desempenho dos profissionais.',
+    ],
+  },
+  {
+    numero: 14,
+    indicador: 'Programa de Proteção Radiológica (PPR)',
+    criticidade: 'NC',
+    baseLegal: 'Art. 42 da RDC backup) 611/2022',
+    alternativas: [
+      'Não possui Plano de Proteção Radiológica e qualquer implementação do PPR.',
+      'Possui Plano de Proteção Radiológica mas o PPR não está implementado.',
+      'Possui Plano de Proteção Radiológica e o PPR está implementado parcialmente.',
+      'Programa de Proteção Radiológica implementado e contemplando, no mínimo, medidas de prevenção, de controle e de vigilância e monitoramento, para a garantia da segurança e da qualidade dos procedimentos radiológicos.',
+      'Registros do PPR em meio digital, com cópia de segurança (backup).',
+      'Registros em meio digital, com cópia de segurança (atualizados anualmente.',
+    ],
+  },
+  {
+    numero: 15,
+    indicador: 'PGRSS',
+    criticidade: 'NC',
+    baseLegal: 'Art. 23, Inciso X, da RDC 63/2011; Art.2º, Art.5º e inciso XI do Art.6º da RDC 222/2018',
+    alternativas: [
+      'Não possui Plano de Gerenciamento de Resíduos de Serviços de Saúde.',
+      'O Plano de Gerenciamento de Resíduos de Serviços de Saúde está em elaboração.',
+      'O Plano de Gerenciamento de Resíduos de Serviços de Saúde está incompleto e/ou não possui comprovação de capacitação e treinamento dos funcionários.',
+      'Possui Plano de Gerenciamento de Resíduos implementado efetivamente e dispõe de cópia do contrato e licença ambiental vigentes da empresa terceirizada responsável pela destinação final dos RSS.',
+      'O PGRSS está disponível para consulta no setor de radiografia médica.',
+      'O PGRSS é sistematicamente avaliado e ações de conformidade registradas no serviço de saúde.',
+    ],
+  },
+  {
+    numero: 16,
+    indicador: 'Dosimetria Pessoal',
+    criticidade: 'C',
+    baseLegal: 'Art. 66 e Art. 69 da RDC 611/2022',
+    alternativas: [
+      'Não possui contratação de dosimetria pessoal.',
+      'Não possui contratação de dosimetria pessoal para todos os indivíduos ocupacionalmente expostos.',
+      'Todos os indivíduos ocupacionalmente expostos possuem dosímetro, porém não são exclusivos para cada setor ou não realizam investigação nos casos de doses que atingem ou excedem os níveis de investigação.',
+      'Dispõe de dosímetros individuais para todos os indivíduos ocupacionalmente expostos e exclusivos para o setor para o qual foi adquirido. Nos casos de doses efetivas mensais superiores a 20 mSv os resultados da investigação são assentados e comunicados a autoridade sanitária competente. Quando os valores mensais relatados de dose efetiva forem superiores a 100 mSv, o RL providencia avaliação clínica e a realização de exames complementares, incluindo dosimetria citogenética, a critério médico, dos usuários afetados.',
+      'São realizadas trimestralmente avaliações das exposições ocupacionais e ao identificar problemas ou necessidades de melhoria ações são implementadas e registradas.',
+      'São realizadas mensalmente avaliações das exposições ocupacionais e ao identificar problemas ou necessidades de melhoria ações são implementadas e registradas.',
+    ],
+  },
+  {
+    numero: 17,
+    indicador: 'Climatização',
+    criticidade: 'NC',
+    baseLegal: 'Art. 35 da RDC 63/2011, Itens 7.5 e 7.5.1 da Parte III da RDC 50/2002, Artigos 5º, 6º e anexo da Portaria 3523/1998; Art. 1º da Lei 13.589/2018',
+    alternativas: [
+      'Não existe sistema de climatização artificial.',
+      'Existe sistema de climatização artificial, porém visivelmente em más condições de limpeza, manutenção, operação e controle e/ou sistema inadequado (ar condicionado de parede).',
+      'Sistema de climatização em condições adequadas de limpeza, manutenção, operação e controle, porém sem os devidos registros e/ou não existe controle da qualidade do ar conforme normas regulamentadoras e/ou sem um responsável técnico habilitado (quando capacidade acima de 60.000 BTU) e Plano de Manutenção, Operação e Controle (PMOC).',
+      'Sistema de climatização em condições adequadas de limpeza, manutenção, operação e controle com registro. Existe controle da qualidade do ar interno seguindo normas regulamentadoras e Plano de Manutenção, Operação e Controle (PMOC). Para sistemas com capacidade acima de 5 TR (15.000 Kcal/h= 60.000 BTU/H), dispõe de responsável técnico habilitado.',
+      'Mantém PMOC atualizado e cumpre as atividades estipuladas dentro da periodicidade estabelecida, bem como as recomendações a serem adotadas em situações de falha do equipamento e de emergência com os devidos registros.',
+      'Existe um programa de gerenciamento das condições de climatização do serviço de saúde, com relatórios de análise técnica e registro de análise de problemas e ações de melhorias adotadas.',
+    ],
+  },
+  {
+    numero: 18,
+    indicador: 'Sala de Exames de Radiografia Médica',
+    criticidade: 'C',
+    baseLegal: 'Tabela 4.2.12 RDC 50/02; Incisos IV e V do Art. 51 da RDC 611/2022',
+    alternativas: [
+      'Mais de um equipamento de raios X na sala ou sala de espera no interior da sala de exame ou sala de exame utilizada como passagem para outros ambientes.',
+      'Não obedece a distância mínima de 1,5 m de qualquer parede da sala ou barreira de proteção ao ponto de emissão de radiação.',
+      'Existem equipamentos e acessórios no interior da sala de exames além dos indispensáveis à realização dos procedimentos radiológicos.',
+      'Possui apenas um equipamento de raios X e a sala de exames (com comando) ADE, com distâncias mínima entre as bordas ou extremidades do equipamento exceto estativa mural e gerador de todas as paredes da sala igual a: 1 m das bordas laterais da mesa de exames, 0,6 m das demais bordas. Obedece também a distância mínima de 1,5 m de qualquer parede da sala ou barreira de proteção ao ponto de emissão de radiação observando-se sempre os deslocamentos máximos. Dispõe apenas dos equipamentos e acessórios indispensáveis à realização dos procedimentos radiológicos.',
+      'Cumpre os requisitos de distâncias e possui mínimas área > 15 m².',
+      'Além dos requisitos anteriores, possui sistema de passagem dos cassetes/chassis para a sala de processamento/revel ação.',
+    ],
+  },
+  {
+    numero: 19,
+    indicador: 'Comando do Equipamento (F)',
+    criticidade: 'NC',
+    baseLegal: 'Art.54 da RDC 611/2022',
+    alternativas: [
+      'Não permite eficaz comunicação e visualização do paciente, seja por visor ou sistema de observação eletrônico.',
+      'Não permite, na posição de disparo, eficaz comunicação e visualização do paciente, seja por visor ou sistema de observação eletrônico.',
+      'Cabine ou sala de comando permite ao operador, na posição de disparo, eficaz observação visual do paciente, porém não permite eficaz comunicação.',
+      'Cabine ou sala de comando permite ao operador, na posição de disparo, eficaz comunicação e observação visual do paciente mediante sistema de observação eletrônico ou visor de tamanho apropriado. Está posicionada de modo que, durante as exposições, nenhum indivíduo possa adentrar a sala sem ser notado pelo operador. Em caso de sistema de observação eletrônico, possui sistema de reserva ou sistema alternativo para falha eletrônica.',
+      'Cabine ou sala de comando permite visão completa da sala, do paciente e eficaz comunicação.',
+      'Cabine ou sala de comando permite visualização externa e controle dos acessos a sala de exames e comando.',
+    ],
+  },
+  {
+    numero: 20,
+    indicador: 'Orientações de Proteção Radiológica',
+    criticidade: 'NC',
+    baseLegal: 'Art. 53 da RDC 611/2022',
+    alternativas: [
+      'Não dispõe de quadro com as orientações de proteção radiológica na sala de exames e na porta(s) de acesso.',
+      'Dispõe de quadro com orientações de proteção radiológica apenas na sala de exames.',
+      'Dispõe de quadro com orientações de proteção radiológica na sala de exames e porta(s) de acesso, porém com informações incompletas.',
+      'Na sala de exames e na(s) porta(s) de acesso consta, em lugar visível, quadro com as seguintes orientações de proteção radiológica: I - "Paciente, exija e use corretamente vestimenta plumbífera, para sua proteção durante o procedimento radiológico"; II - "Não é permitida a permanência de acompanhantes na sala durante o procedimento radiológico, salvo quando estritamente necessário e autorizado"; III - "Acompanhante, quando houver necessidade de contenção de paciente, exija e use corretamente vestimenta plumbífera, para sua proteção"; IV - "Nesta sala pode permanecer somente 1 (um) paciente de cada vez"; e V - "Mulheres grávidas ou com suspeita de gravidez: informem ao médico ou ao técnico antes do exame".',
+      'O serviço disponibiliza orientações de proteção radiológica no momento de marcação do exame ou durante a espera que antecede a realização do exame.',
+      'Mesma situação anterior e realiza avaliação das estratégias utilizadas para as orientações de proteção radiológica e registra.',
+    ],
+  },
+  {
+    numero: 21,
+    indicador: 'Equipamento de Proteção Individual (proteção radiológica)',
+    criticidade: 'C',
+    baseLegal: 'Art. 57 e Art. 58 da RDC 611/2022',
+    alternativas: [
+      'Não dispõe de nenhum EPI.',
+      'EPI\'s são compartilhados com outros setores.',
+      'EPI\'s são compartilhados entre as salas de radiografia médica.',
+      'Dispõe de equipamentos de proteção individual compatíveis com o tipo de procedimento radiológico e em quantidade suficiente para prover proteção adequada a todos os profissionais e eventuais acompanhantes, quando do uso simultâneo de todas as salas de procedimento. As vestimentas (EPI\'s) para acompanhantes possuem atenuação maior ou igual a 0,25mm equivalente de chumbo.',
+      'Verificados em periodicidade menor que um ano.',
+      'Verificados em periodicidade menor que um ano e substituídos periodicamente independente dos testes.',
+    ],
+  },
+  {
+    numero: 22,
+    indicador: 'Manutenção da Estrutura Física',
+    criticidade: 'NC',
+    baseLegal: 'Inciso VII do Art.23, Art. 36 e Art. 42 da RDC 63/2011',
+    alternativas: [
+      'Não realiza ações de manutenção preventiva e corretiva das instalações prediais e/ou as instalações físicas estão muito degradadas.',
+      'Existem evidências de manutenções corretivas ou preventivas, mas não há registro.',
+      'Há registro apenas das manutenções corretivas.',
+      'Realiza ações de manutenção preventiva e corretiva das instalações prediais, de forma própria ou terceirizada e mantém disponível documentação e registro. As instalações físicas dos ambientes externos e internos estão em boas condições de conservação, segurança, organização, conforto e limpeza.',
+      'Possui plano de manutenção predial preventiva e corretiva, atualizado periodicamente.',
+      'Além do plano de manutenção, possui profissional responsável por avaliar periodicamente as condições da estrutura física.',
+    ],
+  },
+  {
+    numero: 23,
+    indicador: 'Proteção e Guarda dos Cassetes/Chassis na Sala de Exames (C e CR)',
+    criticidade: 'NC',
+    baseLegal: 'Art. 54 da RDC 63/2011',
+    alternativas: [
+      'Guarda dos cassetes/chassis no chão ou expostos diretamente a radiação espalhada.',
+      'Guarda todos os cassetes/chassis em local próximo ao equipamento (gavetas, armários etc.), mas sem blindagem adequada.',
+      'Apenas os chassis/cassetes específicos de cada exame são colocados ao lado do equipamento, sendo expostos a radiação espalhada.',
+      'Guarda os cassetes/chassis no interior da sala com proteção adequada.',
+      'Guarda apenas os cassetes/chassis de cada procedimento e com proteção adequada.',
+      'Todos os cassetes/chassis ficam no porta- chassis, com proteção adequada.',
+    ],
+  },
+  {
+    numero: 24,
+    indicador: 'Uso e Guarda dos Dosímetros',
+    criticidade: 'NC',
+    baseLegal: 'Art. 65 e Art. 66 da RDC 611/2022',
+    alternativas: [
+      'Não utiliza. Ou não são de uso individual.',
+      'Guarda os dosímetros e o padrão em local que não é área livre ou armazena os dosímetros individuais e padrão em locais distintos.',
+      'O dosímetro é de uso único mas o profissional atua em vários setores.',
+      'Cada dosímetro é utilizado por único usuário, exclusivamente no serviço de saúde ou setor para o qual foi adquirido. Quando não está em uso é mantido junto ao dosímetro padrão em local seguro da área livre.',
+      'Guarda em local seguro classificado como área livre, com proteção e acesso apenas para os usuários.',
+      'Mesma condição anterior e possui dosímetros de área para monitorar os ambientes.',
+    ],
+  },
+  {
+    numero: 25,
+    indicador: 'Registro do Equipamento',
+    criticidade: 'C',
+    baseLegal: 'Art. 25 da RDC 611/2022 e Art. 11 da RDC 579/2021',
+    alternativas: [
+      'Equipamento produzido após o ano 2000 sem nunca ter possuído registro na ANVISA.',
+      'Sem identificação do registro ou do período comercializado.',
+      'Equipamento e componentes com registro, mas de diferentes fabricantes, sem relatório de aprovação do fabricante.',
+      'Equipamento regularizado junto a ANVISA.',
+      'Equipamento original e está no período de validade do registro.',
+      'Equipamento regularizado junto a ANVISA, em condições de uso e com monitoramento, pelo fabricante, em tempo real.',
+    ],
+  },
+  {
+    numero: 26,
+    indicador: 'Indicações do Painel',
+    criticidade: 'C',
+    baseLegal: 'Art. 5º e Art 6º da IN 90/2021',
+    alternativas: [
+      'Equipamento não possui indicação no painel de controle de nenhum dos parâmetros básicos.',
+      'Equipamento não possui indicação de dois ou mais parâmetros.',
+      'Equipamento não possui indicação no painel de apenas um dos parâmetros básicos.',
+      'Os parâmetros operacionais, tais como tensão, filtração, posição do ponto focal, distância fonte receptor de imagem, tamanho de campo (equipamentos com DFR constante), tempo e corrente do tubo ou seu produto, estão claramente indicados no painel de controle do equipamento. Caso possua Controle Automático de Exposição, o painel de controle possui indicação de quando esse modo está em uso.',
+      'Além da indicação dos parâmetros básicos, o painel de controle do equipamento exibe a dose do exame.',
+      'Os parâmetros operacionais de cada exame são salvos automaticamente.',
+    ],
+  },
+  {
+    numero: 27,
+    indicador: 'Sistema de Colimação',
+    criticidade: 'C',
+    baseLegal: 'Inciso IV do Art. 2º e Incisos I e II do Art 11da IN 90/2021',
+    alternativas: [
+      'Equipamento sem luz de campo ou sem sistema de colimação ou um desses dispositivos não funcionam.',
+      'Indicação luminosa difere do campo de radiação podendo haver perda de informação da região de interesse clínico.',
+      'Indicação luminosa difere do campo de radiação, mas não existe perda de informação da região de interesse clínico.',
+      'Possui diafragma regulável com localização luminosa, para limitar o campo de radiação à região de interesse clínico.',
+      'Equipamento possui sistema automático para restringir campo de radiação ao tamanho do receptor de imagem.',
+      'Equipamento possui sistema automático de colimação.',
+    ],
+  },
+  {
+    numero: 28,
+    indicador: 'Grade Antidifusora (F)',
+    criticidade: 'C',
+    baseLegal: 'Inciso XI do Art. 2º e inciso V do Art. 11 da IN 90/2021',
+    alternativas: [
+      'Mesa bucky ou bucky mural sem grade antidifusora.',
+      'Possui mesa bucky e bucky mural com grade antidifusora, porém sem remoção em equipamentos para pediatria.',
+      'Mesa bucky ou bucky mural com grade antidifusora móvel, mas sem acionamento do movimento.',
+      'Possui mesa bucky e bucky mural com grade antidifusora, com possibilidade de remoção em equipamentos para pediatria.',
+      'Mesa bucky e bucky mural com grade antidifusora fixa.',
+      'Mesa bucky e bucky mural com grade antidifusora e dispositivo automático de retirada da grade em equipamentos para pediatria.',
+    ],
+  },
+  {
+    numero: 29,
+    indicador: 'Cabo Disparador (M)',
+    criticidade: 'C',
+    baseLegal: 'Inciso VII do Art. 2º e Inciso VII do Art. 11 da IN 90/2021',
+    alternativas: [
+      'Equipamento móvel sem cabo disparador.',
+      'Equipamento móvel dispõe de cabo disparador com comprimento menor que 1 metro.',
+      'Equipamento móvel dispõe de cabo disparador com comprimento menor que 2 metros.',
+      'Equipamento móvel dispõe de cabo disparador com comprimento mínimo de 2 metros.',
+      'Cabo disparador com comprimento superior a 2 metros.',
+      'Equipamento com dispositivo que somente permite o disparo com o cabo a 2 metros.',
+    ],
+  },
+  {
+    numero: 30,
+    indicador: 'Realização de Exames em Ambiente Coletivo (M)',
+    criticidade: 'NC',
+    baseLegal: 'Art. 60 da RDC 611/2022',
+    alternativas: [
+      'Não dispõe de barreiras protetoras e realiza exames em ambiente coletivo mesmo quando é possível remover o paciente até a sala de raios X fixo.',
+      'Realiza exames em ambiente coletivo mesmo quando é possível remover o paciente até a sala de raios X fixo e não dispõe das barreiras protetoras para todos os pacientes.',
+      'Realiza exames em ambiente coletivo mesmo quando é possível remover o paciente até a sala de raios X fixo, mas dispõe das barreiras protetoras com, no mínimo, 0,5 mm equivalentes de chumbo.',
+      'A realização de procedimentos em leitos hospitalares ou ambientes coletivos de internação, somente é permitida quando for clinicamente inaceitável transferir o paciente para instalação com equipamento fixo. Há garantia que os demais pacientes que não puderem ser removidos do ambiente estejam protegidos da radiação espalhada por barreira protetora com, no mínimo, 0,5 mm equivalentes de chumbo.',
+      'Remove os demais pacientes do ambiente ou os posiciona a mais de 2 m do ponto de emissão da radiação.',
+      'Possui cortina plumbífera possibilitando circundar toda a área do exame.',
+    ],
+  },
+  {
+    numero: 31,
+    indicador: 'Processamento Convencional e Câmara Escura (C)',
+    criticidade: 'C',
+    baseLegal: 'Art. 82 e Anexo I da IN 90/2021',
+    alternativas: [
+      'Velando filme ou é realizado processamento manual dos filmes radiográficos.',
+      'Pouca entrada de luz pelo teto ou laterais da porta ou da processadora, mas não velam o filme.',
+      'Pouca entrada de luz por baixo da porta ou regiões de baixa altura e não velam o filme.',
+      'Sem entrada de luz externa.',
+      'Luz vermelha específica para câmara escura e interruptor de luz clara em local distante da luz vermelha ou dispõe de cuba profunda para higienização da processadora.',
+      'Porta com dispositivo para acionar luz clara apenas quando aberta e luz vermelha, quando fechada.',
+    ],
+  },
+  {
+    numero: 32,
+    indicador: 'Integridade dos Chassis e Cassetes (C e CR)',
+    criticidade: 'NC',
+    baseLegal: 'Anexo I da IN 90/2021',
+    alternativas: [
+      'Chassis/cassetes com danos que comprometem o fechamento.',
+      'Chassis/cassetes íntegros, mas com sujidade que podem provocar artefatos.',
+      'Chassis/cassetes, com sujidade, mas sem artefatos.',
+      'Chassis e cassetes íntegros.',
+      'Chassis/cassetes, limpos, numerados e com registro semanal da limpeza.',
+      'Mesma condição anterior e com programa de substituição.',
+    ],
+  },
+  {
+    numero: 33,
+    indicador: 'Efetividade do Ciclo de Apagamento F/M(CR/DR)',
+    criticidade: 'NC',
+    baseLegal: 'Anexo I da IN 90/2021',
+    alternativas: [
+      'Várias imagens residuais ou imagem residual em todas as placas.',
+      'Uma imagem residual bem visível.',
+      'Presença de uma imagem residual tênue.',
+      'Ausência de imagem residual.',
+      'Verificação diária de imagens residuais em todas as placas.',
+      'Utilização de softwares para detecção de imagens residuais.',
+    ],
+  },
+  {
+    numero: 34,
+    indicador: 'Iluminância da Sala de Laudos',
+    criticidade: 'NC',
+    baseLegal: 'Art. 9º da RDC 611/2022 e Anexo I da IN 90/2021 50 lx.',
+    alternativas: [
+      'Não possui laudo indicando a iluminância da sala.',
+      'Possui laudo indicando não conformidade na iluminância da sala.',
+      'Possui laudo, porém está com prazo de validade expirado.',
+      'A iluminação da sala de laudos é planejada de modo a não prejudicar a avaliação da imagem e possui laudo indicando iluminância ≤ 50 lx.',
+      'Há dispositivo para controle da iluminância.',
+      'Iluminação da sala de laudos é automatizada, permitindo a programação da iluminância para valores ≤',
+    ],
+  },
+  {
+    numero: 35,
+    indicador: 'Negatoscópios ou Monitores para Diagnóstico ou Laudo',
+    criticidade: 'NC',
+    baseLegal: 'Art. 74 da RDC 611/2021 e Anexo I da IN 90/2021',
+    alternativas: [
+      'Utiliza monitores convencionais, não específicos para laudo.',
+      'Os monitores ou negatoscópios apresentam danos na região de visualização da imagem ou não possuem os testes de luminância.',
+      'Os monitores ou negatoscópios apresentam danos fora da região de visualização da imagem ou possuem não conformidades no relatório.',
+      'Os monitores e negatoscópios utilizados para laudo são específicos para esse fim, compatíveis com as características das imagens da modalidade assistencial e possuem luminância mínima de 170 e 1500 2 cd/m, respectivamente, conforme laudo comprobatório.',
+      'Utiliza monitores e negatoscópios específicos e realiza verificações diárias de qualidade.',
+      'Utiliza monitores e negatoscópios específicos e em duplicidade.',
+    ],
+  },
+  {
+    numero: 36,
+    indicador: 'Telerradiologia',
+    criticidade: 'C',
+    baseLegal: 'Art. 71, Art. 72, Art. 73 da RDC 611/2022',
+    alternativas: [
+      'Fotografa, filma ou utiliza escâner não específico para exames radiológicos ou não utiliza protocolo DICOM/HL7 ou não possui sistema de armazenamento de imagens digitais e imprime as imagens apenas em papel ou em filmes apenas em formato reduzido.',
+      'O serviço não possibilita acesso a informações clínicas adicionais necessárias para o procedimento radiológico.',
+      'O serviço não possibilita acesso a estudos e relatórios anteriores.',
+      'Serviço dispõe de infraestrutura tecnológica apropriada ao armazenamento, manuseio, transmissão, confidencialidade e privacidade dos dados e utiliza protocolos de comunicação, formato dos arquivos e algoritmos de compressão, relativos a procedimentos telerradiológicos, de acordo com o padrão atual DICOM e HL7. Possibilita acesso a estudos e relatórios anteriores, além de informações clínicas adicionais necessárias para o procedimento radiológico.',
+      'Além das versões impressas, os exames e laudos ficam disponíveis ao paciente em meio digital.',
+      'Faz uso de inteligência artificial, por meio da tecnologia de aprendizado de máquina, servindo de apoio ao médico radiologista na tomada de decisão sobre o diagnóstico.',
+    ],
+  },
+];
