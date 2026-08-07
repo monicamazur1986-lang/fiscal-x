@@ -1259,5 +1259,158 @@
         "keywords": "saúde clínica consultório hospital"
       }
     ]
+  },
+  "SALAO_BELEZA": {
+    "titulo": "Resolução SESA nº 700/2013",
+    "descricao": "Salão de Beleza, Barbearia e Depilação",
+    "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Servicos-de-Saude",
+    "biblioteca": { "esfera": "estadual", "categoria": "Resolução" },
+    "artigos": [
+      {
+        "id": "sesa-700-13-art5",
+        "label": "Art. 5º da Resolução SESA nº 700/2013",
+        "texto": "A Licença Sanitária do serviço de salão de beleza e/ou depilação será fornecida pela Vigilância Sanitária Estadual ou Municipal.",
+        "keywords": "salão beleza barbearia depilação licença sanitária alvará funcionamento sem licença"
+      },
+      {
+        "id": "sesa-700-13-art4",
+        "label": "Art. 4º da Resolução SESA nº 700/2013",
+        "texto": "O serviço de salão de beleza e/ou depilação deve dispor de produtos condizentes com o número de indivíduos atendidos, o tipo de procedimento realizado e o processo de esterilização adotado.",
+        "keywords": "salão beleza barbearia depilação produtos insuficientes quantidade materiais"
+      },
+      {
+        "id": "sesa-700-13-anexoII-32",
+        "label": "Anexo II, item 3.2 da Resolução SESA nº 700/2013",
+        "texto": "O estabelecimento de salão de beleza, barbearia e/ou depilação deve possuir autoclave para esterilização dos materiais, sendo proibido o uso de fornos elétricos, estufas, equipamentos à base de radiação ultravioleta e a esterilização química por imersão.",
+        "keywords": "salão beleza barbearia depilação autoclave esterilização estufa forno elétrico ultravioleta imersão química sem autoclave"
+      },
+      {
+        "id": "sesa-700-13-anexoII-23",
+        "label": "Anexo II, item 2.3 da Resolução SESA nº 700/2013",
+        "texto": "Na utilização de luvas pelas manicures/pedicures deve ser realizada a troca a cada cliente, com prévia higienização das mãos.",
+        "keywords": "salão beleza manicure pedicure luvas troca higienização mãos"
+      },
+      {
+        "id": "sesa-700-13-anexoII-24",
+        "label": "Anexo II, item 2.4 da Resolução SESA nº 700/2013",
+        "texto": "Todos os produtos cosméticos e saneantes utilizados devem estar regularizados junto à ANVISA/Ministério da Saúde e dentro do prazo de validade.",
+        "keywords": "salão beleza produtos cosméticos vencidos validade anvisa sem registro"
+      },
+      {
+        "id": "sesa-700-13-anexoII-51",
+        "label": "Anexo II, item 5.1 da Resolução SESA nº 700/2013",
+        "texto": "As lâminas e navalhas utilizadas no serviço de cabeleireiro e barbeiro devem ser descartadas após cada uso.",
+        "keywords": "barbearia lâmina navalha descarte reutilização barbeiro corte"
+      },
+      {
+        "id": "sesa-700-13-anexoII-78",
+        "label": "Anexo II, item 7.8 da Resolução SESA nº 700/2013",
+        "texto": "A cera depilatória é de uso exclusivo e deve ser descartada após o uso, sendo proibida a sua reutilização.",
+        "keywords": "depilação cera reutilização descarte uso exclusivo"
+      },
+      {
+        "id": "sesa-700-13-anexoII-14",
+        "label": "Anexo II, item 1.4 da Resolução SESA nº 700/2013",
+        "texto": "O estabelecimento deve dispor de lavatório de mãos provido com sabonete líquido, papel toalha e lixeira sem tampa ou com tampa de acionamento por pedal ou automático na área de atendimento.",
+        "keywords": "salão beleza lavatório mãos sabonete lixeira higiene"
+      },
+      {
+        "id": "sesa-700-13-art9",
+        "label": "Art. 9º da Resolução SESA nº 700/2013",
+        "texto": "Os produtos passíveis de processamento podem ser terceirizados para empresa processadora, desde que esta esteja regularizada junto aos órgãos sanitários, mediante contrato de prestação de serviço.",
+        "keywords": "salão beleza terceirização esterilização contrato empresa processadora"
+      },
+      {
+        "id": "sesa-700-13-art8",
+        "label": "Art. 8º da Resolução SESA nº 700/2013",
+        "texto": "O não cumprimento dos dispositivos desta Resolução implicará na aplicação das penalidades previstas na Lei Estadual nº 13.331, de 23 de novembro de 2001, e/ou legislação específica estadual e municipal que estabeleça os ritos do Processo Administrativo Sanitário.",
+        "keywords": "salão beleza penalidade sanção processo administrativo sanitário"
+      }
+    ]
+  },
+  "FARMACIA": {
+    "titulo": "RDC ANVISA nº 44/2009",
+    "descricao": "Boas Práticas Farmacêuticas para Farmácias e Drogarias",
+    "biblioteca": { "esfera": "federal", "categoria": "RDC" },
+    "artigos": [
+      {
+        "id": "rdc-44-09-art2",
+        "label": "Art. 2º da RDC ANVISA nº 44/2009",
+        "texto": "As farmácias e drogarias devem possuir os seguintes documentos no estabelecimento: Autorização de Funcionamento de Empresa (AFE) expedida pela Anvisa; Autorização Especial de Funcionamento (AE) para farmácias, quando aplicável; Licença ou Alvará Sanitário expedido pelo órgão Estadual ou Municipal de Vigilância Sanitária; Certidão de Regularidade Técnica, emitida pelo Conselho Regional de Farmácia; e Manual de Boas Práticas Farmacêuticas.",
+        "keywords": "farmácia drogaria documentos afe licença alvará sanitário certidão regularidade técnica manual boas práticas"
+      },
+      {
+        "id": "rdc-44-09-art3",
+        "label": "Art. 3º da RDC ANVISA nº 44/2009",
+        "texto": "As farmácias e as drogarias devem ter, obrigatoriamente, a assistência de farmacêutico responsável técnico ou de seu substituto, durante todo o horário de funcionamento do estabelecimento.",
+        "keywords": "farmácia drogaria sem farmacêutico responsável técnico ausente funcionamento"
+      },
+      {
+        "id": "rdc-44-09-art30",
+        "label": "Art. 30 da RDC ANVISA nº 44/2009",
+        "texto": "Somente podem ser adquiridos produtos regularizados junto à Anvisa, conforme legislação vigente.",
+        "keywords": "farmácia produto sem registro anvisa irregular"
+      },
+      {
+        "id": "rdc-44-09-art37",
+        "label": "Art. 37 da RDC ANVISA nº 44/2009",
+        "texto": "O estabelecimento que realizar dispensação de medicamentos sujeitos a controle especial deve dispor de sistema segregado (armário resistente ou sala própria) com chave para o seu armazenamento, sob a guarda do farmacêutico.",
+        "keywords": "farmácia medicamento controle especial armário chave armazenamento tarja preta psicotrópico"
+      },
+      {
+        "id": "rdc-44-09-art38",
+        "label": "Art. 38 da RDC ANVISA nº 44/2009",
+        "texto": "Os produtos violados, vencidos, sob suspeita de falsificação, corrupção, adulteração ou alteração devem ser segregados em ambiente seguro e diverso da área de dispensação e identificados quanto a sua condição e destino, de modo a evitar sua entrega ao consumo.",
+        "keywords": "farmácia produto vencido violado adulterado falsificado segregação validade expirada"
+      },
+      {
+        "id": "rdc-44-09-art40",
+        "label": "Art. 40, §1º da RDC ANVISA nº 44/2009",
+        "texto": "Os medicamentos deverão permanecer em área de circulação restrita aos funcionários, não sendo permitida sua exposição direta ao alcance dos usuários do estabelecimento.",
+        "keywords": "farmácia medicamento exposto alcance balcão livre acesso público"
+      },
+      {
+        "id": "rdc-44-09-art43",
+        "label": "Art. 43 da RDC ANVISA nº 44/2009",
+        "texto": "Os medicamentos sujeitos à prescrição somente podem ser dispensados mediante apresentação da respectiva receita.",
+        "keywords": "farmácia venda sem receita medicamento controlado prescrição obrigatória"
+      },
+      {
+        "id": "rdc-44-09-art45",
+        "label": "Art. 45 da RDC ANVISA nº 44/2009",
+        "texto": "Não podem ser dispensados medicamentos cujas receitas estiverem ilegíveis ou que possam induzir a erro ou confusão.",
+        "keywords": "farmácia receita ilegível rasurada dispensação indevida"
+      },
+      {
+        "id": "rdc-44-09-art50",
+        "label": "Art. 50 da RDC ANVISA nº 44/2009",
+        "texto": "É vedada a captação de receitas contendo prescrições magistrais e oficinais em drogarias, ervanárias e postos de medicamentos, ainda que em filiais da mesma empresa, bem como a intermediação entre empresas.",
+        "keywords": "drogaria captação receita manipulada magistral vedado"
+      },
+      {
+        "id": "rdc-44-09-art54",
+        "label": "Art. 54 da RDC ANVISA nº 44/2009",
+        "texto": "É vedada a utilização de imagens, propaganda, publicidade e promoção de medicamentos de venda sob prescrição médica em qualquer parte do sítio eletrônico.",
+        "keywords": "farmácia propaganda publicidade medicamento tarjado prescrição vedada"
+      },
+      {
+        "id": "rdc-44-09-art90",
+        "label": "Art. 90 da RDC ANVISA nº 44/2009",
+        "texto": "É vedado utilizar qualquer dependência da farmácia ou da drogaria como consultório ou outro fim diverso do licenciamento.",
+        "keywords": "farmácia consultório uso indevido dependência finalidade diversa"
+      },
+      {
+        "id": "rdc-44-09-art97",
+        "label": "Art. 97 da RDC ANVISA nº 44/2009",
+        "texto": "As farmácias e drogarias devem possuir Plano de Gerenciamento de Resíduos de Serviços de Saúde – PGRSS, conforme legislação específica.",
+        "keywords": "farmácia pgrss resíduos plano gerenciamento sem plano"
+      },
+      {
+        "id": "rdc-44-09-art99",
+        "label": "Art. 99 da RDC ANVISA nº 44/2009",
+        "texto": "O descumprimento das disposições contidas nesta Resolução constitui infração sanitária, nos termos da Lei nº 6.437, de 20 de agosto de 1977, sem prejuízo das responsabilidades civil, administrativa e penal cabíveis.",
+        "keywords": "farmácia infração sanitária penalidade descumprimento"
+      }
+    ]
   }
 }

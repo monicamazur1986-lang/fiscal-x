@@ -67,9 +67,16 @@ const index = new MiniSearch<IndexedArticle>({
 });
 index.addAll(allArticles);
 
-function matchesPreference(lawKey: string, pref: LawPreference): boolean {
-  if (pref === 'municipal') return lawKey.includes('MUNICIPAL');
-  if (pref === 'estadual') return lawKey.includes('ESTADUAL');
+// Antes checava se lawKey continha literalmente "MUNICIPAL"/"ESTADUAL" — só a
+// LEI_MUNICIPAL_2276_2017 e a LEI_ESTADUAL_13331_2001 batiam com isso. Toda
+// legislação de nicho (ODONTOLOGIA, ALIMENTOS, ILPI, SALAO_BELEZA...) nunca
+// aparecia quando o fiscal filtrava por "Código Estadual" ou "Código
+// Municipal" — só entrava em "Base Integral". A distinção que realmente
+// importa já existe por artigo: tem `municipioId` = é lei municipal; não tem
+// = é estadual/federal (SESA, ANVISA), vale pra qualquer fiscal do estado.
+function matchesPreference(artMunicipioId: string | undefined, pref: LawPreference): boolean {
+  if (pref === 'municipal') return !!artMunicipioId;
+  if (pref === 'estadual') return !artMunicipioId;
   return true;
 }
 
@@ -102,7 +109,7 @@ export function searchLegislacao(
   for (const r of results) {
     const art = allArticles.find(a => a.id === r.id);
     if (!art) continue;
-    if (!matchesPreference(art.lawKey, pref)) continue;
+    if (!matchesPreference(art.municipioId, pref)) continue;
     if (!matchesMunicipio(art.municipioId, municipioId)) continue;
     (GENERAL_LAW_KEYS.has(art.lawKey) ? general : specific).push({ art, score: r.score });
   }

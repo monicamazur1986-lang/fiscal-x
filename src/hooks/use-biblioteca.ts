@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { LegislacaoDocumento } from '@/lib/types';
+import { documentosDaLegislacao } from '@/lib/legislacao-biblioteca';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // pdfjs-dist 4.x só publica o worker como ES module (.mjs) — precisa estar em
@@ -121,7 +122,12 @@ export function useBiblioteca(municipioId?: string) {
         const cachedData = localStorage.getItem(localStorageKey);
         if (cachedData) {
           setLoadingMessage('Carregando do cache local...');
-          setDocuments(JSON.parse(cachedData));
+          // As leis do legislacao.json entram DEPOIS do cache, nunca dentro
+          // dele: são um import estático (custo zero pra montar) e, guardadas
+          // no cache, ficariam congeladas na versão do manifest de PDFs — uma
+          // lei nova só apareceria se alguém lembrasse de subir a "version"
+          // do manifest, que não tem nada a ver com ela.
+          setDocuments([...JSON.parse(cachedData), ...documentosDaLegislacao]);
           setLoading(false);
           return;
         }
@@ -134,7 +140,9 @@ export function useBiblioteca(municipioId?: string) {
         : [];
 
       const allDocs = [...rootDocs, ...municipalDocs];
-      setDocuments(allDocs);
+      setDocuments([...allDocs, ...documentosDaLegislacao]);
+      // Só os documentos extraídos de PDF vão pro cache — o custo que o cache
+      // existe pra evitar é o do pdf.js, não o do import estático.
       localStorage.setItem(localStorageKey, JSON.stringify(allDocs));
       localStorage.setItem(versionKey, combinedVersion);
       setLoadingMessage('Biblioteca carregada!');
