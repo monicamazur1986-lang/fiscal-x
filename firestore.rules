@@ -80,7 +80,11 @@ service cloud.firestore {
         ) ||
         (
           request.auth.uid == userId &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL', 'fcmTokens'])
+          // roteiroTextos = padrão pessoal de introdução/conclusão dos
+          // relatórios de roteiro (ver UserProfile em src/lib/types.ts). Segue
+          // valendo a restrição por lista: é ela que impede o próprio usuário
+          // de mexer em role, isAuthorized, status ou municipioId.
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL', 'fcmTokens', 'roteiroTextos'])
         )
       );
 

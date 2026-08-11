@@ -26,7 +26,7 @@ import { useIntimacoes } from "@/hooks/use-intimacoes"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useAuth } from "@/hooks/use-auth"
 import { auth as firebaseAuth } from "@/lib/firebase"
-import { intimacaoSchema, DEFAULT_PRAZO_TEXT, INTERDICAO_PRAZO_TEXT, APREENSAO_PRAZO_TEXT } from "@/lib/schema"
+import { intimacaoSchema, prazoTextoDoTipo, atoTextoDoTipo } from "@/lib/schema"
 import { Intimacao, Autoridade } from "@/lib/types"
 import { Label } from "@/components/ui/label"
 import { SignaturePad } from "./signature-pad"
@@ -182,10 +182,17 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             tipoTermo: defaultValues?.tipoTermo || "TERMO DE INTIMAÇÃO",
             comarca: defaultValues?.comarca || config.municipioNome || "PRUDENTÓPOLIS",
             autoridades: defaultValues?.autoridades || [],
-            teor: defaultValues?.teor || "",
+            // Termos sem prazo (interdição, apreensão…) já abrem com o texto do
+            // ato no campo de objeto — quem entra pelo card do tipo nunca passa
+            // por handleTipoTermoChange, e o documento abriria em branco.
+            teor: defaultValues?.teor || atoTextoDoTipo(defaultValues?.tipoTermo || "TERMO DE INTIMAÇÃO"),
             legislacaoBase: defaultValues?.legislacaoBase || "",
             recusouAssinar: defaultValues?.recusouAssinar || false,
-            prazo: defaultValues?.prazo || DEFAULT_PRAZO_TEXT,
+            // O texto tem que nascer conforme o tipo: quem chega pelo card de
+            // "Termo de Intimação" já entra com o tipo definido e nunca dispara
+            // handleTipoTermoChange, então antes o documento abria com o texto
+            // de defesa prévia do auto de infração.
+            prazo: defaultValues?.prazo || prazoTextoDoTipo(defaultValues?.tipoTermo || "TERMO DE INTIMAÇÃO"),
             dataIntimacao: defaultValues?.dataIntimacao || new Date(),
             dataRecebimento: defaultValues?.dataRecebimento ? new Date(defaultValues.dataRecebimento) : undefined,
             dataDocumento: defaultValues?.dataDocumento || format(new Date(), "dd/MM/yyyy"),
@@ -241,14 +248,17 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
         }
     }, [profile, loadingIntimacoes, getValues, setValue, generateNewNumeroProcesso]);
 
-    // Interdição não abre prazo de defesa (é uma determinação); Apreensão remete
-    // o prazo de defesa ao Auto de Infração anexo. Só troca o texto se o fiscal
-    // ainda não tiver editado esse campo manualmente.
+    // Cada tipo escreve num campo diferente: quem abre prazo (auto de infração,
+    // intimação, penalidade) recebe o texto no campo de prazo; os demais
+    // (interdição, desinterdição, apreensão, inutilização) não têm bloco de
+    // prazo, e o conteúdo do ato vai no campo de objeto — ver
+    // src/lib/autuacao-estrutura.ts. Só preenche o objeto se ainda estiver
+    // vazio, pra nunca apagar o que o fiscal escreveu.
     const handleTipoTermoChange = (value: string) => {
-        if (prazoEditadoManualmenteRef.current) return;
-        if (value === 'TERMO DE INTERDIÇÃO') setValue('prazo', INTERDICAO_PRAZO_TEXT);
-        else if (value === 'TERMO DE APREENSÃO') setValue('prazo', APREENSAO_PRAZO_TEXT);
-        else setValue('prazo', DEFAULT_PRAZO_TEXT);
+        if (!prazoEditadoManualmenteRef.current) setValue('prazo', prazoTextoDoTipo(value));
+        const textoDoAto = atoTextoDoTipo(value);
+        const objetoAtual = (getValues('teor') || '').replace(/<br\s*\/?>/gi, '').trim();
+        if (textoDoAto && !objetoAtual) setValue('teor', textoDoAto);
     };
 
     // Gera o documento vinculado (anexo) com os dados do estabelecimento,
@@ -260,9 +270,10 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
         const novoNumero = await generateNewNumeroProcesso();
         const main = getValues();
         const base = intimacaoSchema.parse({});
-        const prazoAnexo = tipoAnexo === 'TERMO DE INTERDIÇÃO' ? INTERDICAO_PRAZO_TEXT
-            : tipoAnexo === 'TERMO DE APREENSÃO' ? APREENSAO_PRAZO_TEXT
-            : DEFAULT_PRAZO_TEXT;
+        const prazoAnexo = prazoTextoDoTipo(tipoAnexo);
+        // O anexo nasce com o texto do ato já preenchido quando é um termo sem
+        // prazo (interdição/apreensão gerados a partir do Auto de Infração).
+        const objetoAnexo = atoTextoDoTipo(tipoAnexo);
         anexoMethods.reset({
             ...base,
             tipoTermo: tipoAnexo,
@@ -284,7 +295,10 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             municipioId: main.municipioId,
             dataDocumento: main.dataDocumento,
             horaDocumento: main.horaDocumento,
-            teor: main.teor,
+            // Auto de Infração herda o relato dos fatos do documento de origem;
+            // um termo sem prazo (interdição/apreensão) não — nele esse campo é
+            // o texto do próprio ato, não a descrição da infração.
+            teor: objetoAnexo || main.teor,
             legislacaoBase: main.legislacaoBase,
         });
         // Usa o replace() do próprio useFieldArray (em vez de incluir "autoridades"

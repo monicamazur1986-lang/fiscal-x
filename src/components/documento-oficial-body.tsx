@@ -17,11 +17,23 @@ import { AssistenteIAFormDialog } from "./assistente-ia-form-dialog"
 import { Textarea } from "./ui/textarea"
 import type { MunicipalityConfig } from "@/hooks/use-app-config"
 import { sanitizeHtml } from "@/lib/sanitize-html"
+import { estruturaDoTipo } from "@/lib/autuacao-estrutura"
 
 export type IntimacaoFormValues = z.infer<typeof intimacaoSchema>
 export type SignatureTargetType = 'fiscal' | 'responsavel' | 'responsavelTecnico' | 'testemunha1' | 'testemunha2'
 
-const termoOptions = ["TERMO DE INTIMAÇÃO", "AUTO DE INFRAÇÃO", "TERMO DE APREENSÃO", "TERMO DE INTERDIÇÃO", "TERMO DE INUTILIZAÇÃO"];
+// Ordem segue o fluxo processual, mantendo juntos os pares que se referenciam
+// (interdição/desinterdição, apreensão/apreensão e inutilização/inutilização).
+const termoOptions = [
+  "AUTO DE INFRAÇÃO",
+  "TERMO DE INTIMAÇÃO",
+  "TERMO DE INTERDIÇÃO",
+  "TERMO DE DESINTERDIÇÃO",
+  "TERMO DE APREENSÃO",
+  "TERMO DE APREENSÃO E INUTILIZAÇÃO",
+  "TERMO DE INUTILIZAÇÃO",
+  "TERMO DE IMPOSIÇÃO DE PENALIDADE",
+];
 
 /** Durante a geração do PDF (html2canvas), campos de formulário (<input>/
  * <textarea>) não são fotografados com fidelidade — o html2canvas aproxima
@@ -31,6 +43,77 @@ const termoOptions = ["TERMO DE INTIMAÇÃO", "AUTO DE INFRAÇÃO", "TERMO DE AP
  * mesma técnica já usada aqui para o campo "tipoTermo". */
 function StaticField({ value, className }: { value?: string | null; className?: string }) {
   return <div className={className}>{value || ""}</div>;
+}
+
+type ItemApreendido = { produto: string; marcaLote: string; quantidade: string; unidade: string };
+
+/**
+ * Relação dos bens alcançados por apreensão e/ou inutilização. A apreensão
+ * recai sobre bens determinados (Art. 549 do Decreto nº 5.711/2002), então
+ * essa lista é o objeto do documento — o equivalente ao relato dos fatos no
+ * auto de infração. Depois de finalizado vira tabela estática, sem inputs,
+ * porque o html2canvas não fotografa campos de formulário com fidelidade.
+ */
+function ItensApreendidosTable({ itens, onChange, disabled }: {
+  itens: ItemApreendido[];
+  onChange: (itens: ItemApreendido[]) => void;
+  disabled: boolean;
+}) {
+  const atualizar = (i: number, campo: keyof ItemApreendido, valor: string) => {
+    onChange(itens.map((item, idx) => (idx === i ? { ...item, [campo]: valor } : item)));
+  };
+  const adicionar = () => onChange([...itens, { produto: '', marcaLote: '', quantidade: '', unidade: '' }]);
+  const remover = (i: number) => onChange(itens.filter((_, idx) => idx !== i));
+
+  return (
+    <div className="p-2">
+      <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: '9.5pt' }}>
+        <thead>
+          <tr className="bg-zinc-50">
+            <th className="border border-black/20 p-1 text-left w-8">#</th>
+            <th className="border border-black/20 p-1 text-left">PRODUTO / DESCRIÇÃO</th>
+            <th className="border border-black/20 p-1 text-left w-40">MARCA / LOTE</th>
+            <th className="border border-black/20 p-1 text-left w-24">QTD.</th>
+            <th className="border border-black/20 p-1 text-left w-24">UNIDADE</th>
+            {!disabled && <th className="border border-black/20 p-1 w-10 no-print" />}
+          </tr>
+        </thead>
+        <tbody>
+          {itens.length === 0 && (
+            <tr><td colSpan={disabled ? 5 : 6} className="border border-black/20 p-2 text-center text-zinc-400 italic">Nenhum bem relacionado.</td></tr>
+          )}
+          {itens.map((item, i) => (
+            <tr key={i}>
+              <td className="border border-black/20 p-1 text-center">{i + 1}</td>
+              {(['produto', 'marcaLote', 'quantidade', 'unidade'] as const).map((campo) => (
+                <td key={campo} className="border border-black/20 p-1">
+                  {disabled
+                    ? <span>{item[campo]}</span>
+                    : <input
+                        value={item[campo]}
+                        onChange={(e) => atualizar(i, campo, e.target.value)}
+                        className="w-full bg-transparent outline-none border-none p-0"
+                      />}
+                </td>
+              ))}
+              {!disabled && (
+                <td className="border border-black/20 p-1 text-center no-print">
+                  <button type="button" onClick={() => remover(i)} className="text-rose-500 hover:text-rose-700" aria-label={`Remover item ${i + 1}`}>
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!disabled && (
+        <button type="button" onClick={adicionar} className="no-print mt-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-primary hover:underline">
+          <Plus className="h-3 w-3" /> Adicionar bem
+        </button>
+      )}
+    </div>
+  );
 }
 
 interface DocumentoOficialBodyProps {
@@ -165,6 +248,11 @@ export function DocumentoOficialBody({
     setValue('signatureResponsavelTecnico', '');
     setMostrarResponsavelTecnico(false);
   };
+
+  // Cada tipo de autuação tem corpo próprio: relato dos fatos e prazo de
+  // defesa são elementos do auto de infração, não de todo termo. Ver
+  // src/lib/autuacao-estrutura.ts para a matriz e a base legal.
+  const estrutura = estruturaDoTipo(watch('tipoTermo'));
 
   // Os ~7 blocos de nível superior do documento, num array (em vez de filhos
   // soltos em sequência) — só assim dá pra intercalar um LivePageHeader entre
@@ -397,14 +485,31 @@ export function DocumentoOficialBody({
       </div>
       <div className="flex flex-col">
         <div className="p-2 border-b border-black/10"><span className="data-label">BASE LEGAL PARA AUTUAÇÃO:</span><RichTextEditor value={watch('legislacaoBase') || ""} onChange={(v) => setValue('legislacaoBase', v)} disabled={isFinalized} fontSize="10pt" minHeight="2em" /></div>
-        <div className="p-2"><span className="data-label">RELATO DOS FATOS CONSTATADOS:</span><RichTextEditor value={watch('teor') || ""} onChange={(v) => setValue('teor', v)} disabled={isFinalized} fontSize="10.5pt" minHeight="12em" /></div>
+        {/* Relato circunstanciado da infracao e elemento do AUTO DE INFRACAO
+            (Art. 555, III). Nos demais termos o campo muda de sentido: passa a
+            descrever o objeto do ato — alcance da interdicao, motivo da
+            apreensao, penalidade aplicada. Ver src/lib/autuacao-estrutura.ts */}
+        <div className="p-2">
+          <span className="data-label">{estrutura.relatoDosFatos ? "RELATO DOS FATOS CONSTATADOS:" : estrutura.objetoLabel + ":"}</span>
+          <RichTextEditor value={watch("teor") || ""} onChange={(v) => setValue("teor", v)} disabled={isFinalized} fontSize="10.5pt" minHeight={estrutura.relatoDosFatos ? "12em" : "6em"} />
+        </div>
       </div>
     </div>,
 
-    <div key="notificacao" className="section-box" style={{ borderTop: 'none' }}>
-      <div className="sub-header-row">4. NOTIFICAÇÃO E PRAZO PARA DEFESA</div>
+
+    ...(estrutura.listaDeItens ? [
+      <div key="itens-apreendidos" className="section-box" style={{ borderTop: "none" }}>
+        <div className="sub-header-row">4. RELACAO DOS BENS</div>
+        <ItensApreendidosTable itens={watch("itensApreendidos") || []} onChange={(itens) => setValue("itensApreendidos", itens)} disabled={isFinalized} />
+      </div>,
+    ] : []),
+
+    ...(estrutura.prazo ? [
+      <div key="notificacao" className="section-box" style={{ borderTop: "none" }}>
+        <div className="sub-header-row">{estrutura.listaDeItens ? 5 : 4}. {estrutura.prazo.titulo}</div>
       <div className="p-2 bg-zinc-50/20"><RichTextEditor value={watch('prazo')} onChange={(v) => { setValue('prazo', v); onPrazoChange?.(v); }} disabled={isFinalized} fontSize="9.5pt" minHeight="4em" /></div>
-    </div>,
+      </div>,
+    ] : []),
 
     <div key="ciencia-digital" className="section-box" style={{ borderTop: 'none' }}>
       <div className="sub-header-row">5. CIÊNCIA DIGITAL</div>

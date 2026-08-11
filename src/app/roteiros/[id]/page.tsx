@@ -39,7 +39,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { cn } from "@/lib/utils"
+import { cn, normalizeId } from "@/lib/utils"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -62,10 +62,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from "@/components/ui/alert-dialog"
 import { compressImage, blobToDataUrl } from "@/lib/compress-image"
 import { RichTextEditor } from "@/components/rich-text-editor"
-import { getDefaultIntroHtml, getDefaultConclusaoHtml, fillRoteiroTextoTokens } from "@/lib/roteiro-textos-padrao"
+import { getDefaultIntroHtml, getDefaultConclusaoHtml, fillRoteiroTextoTokens, resolverIntroHtml, resolverConclusaoHtml } from "@/lib/roteiro-textos-padrao"
 import { sanitizeHtml } from "@/lib/sanitize-html"
 import { ROI_RADIOGRAFIA_MEDICA, NOTA_CONFORME, type RoiIndicador } from "@/lib/roteiro-roi-radiologia"
 import { useSearchParams } from "next/navigation"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup } from "@/components/ui/command"
+import municipiosPR from "@/lib/municipios-pr.json"
+import { ChevronsUpDown } from "lucide-react"
 
 type Criticality = 'I' | 'N' | 'R'
 
@@ -1135,8 +1139,44 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // no formulário, nem no relatório, nem gerados em memória.
   const isRoi = !!checklist.roi;
   const { toast } = useToast()
-  const { profile } = useAuth()
-  const { config } = useAppConfig()
+  const { profile, updateProfileData } = useAuth()
+  const isRoot = profile?.role === 'root'
+
+  // A conta root pertence ao município fictício "geral", que não tem
+  // identidade visual configurada — por isso o relatório dela saía com o
+  // brasão genérico e o cabeçalho padrão do código. Como nas demais telas
+  // (Biblioteca, Configurações, lista de Roteiros), o root escolhe de qual
+  // município usar a identidade; a escolha fica lembrada pra não ter que
+  // repetir a cada roteiro aberto. Os outros papéis seguem pelo próprio
+  // município, sem seletor.
+  const MUNICIPIO_ROOT_KEY = 'fiscal_x_roteiro_municipio_root';
+  const [municipioPickerOpen, setMunicipioPickerOpen] = useState(false);
+  const [municipioSearchTerm, setMunicipioSearchTerm] = useState("");
+  const [selectedMunicipioForRoot, setSelectedMunicipioForRoot] = useState("");
+
+  useEffect(() => {
+    if (!isRoot) return;
+    setSelectedMunicipioForRoot(localStorage.getItem(MUNICIPIO_ROOT_KEY) || "");
+  }, [isRoot]);
+
+  const escolherMunicipioRoot = (municipio: string) => {
+    setSelectedMunicipioForRoot(municipio);
+    localStorage.setItem(MUNICIPIO_ROOT_KEY, municipio);
+    setMunicipioPickerOpen(false);
+    setMunicipioSearchTerm("");
+  };
+
+  const filteredMunicipiosPicker = useMemo(() => {
+    const termo = normalizeId(municipioSearchTerm);
+    if (!termo) return municipiosPR;
+    return municipiosPR.filter((m) => normalizeId(m).includes(termo));
+  }, [municipioSearchTerm]);
+
+  const { config } = useAppConfig({
+    municipioIdOverride: isRoot
+      ? (selectedMunicipioForRoot ? normalizeId(selectedMunicipioForRoot) : undefined)
+      : profile?.municipioId,
+  })
   const router = useRouter()
   const { saveInspecao, deleteInspecao, inspecoes, loading: loadingInspecoes } = useInspecoes()
   const reportRef = useRef<HTMLDivElement>(null)
@@ -1337,8 +1377,8 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
       setIntroducaoHtml("");
       setConclusaoHtml("");
     } else {
-      setIntroducaoHtml(cd.introducaoHtml || fillRoteiroTextoTokens(config.roteiroTextos?.[id]?.introducaoHtml || getDefaultIntroHtml(id), carregadaIdData));
-      setConclusaoHtml(cd.conclusaoHtml || fillRoteiroTextoTokens(config.roteiroTextos?.[id]?.conclusaoHtml || getDefaultConclusaoHtml(id), carregadaIdData));
+      setIntroducaoHtml(cd.introducaoHtml || fillRoteiroTextoTokens(resolverIntroHtml(id, profile?.roteiroTextos, config.roteiroTextos), carregadaIdData));
+      setConclusaoHtml(cd.conclusaoHtml || fillRoteiroTextoTokens(resolverConclusaoHtml(id, profile?.roteiroTextos, config.roteiroTextos), carregadaIdData));
     }
     setCurrentInspecaoId(inspecao.id);
     setInspecaoStatus(inspecao.status === 'concluido' ? 'concluido' : 'rascunho');
@@ -1349,7 +1389,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     isDirtyRef.current = false;
     router.replace(`/roteiros/${id}?inspecaoId=${inspecao.id}`, { scroll: false });
     setIsPickerOpen(false);
-  }, [config, id, isRoi, router]);
+  }, [config, id, isRoi, profile?.roteiroTextos, router]);
 
   // Reseta pra uma inspeção nova em branco — nem toca no que já está salvo
   // (diferente do antigo "Novo Zero", que apagava o rascunho anterior; agora
@@ -1409,17 +1449,17 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // handleIntroducaoChange/handleConclusaoChange) e essa sincronização para.
   useEffect(() => {
     if (isRoi || introTravadaRef.current) return;
-    const base = config.roteiroTextos?.[id]?.introducaoHtml || getDefaultIntroHtml(id);
+    const base = resolverIntroHtml(id, profile?.roteiroTextos, config.roteiroTextos);
     setIntroducaoHtml(fillRoteiroTextoTokens(base, idData));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config, id, isRoi, idData.fantasia, idData.cnpj, idData.dataHorario]);
+  }, [config, id, isRoi, profile?.roteiroTextos, idData.fantasia, idData.cnpj, idData.dataHorario]);
 
   useEffect(() => {
     if (isRoi || conclusaoTravadaRef.current) return;
-    const base = config.roteiroTextos?.[id]?.conclusaoHtml || getDefaultConclusaoHtml(id);
+    const base = resolverConclusaoHtml(id, profile?.roteiroTextos, config.roteiroTextos);
     setConclusaoHtml(fillRoteiroTextoTokens(base, idData));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config, id, isRoi, idData.prazoDias, idData.baseLegalPrazo]);
+  }, [config, id, isRoi, profile?.roteiroTextos, idData.prazoDias, idData.baseLegalPrazo]);
 
   const handleIntroducaoChange = (html: string) => {
     introTravadaRef.current = true;
@@ -1429,6 +1469,46 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   const handleConclusaoChange = (html: string) => {
     conclusaoTravadaRef.current = true;
     setConclusaoHtml(html);
+  };
+
+  // Padrão PESSOAL do fiscal: guarda o texto que ele acabou de escrever no
+  // próprio perfil, e a partir daí toda inspeção nova deste roteiro já nasce
+  // com ele. Tem precedência sobre o padrão do município — ver
+  // resolverIntroHtml em src/lib/roteiro-textos-padrao.ts.
+  const [salvandoPadrao, setSalvandoPadrao] = useState<'introducaoHtml' | 'conclusaoHtml' | null>(null);
+
+  const salvarComoMeuPadrao = async (campo: 'introducaoHtml' | 'conclusaoHtml', html: string) => {
+    setSalvandoPadrao(campo);
+    try {
+      await updateProfileData({
+        roteiroTextos: {
+          ...profile?.roteiroTextos,
+          [id]: { ...profile?.roteiroTextos?.[id], [campo]: html },
+        },
+      });
+      toast({
+        title: "Salvo como seu padrão",
+        description: "Suas próximas inspeções deste roteiro já começam com este texto.",
+      });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro ao salvar seu padrão", description: e?.message });
+    } finally {
+      setSalvandoPadrao(null);
+    }
+  };
+
+  // Volta ao texto padrão vigente (o seu, se houver; senão o do município ou o
+  // do código), já com os dados da inspeção preenchidos. Continua "travado",
+  // porque é uma escolha explícita do fiscal e não deve ser sobrescrita pela
+  // sincronização automática depois.
+  const restaurarPadraoIntroducao = () => {
+    setIntroducaoHtml(fillRoteiroTextoTokens(resolverIntroHtml(id, profile?.roteiroTextos, config.roteiroTextos), idData));
+    introTravadaRef.current = true;
+  };
+
+  const restaurarPadraoConclusao = () => {
+    setConclusaoHtml(fillRoteiroTextoTokens(resolverConclusaoHtml(id, profile?.roteiroTextos, config.roteiroTextos), idData));
+    conclusaoTravadaRef.current = true;
   };
 
   // Atalho do cabeçalho ("Minhas Inspeções") — reabre o seletor a qualquer
@@ -1832,6 +1912,35 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // genérico) em vez de qualquer imagem específica — nunca a marca do
   // sistema (mascote do login) nem qualquer outra logo que não seja a do
   // próprio município.
+  // Campos da identificação do relatório, em ordem. `full` ocupa a linha
+  // inteira; os demais são emparelhados de dois em dois, aproveitando as duas
+  // colunas da tabela. Campo sem valor é OMITIDO — antes todos apareciam, e um
+  // "---" de e-mail ou responsável técnico gastava uma linha inteira do
+  // documento sem informar nada.
+  const camposIdentificacao: { label: string; valor: string; full?: boolean; classe?: string }[] = [
+    { label: 'RAZÃO SOCIAL / NOME FANTASIA', valor: idData.fantasia, full: true, classe: 'font-black text-[11pt]' },
+    { label: 'CNPJ / CPF', valor: idData.cnpj },
+    { label: 'TELEFONE', valor: idData.telefone },
+    { label: 'E-MAIL', valor: idData.email },
+    { label: 'DATA/HORÁRIO DA INSPEÇÃO', valor: idData.dataHorario ? format(new Date(idData.dataHorario), "dd/MM/yyyy 'às' HH:mm") : '' },
+    { label: 'ATIVIDADES (CNAE)', valor: idData.cnae, full: true, classe: 'font-bold text-[9pt] leading-tight text-zinc-800 uppercase' },
+    { label: 'ENDEREÇO', valor: [idData.endereco, idData.bairro].filter(Boolean).join(' - '), full: true },
+    { label: 'RESPONSÁVEL TÉCNICO', valor: idData.responsavelTecnico ? `${idData.responsavelTecnico}${idData.responsavelTecnicoRegistro ? ` — ${idData.responsavelTecnicoRegistro}` : ''}` : '' },
+    { label: 'RESPONSÁVEL LEGAL', valor: idData.responsavel },
+    { label: 'EQUIPE DE FISCALIZAÇÃO', valor: fiscais.length > 0 ? fiscais.map(f => (f as any).nome).join(' e ') : (profile?.displayName || ''), full: true },
+  ].filter((campo) => campo.valor && campo.valor.trim());
+
+  // Agrupa em linhas da tabela: um campo `full` ocupa a linha sozinho; os
+  // curtos vão de dois em dois (e o último sozinho, com colSpan, se sobrar).
+  const linhasIdentificacao: (typeof camposIdentificacao)[] = [];
+  for (let i = 0; i < camposIdentificacao.length; i++) {
+    const campo = camposIdentificacao[i];
+    if (campo.full) { linhasIdentificacao.push([campo]); continue; }
+    const proximo = camposIdentificacao[i + 1];
+    if (proximo && !proximo.full) { linhasIdentificacao.push([campo, proximo]); i++; }
+    else linhasIdentificacao.push([campo]);
+  }
+
   const hasLogo = !!config.logoUrl;
   const isDataUrl = hasLogo && config.logoUrl!.startsWith('data:');
   const displayLogoUrl = hasLogo
@@ -1889,23 +1998,26 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   </div>
               </div>
 
-              <div data-pdf-block className="mb-6">
+              <div data-pdf-block className="mb-4">
                   <div className="sub-header-row">1. IDENTIFICAÇÃO DO ESTABELECIMENTO</div>
                   <table className="form-table-clean border-black w-full" style={{ borderCollapse: 'collapse' }}>
                       <tbody>
-                          <tr><td colSpan={2} style={{ padding: '6pt 10pt' }}><span className="data-label">RAZÃO SOCIAL / NOME FANTASIA:</span><div className="font-black text-[11pt]">{idData.fantasia || "---"}</div></td></tr>
-                          <tr><td style={{ padding: '6pt 10pt' }}><span className="data-label">CNPJ / CPF:</span><div className="font-bold text-[10pt]">{idData.cnpj || "---"}</div></td><td style={{ padding: '6pt 10pt' }}><span className="data-label">TELEFONE:</span><div className="font-bold text-[10pt]">{idData.telefone || "---"}</div></td></tr>
-                          <tr><td style={{ padding: '6pt 10pt' }}><span className="data-label">E-MAIL:</span><div className="font-bold text-[10pt]">{idData.email || "---"}</div></td><td style={{ padding: '6pt 10pt' }}><span className="data-label">DATA/HORÁRIO DA INSPEÇÃO:</span><div className="font-bold text-[10pt]">{idData.dataHorario ? format(new Date(idData.dataHorario), "dd/MM/yyyy 'às' HH:mm") : "---"}</div></td></tr>
-                          <tr><td colSpan={2} style={{ padding: '6pt 10pt' }}><span className="data-label">ATIVIDADES (CNAE):</span><div className="font-bold text-[9pt] leading-tight text-zinc-800 uppercase">{idData.cnae || "---"}</div></td></tr>
-                          <tr><td colSpan={2} style={{ padding: '6pt 10pt' }}><span className="data-label">ENDEREÇO:</span><div className="font-bold text-[10pt]">{idData.endereco} - {idData.bairro}</div></td></tr>
-                          <tr><td colSpan={2} style={{ padding: '6pt 10pt' }}><span className="data-label">RESPONSÁVEL TÉCNICO:</span><div className="font-bold text-[10pt]">{idData.responsavelTecnico || "---"}{idData.responsavelTecnicoRegistro ? ` — ${idData.responsavelTecnicoRegistro}` : ""}</div></td></tr>
-                          <tr><td colSpan={2} style={{ padding: '6pt 10pt' }}><span className="data-label">EQUIPE DE FISCALIZAÇÃO:</span><div className="font-bold text-[10pt]">{fiscais.length > 0 ? fiscais.map(f => (f as any).nome).join(' e ') : (profile?.displayName || "---")}</div></td></tr>
+                          {linhasIdentificacao.map((linha, i) => (
+                            <tr key={i}>
+                              {linha.map((campo) => (
+                                <td key={campo.label} colSpan={linha.length === 1 ? 2 : 1} style={{ padding: '3pt 8pt' }}>
+                                  <span className="data-label">{campo.label}:</span>
+                                  <div className={campo.classe || "font-bold text-[10pt]"}>{campo.valor}</div>
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
                       </tbody>
                   </table>
               </div>
 
               {!isRoi && (
-              <div data-pdf-block className="mb-6">
+              <div data-pdf-block className="mb-4">
                   <div className="sub-header-row">2. CONSIDERAÇÕES GERAIS</div>
                   <div
                     className="border border-[#171717] p-4 bg-zinc-50/50"
@@ -1915,7 +2027,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
               </div>
               )}
 
-              <div className="mb-6">
+              <div className="mb-4">
                   {/* No ROI não existem as seções 2 e 4, então as seguintes
                       sobem de número em vez de deixar buraco na sequência. */}
                   <div data-pdf-block className="sub-header-row">{isRoi ? 2 : 3}. NÃO CONFORMIDADES DETECTADAS</div>
@@ -1990,7 +2102,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
 
 
               {!isRoi && (
-              <div data-pdf-block className="mb-8">
+              <div data-pdf-block className="mb-6">
                   <div className="sub-header-row">4. CONCLUSÃO E PRAZO LEGAL</div>
                   <div
                     className="border border-[#171717] p-4 bg-zinc-50/50"
@@ -2076,6 +2188,53 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
       </header>
 
       <div className="space-y-8 no-print">
+          {/* Só o root escolhe: a conta dele fica no município fictício
+              "geral", que não tem brasão nem cabeçalho configurados. Fiscal e
+              gestor usam o próprio município, sem nada a selecionar. */}
+          {isRoot && (
+            <div className="bg-white px-6 py-4 rounded-lg border border-[#E4DFD1] shadow-sm flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C]">Identidade do documento</p>
+                <p className="text-[11px] text-[#6B6659] mt-1">De qual município usar brasão, cabeçalho e rodapé no relatório.</p>
+              </div>
+              <Popover open={municipioPickerOpen} onOpenChange={setMunicipioPickerOpen}>
+                <PopoverTrigger asChild>
+                  <button className="flex items-center gap-1.5 text-xs font-medium text-[#6B6659] hover:text-[#0E4A44] transition-colors border border-[#E4DFD1] rounded-xl px-3 h-10">
+                    <Building2 className="h-3.5 w-3.5" />
+                    {selectedMunicipioForRoot || "Selecionar município"}
+                    <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[280px] p-0 bg-white border-[#E4DFD1] rounded-lg shadow-lg">
+                  <Command className="bg-transparent" shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Pesquisar município..."
+                      value={municipioSearchTerm}
+                      onValueChange={setMunicipioSearchTerm}
+                      className="h-10 border-none focus:ring-0 text-sm"
+                    />
+                    <CommandList className="max-h-[300px] overflow-y-auto">
+                      {filteredMunicipiosPicker.length === 0 && (
+                        <CommandEmpty className="p-4 text-center text-xs text-[#A39D8C] font-medium">Não encontrado.</CommandEmpty>
+                      )}
+                      <CommandGroup>
+                        {filteredMunicipiosPicker.map((m) => (
+                          <div
+                            key={m}
+                            onClick={() => escolherMunicipioRoot(m)}
+                            className="hover:bg-[#E4EEEC] cursor-pointer py-2.5 px-4 transition-colors font-medium text-sm border-b border-[#F1EEE4] last:border-b-0"
+                          >
+                            {m}
+                          </div>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
+
           <div className="bg-white p-6 md:p-8 rounded-lg border border-[#E4DFD1] shadow-sm space-y-5">
             <div className="space-y-3">
                 <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Building2 className="h-4 w-4 text-primary" /> Estabelecimento</h2>
@@ -2188,6 +2347,25 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                 <p className="text-[11px] font-medium text-[#6B6659] -mt-1">Texto que abre o relatório final ("Considerações Gerais") — editável. Pré-preenchido com o padrão do município e os dados acima.</p>
                 <div className="p-2 bg-[#FAF8F3] rounded-lg border border-[#E4DFD1] font-serif">
                   <RichTextEditor value={introducaoHtml} onChange={handleIntroducaoChange} fontSize="10.5pt" minHeight="140px" />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => salvarComoMeuPadrao('introducaoHtml', introducaoHtml)}
+                    disabled={salvandoPadrao === 'introducaoHtml'}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest text-primary hover:bg-[#E4EEEC] transition-colors disabled:opacity-50"
+                  >
+                    {salvandoPadrao === 'introducaoHtml' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                    Salvar como meu padrão
+                  </button>
+                  <button
+                    type="button"
+                    onClick={restaurarPadraoIntroducao}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest text-[#6B6659] hover:bg-[#F1EEE4] transition-colors"
+                  >
+                    <Eraser className="h-3 w-3" />
+                    Restaurar padrão
+                  </button>
                 </div>
             </div>
             </>
@@ -2411,6 +2589,25 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                 <p className="text-[11px] font-medium text-[#6B6659] -mt-1">Texto que fecha o relatório final ("Conclusão e Prazo Legal") — editável. Pré-preenchido com o padrão do município e o prazo acima.</p>
                 <div className="p-2 bg-[#FAF8F3] rounded-lg border border-[#E4DFD1] font-serif">
                   <RichTextEditor value={conclusaoHtml} onChange={handleConclusaoChange} fontSize="10.5pt" minHeight="140px" />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => salvarComoMeuPadrao('conclusaoHtml', conclusaoHtml)}
+                    disabled={salvandoPadrao === 'conclusaoHtml'}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest text-primary hover:bg-[#E4EEEC] transition-colors disabled:opacity-50"
+                  >
+                    {salvandoPadrao === 'conclusaoHtml' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                    Salvar como meu padrão
+                  </button>
+                  <button
+                    type="button"
+                    onClick={restaurarPadraoConclusao}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest text-[#6B6659] hover:bg-[#F1EEE4] transition-colors"
+                  >
+                    <Eraser className="h-3 w-3" />
+                    Restaurar padrão
+                  </button>
                 </div>
             </div>
             </>

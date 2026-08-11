@@ -109,6 +109,47 @@ export function getDefaultConclusaoHtml(roteiroId: string): string {
   return DEFAULT_CONCLUSAO_HTML[roteiroId] || DEFAULT_CONCLUSAO_HTML.default;
 }
 
+/** Textos padrão por id de roteiro — mesmo formato no perfil do fiscal e na
+ *  configuração do município. */
+export type RoteiroTextos = Record<string, { introducaoHtml?: string; conclusaoHtml?: string }>;
+
+/**
+ * Resolve qual texto vale para um roteiro, na ordem: padrão pessoal do fiscal,
+ * padrão do município e, por fim, o fixo do código.
+ *
+ * O do fiscal vem primeiro porque é a personalização mais específica — quem
+ * assina o relatório é ele. O do município continua valendo para todo mundo
+ * que não definiu o próprio.
+ *
+ * Centralizado aqui porque a mesma decisão é tomada em três pontos de
+ * roteiros/[id]/page.tsx (os dois efeitos de sincronização e o carregamento de
+ * uma inspeção salva) — duplicar a cadeia era garantir que uma delas ficasse
+ * para trás numa mudança futura.
+ */
+export function resolverIntroHtml(
+  roteiroId: string,
+  textosDoFiscal?: RoteiroTextos,
+  textosDoMunicipio?: RoteiroTextos
+): string {
+  return (
+    textosDoFiscal?.[roteiroId]?.introducaoHtml ||
+    textosDoMunicipio?.[roteiroId]?.introducaoHtml ||
+    getDefaultIntroHtml(roteiroId)
+  );
+}
+
+export function resolverConclusaoHtml(
+  roteiroId: string,
+  textosDoFiscal?: RoteiroTextos,
+  textosDoMunicipio?: RoteiroTextos
+): string {
+  return (
+    textosDoFiscal?.[roteiroId]?.conclusaoHtml ||
+    textosDoMunicipio?.[roteiroId]?.conclusaoHtml ||
+    getDefaultConclusaoHtml(roteiroId)
+  );
+}
+
 /** Metadados dos roteiros existentes — usado no seletor da tela de
  * configuração municipal (src/app/admin/configuracoes/page.tsx), sem
  * precisar importar a lista completa (com ícones) de src/app/roteiros/page.tsx. */

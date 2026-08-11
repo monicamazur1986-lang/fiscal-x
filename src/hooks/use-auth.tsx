@@ -32,6 +32,13 @@ interface UserProfile {
   adminFeedback?: string;
   municipioNome?: string;
   fcmTokens?: string[];
+  /**
+   * Padrão PESSOAL de "Considerações Gerais" e "Conclusão e Prazo Legal" por
+   * id de roteiro, salvo pelo botão "Salvar como meu padrão" na tela de
+   * preenchimento. Tem precedência sobre o padrão do município — ver
+   * resolverIntroHtml em src/lib/roteiro-textos-padrao.ts.
+   */
+  roteiroTextos?: Record<string, { introducaoHtml?: string; conclusaoHtml?: string }>;
 }
 
 interface RegisterInput {

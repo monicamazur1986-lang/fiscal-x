@@ -224,7 +224,7 @@
         font-weight: bold;
         text-transform: uppercase;
         background-color: #f8fafc !important;
-        padding: 6pt 10pt !important;
+        padding: 4pt 10pt !important;
         border-bottom: 1pt solid #94a3b8;
         color: #171717 !important;
     }
@@ -254,8 +254,13 @@
         font-weight: 800;
         text-transform: uppercase;
         color: #64748b;
-        margin-bottom: 2pt;
+        /* Rótulo e valor ficam em blocos empilhados; com 2pt de respiro entre
+           eles, mais o padding da célula, a identificação sozinha comia meia
+           página. 1pt mantém a leitura sem o vazio. */
+        margin-bottom: 1pt;
         letter-spacing: 0.05em;
+        display: block;
+        line-height: 1.2;
     }
 
     .data-field-input {

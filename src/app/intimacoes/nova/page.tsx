@@ -4,26 +4,27 @@ import { IntimacaoForm } from "@/components/intimacao-form";
 import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Intimacao } from "@/lib/types";
-import { ScrollText, Gavel, Lock, PackageX, Ban, ChevronRight, Loader2 } from "lucide-react";
+import { ScrollText, Gavel, Lock, Unlock, PackageX, Trash2, Ban, Scale, ChevronRight, Loader2 } from "lucide-react";
 
-// As 5 opções de "termoOptions" (documento-oficial-body.tsx), com a
+// Mesmas opções de "termoOptions" (documento-oficial-body.tsx), com a
 // orientação de quando usar cada uma — a mesma escolha que hoje só existe
 // como um <select> dentro do próprio documento, agora explicada antes de
-// abrir a página em branco.
+// abrir a página em branco. A ordem acompanha o fluxo processual e mantém
+// juntos os pares que se referenciam.
 const TIPOS_AUTUACAO = [
-  {
-    value: "TERMO DE INTIMAÇÃO",
-    label: "Termo de Intimação",
-    description: "Notifica formalmente uma exigência, sem caracterizar infração ainda.",
-    icon: ScrollText,
-    accent: "#0E4A44",
-  },
   {
     value: "AUTO DE INFRAÇÃO",
     label: "Auto de Infração",
     description: "Registra a irregularidade constatada e abre prazo de defesa. Ponto de partida mais comum.",
     icon: Gavel,
     accent: "#9C7A3C",
+  },
+  {
+    value: "TERMO DE INTIMAÇÃO",
+    label: "Termo de Intimação",
+    description: "Notifica formalmente uma exigência, sem caracterizar infração ainda.",
+    icon: ScrollText,
+    accent: "#0E4A44",
   },
   {
     value: "TERMO DE INTERDIÇÃO",
@@ -33,6 +34,13 @@ const TIPOS_AUTUACAO = [
     accent: "#A15437",
   },
   {
+    value: "TERMO DE DESINTERDIÇÃO",
+    label: "Termo de Desinterdição",
+    description: "Encerra a interdição depois de sanadas as irregularidades e libera o reinício das atividades.",
+    icon: Unlock,
+    accent: "#3F6B4A",
+  },
+  {
     value: "TERMO DE APREENSÃO",
     label: "Termo de Apreensão",
     description: "Recolhe produtos ou materiais irregulares. O prazo de defesa corre no Auto de Infração vinculado.",
@@ -40,11 +48,25 @@ const TIPOS_AUTUACAO = [
     accent: "#3D5A73",
   },
   {
+    value: "TERMO DE APREENSÃO E INUTILIZAÇÃO",
+    label: "Termo de Apreensão e Inutilização",
+    description: "Reúne os dois atos: recolhe e já inutiliza produtos impróprios, num único documento.",
+    icon: Trash2,
+    accent: "#7A4A3A",
+  },
+  {
     value: "TERMO DE INUTILIZAÇÃO",
     label: "Termo de Inutilização",
     description: "Formaliza a inutilização de produtos impróprios para consumo ou uso.",
     icon: Ban,
     accent: "#6B4C80",
+  },
+  {
+    value: "TERMO DE IMPOSIÇÃO DE PENALIDADE",
+    label: "Termo de Imposição de Penalidade",
+    description: "Aplica a penalidade ao final do processo. Abre prazo de recurso, não de defesa prévia.",
+    icon: Scale,
+    accent: "#5A4632",
   },
 ] as const;
 

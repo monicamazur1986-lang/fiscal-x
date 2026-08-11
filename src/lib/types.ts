@@ -156,6 +156,14 @@ export type UserProfile = {
   role: 'admin' | 'fiscal' | 'root';
   municipioId: string;
   fiscalCode?: string;
+  /**
+   * Padrão PESSOAL de "Considerações Gerais" e "Conclusão e Prazo Legal" por
+   * id de roteiro. Tem precedência sobre o padrão do município (ver
+   * resolverIntroHtml em src/lib/roteiro-textos-padrao.ts) — quem assina o
+   * relatório é o fiscal. Salvo pelo botão "Salvar como meu padrão" na tela de
+   * preenchimento do roteiro.
+   */
+  roteiroTextos?: Record<string, { introducaoHtml?: string; conclusaoHtml?: string }>;
 };
 
 export type Chamado = {

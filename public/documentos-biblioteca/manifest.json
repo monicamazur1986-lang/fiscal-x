@@ -1,5 +1,5 @@
 {
-  "version": "2.1.0",
+  "version": "2.3.0",
   "documents": [
     {
       "id": "codigo-sanitario-estadual-pr",
@@ -20,13 +20,13 @@
       "keywords": "rdc 1002, anvisa, odontologia, boas praticas, biosseguranca, clinica odontologica, protese dentaria"
     },
     {
-      "id": "roi-9-1-radiografia-medica",
-      "titulo": "ROI 9.1 — Radiografia Médica (ANVISA)",
-      "path": "/documentos-biblioteca/roi-9-1-radiografia-medica.pdf",
+      "id": "rdc-216-2004-alimentacao",
+      "titulo": "RDC nº 216/2004 — Boas Práticas para Serviços de Alimentação",
+      "path": "/documentos-biblioteca/rdc-216-2004-servicos-alimentacao.pdf",
       "esfera": "federal",
-      "categoria": "Roteiro",
-      "descricao": "Roteiro Objetivo de Inspeção da ANVISA para serviços de radiografia médica (documento 9.1, versão 1.2). É a fonte dos 36 indicadores do roteiro de mesmo nome disponível em Roteiros, avaliados por nota de 0 a 5.",
-      "keywords": "roi, anvisa, radiografia medica, radiologia, raios x, rdc 611, rdc 63, inspecao, indicadores, protecao radiologica, dosimetria"
+      "categoria": "RDC",
+      "descricao": "Resolução da ANVISA que aprova o Regulamento Técnico de Boas Práticas para Serviços de Alimentação, com os requisitos higiênico-sanitários gerais aplicáveis em todo o território nacional. É a base do roteiro de inspeção de Serviços de Alimentação.",
+      "keywords": "rdc 216, anvisa, alimentos, servicos de alimentacao, boas praticas, higiene, manipulacao de alimentos, restaurante, lanchonete, cozinha, manipulador, pop, controle sanitario"
     }
   ]
 }
