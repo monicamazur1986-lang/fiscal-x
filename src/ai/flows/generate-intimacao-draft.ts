@@ -31,7 +31,11 @@ const ReportTypeSchema = z.enum(['intimação', 'infração', 'apreensão', 'int
 // correto e reduzir a dispersão entre legislações setoriais distintas.
 const LawPreferenceSchema = z.union([
   z.enum(['todas', 'municipal', 'estadual']),
-  z.array(z.enum(['todas', 'municipal', 'estadual']))
+  z.string(),
+  z.array(z.union([
+    z.enum(['todas', 'municipal', 'estadual']),
+    z.string()
+  ]))
 ]).default(['estadual']);
 
 // Origem/contexto da ação — define como o texto abre (não é sempre "durante

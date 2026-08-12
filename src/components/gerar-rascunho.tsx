@@ -37,15 +37,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { Badge } from "@/components/ui/badge"
+import legislacaoData from "@/lib/legislacao.json"
 
 type ReportType = 'intimação' | 'infração' | 'apreensão' | 'interdição';
-type LawPreference = 'todas' | 'municipal' | 'estadual';
+type LawPreference = 'todas' | 'municipal' | 'estadual' | string;
 
 const lawOptions = [
   { id: 'estadual', label: 'Código Sanitário Estadual', icon: BookOpen },
   { id: 'municipal', label: 'Código Municipal', icon: Gavel },
   { id: 'todas', label: 'Todo o banco de dados', icon: Scale },
 ] as const;
+
+const individualLawOptions = Object.entries(legislacaoData as Record<string, { titulo: string; municipioId?: string }>).map(([lawKey, law]) => ({
+  id: lawKey,
+  label: law.titulo,
+  group: law.municipioId ? 'Código Municipal' : 'Código Sanitário Estadual',
+}));
 
 interface GerarRascunhoProps {
   caseDescription: string;
@@ -73,6 +80,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
   const [isUppercase, setIsUppercase] = useState(true)
   const [isRecording, setIsRecording] = useState(false)
   const [coolDown, setCoolDown] = useState(0)
+  const [isLegalMenuOpen, setIsLegalMenuOpen] = useState(false)
 
   const router = useRouter()
   const { toast } = useToast()
@@ -124,6 +132,16 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
     setLawPreferences(prev => {
       if (value === 'todas') {
         return prev.includes('todas') ? ['estadual'] : ['todas'];
+      }
+
+      if (value === 'estadual' || value === 'municipal') {
+        const next = prev.includes(value)
+          ? prev.filter(item => item !== value)
+          : [...prev, value];
+
+        if (next.length === 0) return ['estadual'];
+        if (next.includes('todas')) return next.filter(item => item !== 'todas');
+        return next;
       }
 
       const next = prev.includes(value)
@@ -196,6 +214,19 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
     setFundamentacao("");
     toast({ title: "Rascunho Limpo" });
   }
+
+  const legalSelectionSummary = (() => {
+    if (lawPreferences.length === 0) return 'Selecionar base legal...';
+    if (lawPreferences.includes('todas')) return 'Todo o banco de dados';
+    if (lawPreferences.length === 1) {
+      const match = lawOptions.find((opt) => opt.id === lawPreferences[0]);
+      if (match) return match.label;
+      const lawMatch = individualLawOptions.find((opt) => opt.id === lawPreferences[0]);
+      if (lawMatch) return lawMatch.label;
+      return 'Base legal selecionada';
+    }
+    return `${lawPreferences.length} bases selecionadas`;
+  })();
 
   const handleCopyToClipboard = () => {
     if (!draft) return;
@@ -297,28 +328,64 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
 
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-zinc-500">Base legal</Label>
-              <div className="grid grid-cols-1 gap-2 rounded-xl border border-primary/20 bg-primary/5 p-2">
-                {lawOptions.map((opt) => {
-                  const selected = lawPreferences.includes(opt.id as LawPreference);
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => toggleLawPreference(opt.id as LawPreference)}
-                      className={cn(
-                        'flex items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors',
-                        selected ? 'border-primary bg-white text-primary shadow-sm' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-white/70'
-                      )}
-                    >
-                      <span className="flex items-center gap-2">
-                        <opt.icon className="h-3.5 w-3.5" />
-                        {opt.label}
-                      </span>
-                      {selected ? <Check className="h-3.5 w-3.5" /> : null}
-                    </button>
-                  );
-                })}
-              </div>
+              <Select open={isLegalMenuOpen} onOpenChange={setIsLegalMenuOpen} value={lawPreferences[0] ?? 'estadual'}>
+                <SelectTrigger className="h-11 rounded-xl bg-primary/5 border-primary/30 text-sm font-medium">
+                  <SelectValue placeholder="Selecionar base legal..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-80 overflow-y-auto p-2">
+                  <div className="space-y-2">
+                    {lawOptions.map((opt) => {
+                      const selected = lawPreferences.includes(opt.id as LawPreference);
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            toggleLawPreference(opt.id as LawPreference);
+                            setIsLegalMenuOpen(false);
+                          }}
+                          className={cn(
+                            'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors',
+                            selected ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
+                          )}
+                        >
+                          <span className="flex items-center gap-2">
+                            <opt.icon className="h-3.5 w-3.5" />
+                            {opt.label}
+                          </span>
+                          {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                        </button>
+                      );
+                    })}
+
+                    <div className="my-1 h-px bg-zinc-200" />
+
+                    {individualLawOptions.map((opt) => {
+                      const selected = lawPreferences.includes(opt.id);
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            toggleLawPreference(opt.id);
+                            setIsLegalMenuOpen(false);
+                          }}
+                          className={cn(
+                            'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors',
+                            selected ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
+                          )}
+                        >
+                          <div className="flex flex-col">
+                            <span>{opt.label}</span>
+                            <span className="text-[9px] uppercase text-zinc-500">{opt.group}</span>
+                          </div>
+                          {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

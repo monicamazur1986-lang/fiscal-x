@@ -1,7 +1,7 @@
 import MiniSearch from 'minisearch';
 import legislacaoData from '@/lib/legislacao.json';
 
-export type LawPreference = 'todas' | 'municipal' | 'estadual';
+export type LawPreference = 'todas' | 'municipal' | 'estadual' | string;
 export type LawPreferenceSelection = LawPreference | LawPreference[];
 
 export function normalizeLawPreferenceSelection(pref?: LawPreferenceSelection): LawPreference[] {
@@ -81,8 +81,14 @@ index.addAll(allArticles);
 // Municipal" — só entrava em "Base Integral". A distinção que realmente
 // importa já existe por artigo: tem `municipioId` = é lei municipal; não tem
 // = é estadual/federal (SESA, ANVISA), vale pra qualquer fiscal do estado.
-function matchesPreference(artMunicipioId: string | undefined, pref: LawPreferenceSelection): boolean {
+function matchesPreference(artMunicipioId: string | undefined, artLawKey: string, pref: LawPreferenceSelection): boolean {
   const prefs = normalizeLawPreferenceSelection(pref);
+  const specificLawKeys = prefs.filter(value => value !== 'todas' && value !== 'municipal' && value !== 'estadual');
+
+  if (specificLawKeys.length > 0) {
+    return specificLawKeys.includes(artLawKey);
+  }
+
   if (prefs.includes('todas')) return true;
   const isMunicipal = !!artMunicipioId;
   const selectedMunicipal = prefs.includes('municipal');
@@ -122,7 +128,7 @@ export function searchLegislacao(
   for (const r of results) {
     const art = allArticles.find(a => a.id === r.id);
     if (!art) continue;
-    if (!matchesPreference(art.municipioId, pref)) continue;
+    if (!matchesPreference(art.municipioId, art.lawKey, pref)) continue;
     if (!matchesMunicipio(art.municipioId, municipioId)) continue;
     (GENERAL_LAW_KEYS.has(art.lawKey) ? general : specific).push({ art, score: r.score });
   }

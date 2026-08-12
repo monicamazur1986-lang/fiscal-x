@@ -19,19 +19,26 @@ import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
+import legislacaoData from "@/lib/legislacao.json"
 
 interface Props {
   onApply: (text: string, fundamentacao?: string) => void;
 }
 
 type ReportType = 'intimação' | 'infração' | 'apreensão' | 'interdição';
-type LawPreference = 'todas' | 'municipal' | 'estadual';
+type LawPreference = 'todas' | 'municipal' | 'estadual' | string;
 
 const lawOptions = [
   { id: 'estadual', label: 'Código Sanitário Estadual' },
   { id: 'municipal', label: 'Código Municipal' },
   { id: 'todas', label: 'Todo o banco de dados' },
 ] as const;
+
+const individualLawOptions = Object.entries(legislacaoData as Record<string, { titulo: string; municipioId?: string }>).map(([lawKey, law]) => ({
+  id: lawKey,
+  label: law.titulo,
+  group: law.municipioId ? 'Código Municipal' : 'Código Sanitário Estadual',
+}));
 
 export function AssistenteIAFormDialog({ onApply }: Props) {
   const [isOpen, setIsOpen] = useState(false)
@@ -44,6 +51,7 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [isUppercase, setIsUppercase] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
+  const [isLegalMenuOpen, setIsLegalMenuOpen] = useState(false)
   
   const recognitionRef = useRef<any>(null)
 
@@ -88,6 +96,16 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
         return prev.includes('todas') ? ['estadual'] : ['todas'];
       }
 
+      if (value === 'estadual' || value === 'municipal') {
+        const next = prev.includes(value)
+          ? prev.filter(item => item !== value)
+          : [...prev, value];
+
+        if (next.length === 0) return ['estadual'];
+        if (next.includes('todas')) return next.filter(item => item !== 'todas');
+        return next;
+      }
+
       const next = prev.includes(value)
         ? prev.filter(item => item !== value)
         : [...prev, value];
@@ -118,6 +136,19 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
       setIsLoading(false)
     }
   }
+
+  const legalSelectionSummary = (() => {
+    if (lawPreferences.length === 0) return 'Selecionar base legal...';
+    if (lawPreferences.includes('todas')) return 'Todo o banco de dados';
+    if (lawPreferences.length === 1) {
+      const match = lawOptions.find((opt) => opt.id === lawPreferences[0]);
+      if (match) return match.label;
+      const lawMatch = individualLawOptions.find((opt) => opt.id === lawPreferences[0]);
+      if (lawMatch) return lawMatch.label;
+      return 'Base legal selecionada';
+    }
+    return `${lawPreferences.length} bases selecionadas`;
+  })();
 
   const handleApply = () => {
     const finalContent = isUppercase ? (draft || "").toUpperCase() : draft;
@@ -188,26 +219,62 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
           </div>
 
           <div className="space-y-3 p-5 bg-white rounded-2xl border border-zinc-200 shadow-inner">
-            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 ml-1 flex items-center gap-2 mb-2"><Gavel className="h-3.5 w-3.5" /> Esfera Legal (Base RAG)</label>
-            <div className="grid grid-cols-1 gap-2">
-              {lawOptions.map((opt) => {
-                const selected = lawPreferences.includes(opt.id as LawPreference);
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => toggleLawPreference(opt.id as LawPreference)}
-                    className={cn(
-                      'flex items-center justify-between rounded-xl border px-3 py-2.5 text-left text-[9px] font-black uppercase tracking-[0.15em] transition-colors',
-                      selected ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-zinc-200 bg-zinc-50 text-zinc-600 hover:border-zinc-300'
-                    )}
-                  >
-                    <span>{opt.label}</span>
-                    {selected ? <Check className="h-3.5 w-3.5" /> : null}
-                  </button>
-                );
-              })}
-            </div>
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 ml-1 flex items-center gap-2 mb-2"><Gavel className="h-3.5 w-3.5" /> Base Legal</label>
+            <Select open={isLegalMenuOpen} onOpenChange={setIsLegalMenuOpen} value={lawPreferences[0] ?? 'estadual'}>
+              <SelectTrigger className="h-11 rounded-xl border-zinc-200 bg-zinc-50 text-[10px] font-black uppercase tracking-[0.12em] text-zinc-700">
+                <SelectValue placeholder="Selecionar base legal..." />
+              </SelectTrigger>
+              <SelectContent className="max-h-80 overflow-y-auto p-2">
+                <div className="space-y-2">
+                  {lawOptions.map((opt) => {
+                    const selected = lawPreferences.includes(opt.id as LawPreference);
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          toggleLawPreference(opt.id as LawPreference);
+                          setIsLegalMenuOpen(false);
+                        }}
+                        className={cn(
+                          'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-[9px] font-black uppercase tracking-[0.12em] transition-colors',
+                          selected ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
+                        )}
+                      >
+                        <span>{opt.label}</span>
+                        {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                      </button>
+                    );
+                  })}
+
+                  <div className="my-1 h-px bg-zinc-200" />
+
+                  {individualLawOptions.map((opt) => {
+                    const selected = lawPreferences.includes(opt.id);
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          toggleLawPreference(opt.id);
+                          setIsLegalMenuOpen(false);
+                        }}
+                        className={cn(
+                          'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-[9px] font-bold tracking-[0.08em] transition-colors',
+                          selected ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
+                        )}
+                      >
+                        <div className="flex flex-col">
+                          <span>{opt.label}</span>
+                          <span className="text-[7px] uppercase text-zinc-500">{opt.group}</span>
+                        </div>
+                        {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
