@@ -25,7 +25,14 @@ const ClaudeDraftOutputSchema = z4.object({
 });
 
 const ReportTypeSchema = z.enum(['intimação', 'infração', 'apreensão', 'interdição']);
-const LawPreferenceSchema = z.enum(['todas', 'municipal', 'estadual']).default('todas');
+// Base padrão da autuação sanitária: o Código Sanitário Estadual é a base
+// principal de enquadramento. O usuário pode combinar mais de uma fonte legal,
+// mas a opção padrão continua sendo estadual para manter o foco sanitário
+// correto e reduzir a dispersão entre legislações setoriais distintas.
+const LawPreferenceSchema = z.union([
+  z.enum(['todas', 'municipal', 'estadual']),
+  z.array(z.enum(['todas', 'municipal', 'estadual']))
+]).default(['estadual']);
 
 // Origem/contexto da ação — define como o texto abre (não é sempre "durante
 // inspeção no estabelecimento": pode ser denúncia, monitoramento de
@@ -91,7 +98,9 @@ function generateLocalHeuristicDraft(input: GenerateIntimacaoDraftInput, municip
   }
 
   // 2. BUSCA GRANULAR DE LEGISLAÇÃO (MiniSearch: ranking por relevância, prefixo e tolerância a erros de digitação)
-  const pref = input.lawPreference || 'todas';
+  const pref: Array<'todas' | 'municipal' | 'estadual'> = Array.isArray(input.lawPreference)
+    ? input.lawPreference as Array<'todas' | 'municipal' | 'estadual'>
+    : (input.lawPreference ? [input.lawPreference] as Array<'todas' | 'municipal' | 'estadual'> : ['estadual']);
   const descLower = rawDesc.toLowerCase();
   // Só para as checagens de palavra-chave abaixo (passo 4) — sem acento,
   // porque "responsável"/"eletrônico" (grafia correta que qualquer fiscal
@@ -138,19 +147,28 @@ function generateLocalHeuristicDraft(input: GenerateIntimacaoDraftInput, municip
   }
 
   // 5. MONTAGEM DO BLOCO ÚNICO
+  if (type !== 'infração') {
+    const contextoCurto: Record<string, string> = {
+      'intimação': 'Considerando o relato dos fatos e a legislação sanitária abaixo, lavra-se este Termo de Intimação para notificar o responsável quanto à necessidade de regularização da situação constatada.',
+      'interdição': 'Considerando o relato dos fatos e a legislação sanitária abaixo, lavra-se este Termo de Interdição para suspender cautelarmente a atividade ou o equipamento até a regularização da irregularidade constatada.',
+      'apreensão': 'Considerando o relato dos fatos e a legislação sanitária abaixo, lavra-se este Termo de Apreensão para formalizar o recolhimento do bem ou produto irregular, conforme o Auto de Infração em anexo.'
+    };
+
+    const resumo = contextoCurto[type] || 'Considerando o relato dos fatos e a legislação sanitária abaixo, lavra-se este documento para formalizar a medida sanitária indicada.';
+
+    return {
+      draftIntimacao: `${resumo} Base normativa aplicada: ${fundamentacao}.`.replace(/\s+/g, ' ').trim(),
+      fundamentacaoSugerida: fundamentacao,
+      artigosUtilizados: matchedArticles.map(a => a.id),
+      engine: 'local'
+    };
+  }
+
   const abertura = ORIGEM_ABERTURA[inferOrigem(descLower)];
   const opening = `${abertura} ${factAnalysis}. `;
   const risk = `A situação configura risco sanitário aos consumidores e está em desacordo com as normas de saúde pública e biossegurança. `;
   const legal = `Tal conduta caracteriza irregularidade sanitária e a inobservância das exigências legais aplicáveis ao setor, em violação direta à ${fundamentacao}. `;
-  
-  let closing = "";
-  if (type === 'interdição') {
-    closing = `Diante do exposto, o estabelecimento foi interditado cautelarmente, até a regularização das condições apontadas, sob pena de sanções previstas na legislação vigente.`;
-  } else if (type === 'apreensão') {
-    closing = `Diante do exposto, o produto foi apreendido, lavrado auto de infração e instaurado processo administrativo sanitário, com observância dos prazos legais para defesa e contraditório.`;
-  } else {
-    closing = `Diante do exposto, fica o responsável legal notificado a proceder à imediata regularização das condições apontadas, sob pena de aplicação das sanções previstas na legislação sanitária em vigor.`;
-  }
+  const closing = `Diante do exposto, fica o responsável legal notificado a proceder à imediata regularização das condições apontadas, sob pena de aplicação das sanções previstas na legislação sanitária em vigor.`;
 
   return {
     draftIntimacao: `${opening}${risk}${legal}${closing}`.replace(/\s+/g, ' ').trim(),
@@ -170,7 +188,16 @@ REGRAS CRÍTICAS DE FUNDAMENTAÇÃO:
 4. VÍNCULO FATO-NORMA: No texto, explique por que o fato viola o artigo (ex: "...o que contraria o Art. X da Lei Y, uma vez que proíbe o comércio de produtos sem registro").
 5. VALIDAÇÃO: Se o relato for vago demais para ser enquadrado na legislação fornecida, retorne draftIntimacao como string vazia e preencha o campo error solicitando mais detalhes.
 
-ESTRUTURA OBRIGATÓRIA DO draftIntimacao:
+REGRA ESPECIAL POR TIPO:
+- Se o tipo for "infração": siga a estrutura completa de bloco único, com abertura, risco, enquadramento e fechamento técnico.
+- Se o tipo for "intimação", "apreensão" ou "interdição": NÃO reescreva o texto padrão do termo completo. Em vez disso, produza uma síntese curta e técnica, com 1 frase de contexto + 1 frase de fundamentação legal + 1 frase de medida/ação. O objetivo é apenas contextualizar o ato e reforçar a base legal, sem substituir o texto padrão já preparado no formulário.
+
+ESTRUTURA OBRIGATÓRIA DO draftIntimacao PARA TERMOS QUE NÃO SÃO INFRAÇÃO:
+- Mensagem curta: "Considerando o relato dos fatos e a legislação sanitária abaixo, lavra-se este Termo de [TIPO] para [AÇÃO]."
+- Em seguida, cite a fundamentação legal: "A base normativa aplicada é [CITAÇÃO ESPECÍFICA: LEI (ARTIGO, INCISO)]."
+- Não invente redações longas, não reproduza um texto padrão inteiro e não repita o que já está no tipo do termo.
+
+ESTRUTURA COMPLETA PARA AUTO DE INFRAÇÃO:
 - Abertura: infira a origem da ação diretamente das NOTAS DO FISCAL (nenhuma tela pede isso ao fiscal — a origem não vem pronta, você deduz do próprio relato) e adapte a frase inicial de acordo, em vez de usar sempre a mesma frase de inspeção:
   - Relato descreve visita/inspeção comum ao local: "Durante inspeção realizada no estabelecimento identificado, esta Autoridade Sanitária constatou [FATO]..."
   - Relato menciona denúncia/reclamação recebida: "Em decorrência de denúncia recebida por esta Vigilância Sanitária, foi constatado que [FATO]..."
@@ -213,7 +240,9 @@ export const generateIntimacaoDraftFlow = ai.defineFlow(
     }
 
     try {
-      const pref = input.lawPreference || 'todas';
+      const pref: Array<'todas' | 'municipal' | 'estadual'> = Array.isArray(input.lawPreference)
+        ? input.lawPreference as Array<'todas' | 'municipal' | 'estadual'>
+        : (input.lawPreference ? [input.lawPreference] as Array<'todas' | 'municipal' | 'estadual'> : ['estadual']);
       const selectedArticles = searchLegislacao(input.caseDescription, { pref, limit: 10, municipioId: municipioId || undefined });
 
       if (selectedArticles.length === 0) {

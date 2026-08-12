@@ -2,6 +2,13 @@ import MiniSearch from 'minisearch';
 import legislacaoData from '@/lib/legislacao.json';
 
 export type LawPreference = 'todas' | 'municipal' | 'estadual';
+export type LawPreferenceSelection = LawPreference | LawPreference[];
+
+export function normalizeLawPreferenceSelection(pref?: LawPreferenceSelection): LawPreference[] {
+  if (!pref) return ['estadual'];
+  const values = Array.isArray(pref) ? pref : [pref];
+  return values.length ? values : ['estadual'];
+}
 
 export interface LegalArticle {
   id: string;
@@ -74,9 +81,15 @@ index.addAll(allArticles);
 // Municipal" — só entrava em "Base Integral". A distinção que realmente
 // importa já existe por artigo: tem `municipioId` = é lei municipal; não tem
 // = é estadual/federal (SESA, ANVISA), vale pra qualquer fiscal do estado.
-function matchesPreference(artMunicipioId: string | undefined, pref: LawPreference): boolean {
-  if (pref === 'municipal') return !!artMunicipioId;
-  if (pref === 'estadual') return !artMunicipioId;
+function matchesPreference(artMunicipioId: string | undefined, pref: LawPreferenceSelection): boolean {
+  const prefs = normalizeLawPreferenceSelection(pref);
+  if (prefs.includes('todas')) return true;
+  const isMunicipal = !!artMunicipioId;
+  const selectedMunicipal = prefs.includes('municipal');
+  const selectedEstadual = prefs.includes('estadual');
+  if (selectedMunicipal && selectedEstadual) return true;
+  if (selectedMunicipal) return isMunicipal;
+  if (selectedEstadual) return !isMunicipal;
   return true;
 }
 
@@ -95,9 +108,9 @@ function matchesMunicipio(artMunicipioId: string | undefined, fiscalMunicipioId:
  */
 export function searchLegislacao(
   query: string,
-  options?: { pref?: LawPreference; limit?: number; municipioId?: string }
+  options?: { pref?: LawPreferenceSelection; limit?: number; municipioId?: string }
 ): LegalArticle[] {
-  const pref = options?.pref || 'todas';
+  const pref = normalizeLawPreferenceSelection(options?.pref);
   const limit = options?.limit ?? 10;
   const municipioId = options?.municipioId;
 

@@ -41,6 +41,12 @@ import { Badge } from "@/components/ui/badge"
 type ReportType = 'intimação' | 'infração' | 'apreensão' | 'interdição';
 type LawPreference = 'todas' | 'municipal' | 'estadual';
 
+const lawOptions = [
+  { id: 'estadual', label: 'Código Sanitário Estadual', icon: BookOpen },
+  { id: 'municipal', label: 'Código Municipal', icon: Gavel },
+  { id: 'todas', label: 'Todo o banco de dados', icon: Scale },
+] as const;
+
 interface GerarRascunhoProps {
   caseDescription: string;
   setCaseDescription: Dispatch<SetStateAction<string>>;
@@ -53,15 +59,9 @@ const docTypes = [
   { id: 'interdição', label: 'Termo de Interdição', icon: Ban },
 ] as const;
 
-const lawOptions = [
-  { id: 'todas', label: 'Base Integral', icon: Scale },
-  { id: 'municipal', label: 'Código Municipal', icon: Gavel },
-  { id: 'estadual', label: 'Código Estadual', icon: BookOpen },
-] as const;
-
 export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRascunhoProps) {
   const [reportType, setReportType] = useState<ReportType | undefined>(undefined)
-  const [lawPreference, setLawPreference] = useState<LawPreference | undefined>(undefined)
+  const [lawPreferences, setLawPreferences] = useState<LawPreference[]>(['estadual'])
 
   const [draft, setDraft] = useState("")
   const [fundamentacao, setFundamentacao] = useState("")
@@ -120,9 +120,25 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
     }
   }
 
+  const toggleLawPreference = (value: LawPreference) => {
+    setLawPreferences(prev => {
+      if (value === 'todas') {
+        return prev.includes('todas') ? ['estadual'] : ['todas'];
+      }
+
+      const next = prev.includes(value)
+        ? prev.filter(item => item !== value)
+        : [...prev, value];
+
+      if (next.length === 0) return ['estadual'];
+      if (next.includes('todas')) return next.filter(item => item !== 'todas');
+      return next;
+    });
+  };
+
   const handleGenerate = async () => {
-    if (!caseDescription.trim() || !reportType || !lawPreference || coolDown > 0 || isLoading) {
-      if (!reportType || !lawPreference) {
+    if (!caseDescription.trim() || !reportType || lawPreferences.length === 0 || coolDown > 0 || isLoading) {
+      if (!reportType || lawPreferences.length === 0) {
         toast({ variant: "destructive", title: "Selecione a finalidade do documento e a base legal antes de gerar." });
       }
       return;
@@ -138,7 +154,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
         caseDescription,
         reportType,
         useCloudAI: true,
-        lawPreference: lawPreference,
+        lawPreference: lawPreferences,
         uid: profile?.uid || '',
       });
 
@@ -165,7 +181,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
     setFundamentacao("");
     setError(null);
     setReportType(undefined);
-    setLawPreference(undefined);
+    setLawPreferences(['estadual']);
     toast({ title: "Edição Reiniciada" });
   }
 
@@ -281,18 +297,28 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
 
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-zinc-500">Base legal</Label>
-              <Select value={lawPreference} onValueChange={(v) => setLawPreference(v as LawPreference)}>
-                <SelectTrigger className="h-11 rounded-xl bg-primary/5 border-primary/30 text-sm font-medium">
-                  <SelectValue placeholder="Selecionar base..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {lawOptions.map((opt) => (
-                    <SelectItem key={opt.id} value={opt.id}>
-                      <span className="flex items-center gap-2"><opt.icon className="h-3.5 w-3.5 text-zinc-500" /> {opt.label}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="grid grid-cols-1 gap-2 rounded-xl border border-primary/20 bg-primary/5 p-2">
+                {lawOptions.map((opt) => {
+                  const selected = lawPreferences.includes(opt.id as LawPreference);
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => toggleLawPreference(opt.id as LawPreference)}
+                      className={cn(
+                        'flex items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors',
+                        selected ? 'border-primary bg-white text-primary shadow-sm' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-white/70'
+                      )}
+                    >
+                      <span className="flex items-center gap-2">
+                        <opt.icon className="h-3.5 w-3.5" />
+                        {opt.label}
+                      </span>
+                      {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -379,7 +405,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
 
           <Button
               onClick={handleGenerate}
-              disabled={isLoading || !caseDescription.trim() || !reportType || !lawPreference || coolDown > 0}
+              disabled={isLoading || !caseDescription.trim() || !reportType || lawPreferences.length === 0 || coolDown > 0}
               className={cn(
                   "flex-1 w-full sm:w-auto h-12 rounded-xl font-semibold gap-2.5 transition-all",
                   coolDown > 0 ? "bg-zinc-200 text-zinc-400 cursor-not-allowed" : "bg-primary hover:bg-primary/90 text-white"

@@ -16,8 +16,8 @@ export function SentinelaMascot({ className, width = 280, height = 280, simplifi
   // um recorte fechado no rosto/emblema em vez da arte cheia — mostrar a
   // composição inteira (personagem + faixa "FISCAL-X") num espaço de ~36px
   // deixa tudo ilegível; o recorte usa só a parte que ainda se reconhece
-  // nesse tamanho. Ver public/fiscal_x_icon.png.
-  const defaultFallback = simplified ? "/fiscal_x_icon.png" : "/fiscal_x_hq.png";
+  // nesse tamanho. O arquivo oficial do sistema está em public/logo-fiscalx-oficial.jpeg.
+  const defaultFallback = simplified ? "/logo-fiscalx-oficial.jpeg?v=20260811" : "/logo-fiscalx-oficial.jpeg?v=20260811";
   const [fallbackSrc, setFallbackSrc] = useState(defaultFallback);
   const [mounted, setMounted] = useState(false);
 

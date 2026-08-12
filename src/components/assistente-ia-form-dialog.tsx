@@ -27,11 +27,17 @@ interface Props {
 type ReportType = 'intimação' | 'infração' | 'apreensão' | 'interdição';
 type LawPreference = 'todas' | 'municipal' | 'estadual';
 
+const lawOptions = [
+  { id: 'estadual', label: 'Código Sanitário Estadual' },
+  { id: 'municipal', label: 'Código Municipal' },
+  { id: 'todas', label: 'Todo o banco de dados' },
+] as const;
+
 export function AssistenteIAFormDialog({ onApply }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [caseDescription, setCaseDescription] = useState("")
   const [reportType, setReportType] = useState<ReportType>('intimação')
-  const [lawPreference, setLawPreference] = useState<LawPreference>('todas')
+  const [lawPreferences, setLawPreferences] = useState<LawPreference[]>(['estadual'])
   const [draft, setDraft] = useState("")
   const [fundamentacao, setFundamentacao] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -76,6 +82,22 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
     }
   }
 
+  const toggleLawPreference = (value: LawPreference) => {
+    setLawPreferences(prev => {
+      if (value === 'todas') {
+        return prev.includes('todas') ? ['estadual'] : ['todas'];
+      }
+
+      const next = prev.includes(value)
+        ? prev.filter(item => item !== value)
+        : [...prev, value];
+
+      if (next.length === 0) return ['estadual'];
+      if (next.includes('todas')) return next.filter(item => item !== 'todas');
+      return next;
+    });
+  };
+
   const handleGenerate = async () => {
     if (!caseDescription.trim()) return;
     setIsLoading(true)
@@ -83,7 +105,7 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
     setDraft("")
     setFundamentacao("")
     try {
-      const result = await generateIntimacaoDraft({ caseDescription, reportType, lawPreference, useCloudAI: false, uid: '' })
+      const result = await generateIntimacaoDraft({ caseDescription, reportType, lawPreference: lawPreferences, useCloudAI: false, uid: '' })
       if (result.error) {
         setError(result.error)
       } else {
@@ -167,16 +189,25 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
 
           <div className="space-y-3 p-5 bg-white rounded-2xl border border-zinc-200 shadow-inner">
             <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 ml-1 flex items-center gap-2 mb-2"><Gavel className="h-3.5 w-3.5" /> Esfera Legal (Base RAG)</label>
-            <Select value={lawPreference} onValueChange={(v: any) => setLawPreference(v)}>
-                <SelectTrigger className="h-12 rounded-xl border-none bg-zinc-50 font-bold text-xs uppercase tracking-widest text-slate-800 focus:ring-primary/10">
-                    <SelectValue placeholder="Selecione a base jurídica..." />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl shadow-2xl p-1">
-                    <SelectItem value="todas" className="rounded-lg font-bold uppercase text-[9px] py-2.5">Todas as Leis</SelectItem>
-                    <SelectItem value="municipal" className="rounded-lg font-bold uppercase text-[9px] py-2.5 text-blue-600">Municipal (Prudentópolis)</SelectItem>
-                    <SelectItem value="estadual" className="rounded-lg font-bold uppercase text-[9px] py-2.5 text-emerald-600">Estadual (Paraná)</SelectItem>
-                </SelectContent>
-            </Select>
+            <div className="grid grid-cols-1 gap-2">
+              {lawOptions.map((opt) => {
+                const selected = lawPreferences.includes(opt.id as LawPreference);
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => toggleLawPreference(opt.id as LawPreference)}
+                    className={cn(
+                      'flex items-center justify-between rounded-xl border px-3 py-2.5 text-left text-[9px] font-black uppercase tracking-[0.15em] transition-colors',
+                      selected ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-zinc-200 bg-zinc-50 text-zinc-600 hover:border-zinc-300'
+                    )}
+                  >
+                    <span>{opt.label}</span>
+                    {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="space-y-2">

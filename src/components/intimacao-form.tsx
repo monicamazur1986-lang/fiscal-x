@@ -173,6 +173,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
     const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
     const [hasAnexo, setHasAnexo] = useState(false);
     const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
+    const [showClearDraftConfirm, setShowClearDraftConfirm] = useState(false);
 
     const methods = useForm<IntimacaoFormValues>({
         resolver: zodResolver(intimacaoSchema),
@@ -181,7 +182,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             status: defaultValues?.status || 'rascunho',
             tipoTermo: defaultValues?.tipoTermo || "TERMO DE INTIMAÇÃO",
             comarca: defaultValues?.comarca || config.municipioNome || "PRUDENTÓPOLIS",
-            autoridades: defaultValues?.autoridades || [],
+            autoridades: Array.isArray(defaultValues?.autoridades) ? defaultValues.autoridades : [],
             // Termos sem prazo (interdição, apreensão…) já abrem com o texto do
             // ato no campo de objeto — quem entra pelo card do tipo nunca passa
             // por handleTipoTermoChange, e o documento abriria em branco.
@@ -463,6 +464,51 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
         }
     };
 
+    const handleClearDraft = async () => {
+        setShowClearDraftConfirm(false);
+        const now = new Date();
+        const novoNumero = await generateNewNumeroProcesso();
+        const base = intimacaoSchema.parse({});
+        const autoridadesAtuais = methods.getValues('autoridades') || [];
+
+        methods.reset({
+            ...base,
+            numeroProcesso: novoNumero,
+            status: 'rascunho',
+            tipoTermo: 'TERMO DE INTIMAÇÃO',
+            comarca: config.municipioNome || 'PRUDENTÓPOLIS',
+            dataIntimacao: now,
+            dataDocumento: format(now, 'dd/MM/yyyy'),
+            horaDocumento: format(now, 'HH:mm'),
+            prazo: prazoTextoDoTipo('TERMO DE INTIMAÇÃO'),
+            teor: atoTextoDoTipo('TERMO DE INTIMAÇÃO'),
+            autoridades: autoridadesAtuais,
+        });
+
+        if (hasAnexo) {
+            const autoridadesAnexoAtual = anexoMethods.getValues('autoridades') || [];
+            anexoMethods.reset({
+                ...base,
+                numeroProcesso: await generateNewNumeroProcesso(),
+                status: 'rascunho',
+                tipoTermo: 'AUTO DE INFRAÇÃO',
+                comarca: config.municipioNome || 'PRUDENTÓPOLIS',
+                dataIntimacao: now,
+                dataDocumento: format(now, 'dd/MM/yyyy'),
+                horaDocumento: format(now, 'HH:mm'),
+                prazo: prazoTextoDoTipo('AUTO DE INFRAÇÃO'),
+                teor: atoTextoDoTipo('AUTO DE INFRAÇÃO'),
+                autoridades: autoridadesAnexoAtual,
+            });
+        }
+
+        anexoIdRef.current = undefined;
+        setHasAnexo(false);
+        isDirtyRef.current = false;
+        setLastAutoSavedAt(null);
+        toast({ title: "Rascunho Limpo", description: "O formulário foi reiniciado em branco." });
+    };
+
     // Gera o PDF página a página, repetindo o cabeçalho em cada uma (em vez de
     // cortar um único screenshot longo em pedaços de altura fixa). Quando há um
     // Auto de Infração vinculado, suas páginas são anexadas ao MESMO PDF, sem
@@ -698,6 +744,9 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                     <Button type="button" onClick={() => setIsPreviewMode(true)} variant="outline" size="icon" title="Visualizar" className="h-10 w-10 rounded-xl border-[#E4DFD1] text-[#6B6659]">
                                         <Eye className="h-4 w-4" />
                                     </Button>
+                                    <Button type="button" onClick={() => setShowClearDraftConfirm(true)} variant="outline" size="sm" className="h-10 px-4 rounded-xl border-rose-200 text-rose-600 font-black uppercase text-[10px] tracking-widest gap-2">
+                                        <Trash2 className="h-4 w-4" /> Apagar Rascunho
+                                    </Button>
                                     <Button type="button" onClick={() => handleSaveDraft()} disabled={isSavingDraft || isSaving} variant="outline" size="sm" className="h-10 px-4 rounded-xl border-[#E4DFD1] text-[#6B6659] font-black uppercase text-[10px] tracking-widest gap-2">
                                         {isSavingDraft ? <Loader2 className="animate-spin h-4 w-4" /> : <Save className="h-4 w-4" />} Salvar Rascunho
                                     </Button>
@@ -733,6 +782,21 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                     <AlertDialogFooter>
                         <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
                         <AlertDialogAction onClick={() => { setShowFinalizeConfirm(false); handleSubmit(handleFinalize)(); }} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-primary hover:bg-primary/90">Finalizar</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={showClearDraftConfirm} onOpenChange={setShowClearDraftConfirm}>
+                <AlertDialogContent className="rounded-lg">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="font-serif text-xl text-[#262420]">Apagar rascunho?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Isso reinicia o formulário em branco. O conteúdo atual será perdido e o documento precisará ser preenchido novamente.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleClearDraft} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-rose-600 hover:bg-rose-700">Apagar</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
