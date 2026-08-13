@@ -9,7 +9,11 @@ import type {
 } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000
+const TOAST_REMOVE_DELAY = 3500
+
+function shouldSuppressToast(variant?: "default" | "destructive" | null) {
+  return !variant || variant === "default"
+}
 
 type ToasterToast = ToastProps & {
   id: string
@@ -151,6 +155,14 @@ function toast({ ...props }: Toast) {
       toast: { ...props, id },
     })
   const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
+
+  if (shouldSuppressToast(props.variant)) {
+    return {
+      id,
+      dismiss,
+      update,
+    }
+  }
 
   dispatch({
     type: "ADD_TOAST",

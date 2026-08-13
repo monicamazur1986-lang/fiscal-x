@@ -174,7 +174,7 @@ function HeaderContent({ config }: { config: MunicipalityConfig }) {
           <div style={{ fontFamily: "'Times New Roman', Times, serif" }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(config.headerRichText) }} />
         ) : (
           <>
-            <p className="text-[7pt] md:text-[7.5pt] font-black uppercase text-black">PREFEITURA MUNICIPAL DE {config.municipioNome || "PRUDENTÓPOLIS"}</p>
+            <p className="text-[7pt] md:text-[7.5pt] font-black uppercase text-black">PREFEITURA MUNICIPAL DE {config.municipioNome || "MUNICÍPIO"}</p>
             <h2 className="text-[8pt] md:text-[9pt] font-black uppercase text-black leading-tight mt-0.5">{config.secretaria || "SECRETARIA MUNICIPAL DE SAÚDE"}</h2>
             <h3 className="text-[7pt] md:text-[7.5pt] font-bold text-black uppercase mt-0.5">{config.departamento || "VIGILÂNCIA SANITÁRIA"}</h3>
           </>

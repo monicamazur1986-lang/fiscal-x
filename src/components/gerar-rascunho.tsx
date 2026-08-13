@@ -49,11 +49,19 @@ const lawOptions = [
   { id: 'todas', label: 'Todo o banco de dados', icon: Scale },
 ] as const;
 
-const individualLawOptions = Object.entries(legislacaoData as Record<string, { titulo: string; municipioId?: string }>).map(([lawKey, law]) => ({
-  id: lawKey,
-  label: law.titulo,
-  group: law.municipioId ? 'Código Municipal' : 'Código Sanitário Estadual',
-}));
+const individualLawOptions = Object.entries(
+  legislacaoData as Record<string, {
+    titulo: string;
+    municipioId?: string;
+    biblioteca?: { esfera: 'municipal' | 'estadual' | 'federal'; categoria: string };
+  }>
+)
+  .filter(([, law]) => !!law.biblioteca)
+  .map(([lawKey, law]) => ({
+    id: lawKey,
+    label: law.titulo,
+    group: law.municipioId ? 'Código Municipal' : 'Código Sanitário Estadual',
+  }));
 
 interface GerarRascunhoProps {
   caseDescription: string;
@@ -340,7 +348,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                 </button>
 
                 {isLegalMenuOpen && (
-                  <div className="absolute z-20 mt-2 w-full rounded-xl border border-zinc-200 bg-white p-2 shadow-xl max-h-[60vh] overflow-y-auto overscroll-contain">
+                  <div className="absolute z-20 mt-2 w-full rounded-xl border border-zinc-200 bg-white p-2 shadow-xl max-h-[60vh] overflow-y-auto custom-scrollbar overscroll-contain">
                     <div className="space-y-2">
                       <div className="px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Geral</div>
                       {lawOptions.map((opt) => {

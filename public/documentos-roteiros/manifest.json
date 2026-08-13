@@ -1,0 +1,105 @@
+{
+  "version": 2,
+  "documents": [
+    {
+      "id": "guia-clinica-estetica",
+      "titulo": "Guia de Inspeção para Clínica de Estética",
+      "path": "/documentos-roteiros/GUIA-CLINICA-ESTETICA%20(1).pdf",
+      "categoria": "Saúde",
+      "esfera": "estadual",
+      "descricao": "Guia de inspeção para clínica de estética.",
+      "keywords": "clínica estética",
+      "linkOficial": ""
+    },
+    {
+      "id": "guia-clinicas-de-saude",
+      "titulo": "Guia de Inspeção para Clínicas de Saúde",
+      "path": "/documentos-roteiros/guia-CLINICAS-DE-SAUDE.pdf",
+      "categoria": "Saúde",
+      "esfera": "estadual",
+      "descricao": "Guia de inspeção para clínicas de saúde.",
+      "keywords": "clínicas de saúde",
+      "linkOficial": ""
+    },
+    {
+      "id": "guia-supermercado",
+      "titulo": "Guia de Inspeção para Supermercado",
+      "path": "/documentos-roteiros/GUIA-Supermercado.pdf",
+      "categoria": "Saúde",
+      "esfera": "estadual",
+      "descricao": "Guia de inspeção sanitária para supermercados.",
+      "keywords": "supermercado alimentação",
+      "linkOficial": ""
+    },
+    {
+      "id": "resolucao-sesa-126-07",
+      "titulo": "Resolução SESA nº 126/2007",
+      "path": "/documentos-roteiros/Resolucao%20SESA%20126-07%20(2).pdf",
+      "categoria": "Legislação",
+      "esfera": "estadual",
+      "descricao": "Norma estadual de referência para inspeção sanitária.",
+      "keywords": "resolução SESA 126/2007",
+      "linkOficial": ""
+    },
+    {
+      "id": "roi-radiologia-intervencionista",
+      "titulo": "ROI — Radiologia Intervencionista",
+      "path": "/documentos-roteiros/ROICQdeRadiologiaIntervencionista_V1.2_Abril_22.pdf",
+      "categoria": "Saúde",
+      "esfera": "estadual",
+      "descricao": "Roteiro objetivo de inspeção para radiologia intervencionista.",
+      "keywords": "radiologia intervencionista ROI",
+      "linkOficial": ""
+    },
+    {
+      "id": "roi-endoscopia",
+      "titulo": "ROI — Endoscopia",
+      "path": "/documentos-roteiros/ROIEndoscopia_V1.3_Abril_22.pdf",
+      "categoria": "Saúde",
+      "esfera": "estadual",
+      "descricao": "Roteiro objetivo de inspeção para endoscopia.",
+      "keywords": "endoscopia ROI",
+      "linkOficial": ""
+    },
+    {
+      "id": "roi-urgencia-e-emergencia",
+      "titulo": "ROI — Urgência e Emergência",
+      "path": "/documentos-roteiros/ROIUrgnciaeEmergncia_V1.2_Abril_22.pdf",
+      "categoria": "Saúde",
+      "esfera": "estadual",
+      "descricao": "Roteiro objetivo de inspeção para urgência e emergência.",
+      "keywords": "urgência emergência ROI",
+      "linkOficial": ""
+    },
+    {
+      "id": "roteiro-saa-subterraneo",
+      "titulo": "Roteiro de Inspeção de SAA Subterrâneo",
+      "path": "/documentos-roteiros/ROTEIRO%20DE%20INSPE%C3%87%C3%83O%20DE%20SAA%20-%20SUBTERRANEO.pdf",
+      "categoria": "Saúde",
+      "esfera": "estadual",
+      "descricao": "Roteiro de inspeção de saneamento e água subterrânea.",
+      "keywords": "saa subterrâneo",
+      "linkOficial": ""
+    },
+    {
+      "id": "roi-mamografia",
+      "titulo": "ROI — Mamografia",
+      "path": "/documentos-roteiros/6.1RoteiroObjetivodeInspeodeMamografia_Verso1.3.pdf",
+      "categoria": "Saúde",
+      "esfera": "estadual",
+      "descricao": "Roteiro objetivo de inspeção para mamografia.",
+      "keywords": "mamografia ROI",
+      "linkOficial": ""
+    },
+    {
+      "id": "roi-radiografia-medica",
+      "titulo": "ROI — Radiografia Médica",
+      "path": "/documentos-roteiros/ROICQdeRadiologiaIntervencionista_V1.2_Abril_22.pdf",
+      "categoria": "Saúde",
+      "esfera": "estadual",
+      "descricao": "Roteiro objetivo de inspeção para radiografia médica.",
+      "keywords": "radiografia médica ROI",
+      "linkOficial": ""
+    }
+  ]
+}

@@ -35,7 +35,7 @@ export function useAppConfig(options?: { municipioIdOverride?: string }) {
   const [config, setConfig] = useState<MunicipalityConfig>({
     secretaria: "SECRETARIA MUNICIPAL DE SAÚDE",
     departamento: "VIGILÂNCIA SANITÁRIA",
-    municipioNome: "PRUDENTÓPOLIS",
+    municipioNome: "MUNICÍPIO",
   });
 
   const [systemLogo, setSystemLogo] = useState("");

@@ -45,6 +45,33 @@
 }
 
 @layer components {
+    .custom-scrollbar {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(148, 163, 184, 0.8) transparent;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.8);
+      border-radius: 999px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(100, 116, 139, 0.95);
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+
     /* Fundo padrão do app (atrás de AppHeader + conteúdo) — era um gradiente
        frio slate/branco; agora o tom "papel" institucional (#F5F2EA), pra
        telas que ainda não definem seu próprio fundo herdarem o certo. */

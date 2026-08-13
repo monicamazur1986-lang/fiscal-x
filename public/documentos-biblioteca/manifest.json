@@ -1,5 +1,5 @@
 {
-  "version": "2.3.0",
+  "version": "2.4.0",
   "documents": [
     {
       "id": "codigo-sanitario-estadual-pr",
@@ -27,6 +27,96 @@
       "categoria": "RDC",
       "descricao": "Resolução da ANVISA que aprova o Regulamento Técnico de Boas Práticas para Serviços de Alimentação, com os requisitos higiênico-sanitários gerais aplicáveis em todo o território nacional. É a base do roteiro de inspeção de Serviços de Alimentação.",
       "keywords": "rdc 216, anvisa, alimentos, servicos de alimentacao, boas praticas, higiene, manipulacao de alimentos, restaurante, lanchonete, cozinha, manipulador, pop, controle sanitario"
+    },
+    {
+      "id": "rdc-15-2014",
+      "titulo": "RDC nº 15/2014 — Boas Práticas em Serviços de Saúde",
+      "path": "/documentos-biblioteca/rdc%2015.pdf",
+      "esfera": "federal",
+      "categoria": "RDC",
+      "descricao": "Normas de boas práticas em serviços de saúde e critérios técnicos para a organização, estrutura e funcionamento dos estabelecimentos de saúde.",
+      "keywords": "rdc 15, anvisa, boas praticas servicos de saude, clinica hospital atendimento"
+    },
+    {
+      "id": "rdc-63-2011",
+      "titulo": "RDC nº 63/2011 — Boas Práticas para Serviços de Saúde",
+      "path": "/documentos-biblioteca/rdc%2063.pdf",
+      "esfera": "federal",
+      "categoria": "RDC",
+      "descricao": "Normas gerais de boas práticas e requisitos sanitários para funcionamento de serviços de saúde, incluindo consultórios, clínicas e estabelecimentos correlatos.",
+      "keywords": "rdc 63, anvisa, servicos de saude, boas praticas, consultorio, clinica, higiene"
+    },
+    {
+      "id": "rdc-67-2007-manipulacao",
+      "titulo": "RDC nº 67/2007 — Boas Práticas de Manipulação de Alimentos",
+      "path": "/documentos-biblioteca/rdc%2067%20manipulaca.pdf",
+      "esfera": "federal",
+      "categoria": "RDC",
+      "descricao": "Base regulatória para boas práticas em manipulação e processamento de alimentos, com foco em higiene, segurança e controle operacional.",
+      "keywords": "rdc 67, anvisa, manipulacao de alimentos, boas praticas, higiene, alimentos, processo"
+    },
+    {
+      "id": "rdc-222-2018",
+      "titulo": "RDC nº 222/2018 — Boas Práticas em Serviços de Saúde",
+      "path": "/documentos-biblioteca/rdc%20222.pdf",
+      "esfera": "federal",
+      "categoria": "RDC",
+      "descricao": "Regulamentação sanitária aplicada à estruturas, processos e procedimentos dos serviços de saúde e unidades relacionadas.",
+      "keywords": "rdc 222, anvisa, servicos de saude, regulamento tecnico, boas praticas"
+    },
+    {
+      "id": "rdc-471-2021",
+      "titulo": "RDC nº 471/2021 — Boas Práticas e Segurança Sanitária",
+      "path": "/documentos-biblioteca/rdc%20471.pdf",
+      "esfera": "federal",
+      "categoria": "RDC",
+      "descricao": "Norma sanitária da ANVISA que reforça exigências técnicas e de controle para serviços e estabelecimentos sob vigilância sanitária.",
+      "keywords": "rdc 471, anvisa, vigilância sanitária, boas praticas, normas tecnicas, segurança"
+    },
+    {
+      "id": "rdc-611-2022",
+      "titulo": "RDC nº 611/2022 — Requisitos Técnicos e Sanitários",
+      "path": "/documentos-biblioteca/rdc%20611.pdf",
+      "esfera": "federal",
+      "categoria": "RDC",
+      "descricao": "Norma complementar de exigências sanitárias aplicáveis a serviços e atividades sob vigilância sanitária, com foco em requisitos técnicos e de controle.",
+      "keywords": "rdc 611, anvisa, requisitos tecnicos, vigilância sanitária, controle sanitário"
+    },
+    {
+      "id": "portaria-344-1998",
+      "titulo": "Portaria nº 344/1998 — Medicamentos e Controle Especial",
+      "path": "/documentos-biblioteca/344.pdf",
+      "esfera": "federal",
+      "categoria": "Portaria",
+      "descricao": "Portaria de regulamentação sanitária referente a medicamentos de controle especial e procedimentos correlatos de dispensação, armazenamento e controle.",
+      "keywords": "portaria 344, medicamentos, controle especial, farmacêutica, vigilância sanitária"
+    },
+    {
+      "id": "portaria-1034-2020",
+      "titulo": "Portaria nº 1.034/2020 — Vigilância Sanitária e Serviços de Saúde",
+      "path": "/documentos-biblioteca/1034_20.pdf",
+      "esfera": "federal",
+      "categoria": "Portaria",
+      "descricao": "Portaria que complementa e orienta requisitos sanitários, procedimentos e obrigações aplicáveis em serviços de saúde e atividades correlatas.",
+      "keywords": "portaria 1034, vigilância sanitária, serviços de saúde, normas técnicas, controle sanitário"
+    },
+    {
+      "id": "resolucao-sesa-590-2014",
+      "titulo": "Resolução SESA nº 590/2014 — Higiene e Segurança em Estabelecimentos",
+      "path": "/documentos-biblioteca/Resolu%C3%A7%C3%A3o%20SESA%20n%20590-2014.pdf",
+      "esfera": "estadual",
+      "categoria": "Resolução",
+      "descricao": "Norma estadual para higiene, biossegurança, controle e critérios sanitários aplicáveis a estabelecimentos e serviços sob vigilância sanitária do Paraná.",
+      "keywords": "resolucao sesa 590, parana, higienizacao, biosseguranca, vigilancia sanitaria, estabelecimento sanitaria"
+    },
+    {
+      "id": "rdc-46-2013-vape",
+      "titulo": "RDC nº 46/2013 — Produtos de Tabaco e Dispositivos Eletrônicos",
+      "path": "/documentos-biblioteca/rdc%2046%20cigarro%20eletronico.pdf",
+      "esfera": "federal",
+      "categoria": "RDC",
+      "descricao": "Norma da ANVISA sobre dispositivos eletrônicos para fumar e produtos relacionados, com exigências sanitárias e restrições de uso e comercialização.",
+      "keywords": "rdc 46, anvisa, cigarro eletronico, vape, dispositivos eletrônicos, tabaco, controle sanitário"
     }
   ]
 }

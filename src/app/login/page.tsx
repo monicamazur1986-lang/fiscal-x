@@ -55,15 +55,13 @@ export default function LoginPage() {
     setPendingLoginToast(false);
     if (!user) return;
 
-    if (isAuthorized) {
-      toast({ title: "Acesso Autorizado", description: "Bem-vindo ao Fiscal-X." });
-    } else if (profile?.status === 'rejected') {
+    if (!isAuthorized && profile?.status === 'rejected') {
       toast({
         variant: "destructive",
         title: "Acesso Negado",
         description: profile.adminFeedback || "Seu cadastro foi recusado pelo gestor municipal."
       });
-    } else {
+    } else if (!isAuthorized) {
       toast({
         title: "Login Realizado",
         description: "Sua conta ainda está aguardando aprovação do gestor municipal."

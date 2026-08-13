@@ -34,11 +34,19 @@ const lawOptions = [
   { id: 'todas', label: 'Todo o banco de dados' },
 ] as const;
 
-const individualLawOptions = Object.entries(legislacaoData as Record<string, { titulo: string; municipioId?: string }>).map(([lawKey, law]) => ({
-  id: lawKey,
-  label: law.titulo,
-  group: law.municipioId ? 'Código Municipal' : 'Código Sanitário Estadual',
-}));
+const individualLawOptions = Object.entries(
+  legislacaoData as Record<string, {
+    titulo: string;
+    municipioId?: string;
+    biblioteca?: { esfera: 'municipal' | 'estadual' | 'federal'; categoria: string };
+  }>
+)
+  .filter(([, law]) => !!law.biblioteca)
+  .map(([lawKey, law]) => ({
+    id: lawKey,
+    label: law.titulo,
+    group: law.municipioId ? 'Código Municipal' : 'Código Sanitário Estadual',
+  }));
 
 export function AssistenteIAFormDialog({ onApply }: Props) {
   const [isOpen, setIsOpen] = useState(false)
@@ -231,7 +239,7 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
               </button>
 
               {isLegalMenuOpen && (
-                <div className="absolute z-20 mt-2 w-full rounded-xl border border-zinc-200 bg-white p-2 shadow-xl max-h-[60vh] overflow-y-auto overscroll-contain">
+                <div className="absolute z-20 mt-2 w-full rounded-xl border border-zinc-200 bg-white p-2 shadow-xl max-h-[60vh] overflow-y-auto custom-scrollbar overscroll-contain">
                   <div className="space-y-2">
                     <div className="px-2 text-[9px] font-black uppercase tracking-[0.12em] text-zinc-500">Geral</div>
                     {lawOptions.map((opt) => {

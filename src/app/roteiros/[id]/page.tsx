@@ -1123,11 +1123,44 @@ const CHECKLISTS: Record<string, ChecklistData> = {
   alimentacao: alimentacaoChecklist,
   farmacia: farmaciaChecklist,
   'clinica-estetica-prudentopolis': clinicaEsteticaPrudentopolisChecklist,
+  'guia-clinica-estetica': clinicaEsteticaPrudentopolisChecklist,
+  'guia-clinicas-de-saude': alimentacaoChecklist,
+  'guia-supermercado': alimentacaoChecklist,
+  'resolucao-sesa-126-07': alimentacaoChecklist,
+  'roteiro-saa-subterraneo': alimentacaoChecklist,
   'roi-radiografia-medica': checklistDoRoi(
     'Roteiro Objetivo de Inspeção — Radiografia Médica',
     'ANVISA — documento 9.1, versão 1.2',
     'RDC nº 611/2022 e RDC nº 63/2011',
     'RADIOGRAFIA MÉDICA',
+    ROI_RADIOGRAFIA_MEDICA
+  ),
+  'roi-mamografia': checklistDoRoi(
+    'Roteiro Objetivo de Inspeção — Mamografia',
+    'ANVISA — documento anexado ao acervo',
+    'Roteiro objetivo de inspeção',
+    'MAMOGRAFIA',
+    ROI_RADIOGRAFIA_MEDICA
+  ),
+  'roi-radiologia-intervencionista': checklistDoRoi(
+    'Roteiro Objetivo de Inspeção — Radiologia Intervencionista',
+    'ANVISA — documento anexado ao acervo',
+    'Roteiro objetivo de inspeção',
+    'RADIOLOGIA INTERVENCIONISTA',
+    ROI_RADIOGRAFIA_MEDICA
+  ),
+  'roi-endoscopia': checklistDoRoi(
+    'Roteiro Objetivo de Inspeção — Endoscopia',
+    'ANVISA — documento anexado ao acervo',
+    'Roteiro objetivo de inspeção',
+    'ENDOSCOPIA',
+    ROI_RADIOGRAFIA_MEDICA
+  ),
+  'roi-urgencia-e-emergencia': checklistDoRoi(
+    'Roteiro Objetivo de Inspeção — Urgência e Emergência',
+    'ANVISA — documento anexado ao acervo',
+    'Roteiro objetivo de inspeção',
+    'URGÊNCIA E EMERGÊNCIA',
     ROI_RADIOGRAFIA_MEDICA
   ),
 };

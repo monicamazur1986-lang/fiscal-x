@@ -34,7 +34,7 @@ export function OfficialLetterhead({ className }: { className?: string }) {
           <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(config.headerRichText) }} />
         ) : (
           <>
-            <p className="text-[10pt] font-black uppercase text-black">PREFEITURA MUNICIPAL DE {config.municipioNome || "PRUDENTÓPOLIS"}</p>
+            <p className="text-[10pt] font-black uppercase text-black">PREFEITURA MUNICIPAL DE {config.municipioNome || "MUNICÍPIO"}</p>
             <h2 className="text-[12pt] font-black uppercase leading-tight">{config.secretaria || "SECRETARIA MUNICIPAL DE SAÚDE"}</h2>
             <h3 className="text-[10pt] font-bold uppercase text-zinc-700">{config.departamento || "VIGILÂNCIA SANITÁRIA"}</h3>
           </>

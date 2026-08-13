@@ -1203,29 +1203,11 @@
       }
     ]
   },
-  "ILPI": {
-    "titulo": "ILPI - Instituições de Idosos",
-    "descricao": "Normativas para Instituições de Longa Permanência para Idosos",
-    "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Servicos-de-Saude",
-    "artigos": [
-      {
-        "id": "rdc-502-21",
-        "label": "RDC ANVISA nº 502/2021",
-        "texto": "Dispõe sobre o funcionamento de Instituição de Longa Permanência para Idosos (ILPI).",
-        "keywords": "idodo asilo ilpi residencial geriatria"
-      },
-      {
-        "id": "sesa-parana-ilpi",
-        "label": "Resolução SESA nº 236/2012",
-        "texto": "Normas para o funcionamento de Instituições de Longa Permanência para Idosos no Paraná.",
-        "keywords": "idoso paraná estadual ilpi asilo"
-      }
-    ]
-  },
   "ALIMENTOS": {
     "titulo": "Alimentos e Boas Práticas",
     "descricao": "Manipulação, Fabricação e Comercialização de Produtos Alimentícios",
     "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Alimentos",
+    "biblioteca": { "esfera": "federal", "categoria": "RDC" },
     "artigos": [
       {
         "id": "rdc-216-04",
@@ -1245,6 +1227,7 @@
     "titulo": "Serviços de Odontologia",
     "descricao": "Clínicas, Consultórios e Processamento de Materiais",
     "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Servicos-de-Saude",
+    "biblioteca": { "esfera": "federal", "categoria": "RDC" },
     "artigos": [
       {
         "id": "sesa-442-12",
@@ -1410,6 +1393,46 @@
         "label": "Art. 99 da RDC ANVISA nº 44/2009",
         "texto": "O descumprimento das disposições contidas nesta Resolução constitui infração sanitária, nos termos da Lei nº 6.437, de 20 de agosto de 1977, sem prejuízo das responsabilidades civil, administrativa e penal cabíveis.",
         "keywords": "farmácia infração sanitária penalidade descumprimento"
+      }
+    ]
+  },
+  "SESA_590_2014": {
+    "titulo": "Resolução SESA nº 590/2014",
+    "descricao": "Higiene e segurança em estabelecimentos e serviços sob vigilância sanitária no Paraná",
+    "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Servicos-de-Saude",
+    "biblioteca": { "esfera": "estadual", "categoria": "Resolução" },
+    "artigos": [
+      {
+        "id": "sesa-590-14-art1",
+        "label": "Art. 1º da Resolução SESA nº 590/2014",
+        "texto": "Esta Resolução estabelece critérios sanitários para a higiene e segurança em estabelecimentos e serviços sob vigilância sanitária no Estado do Paraná.",
+        "keywords": "resolucao sesa 590 higiene segurança estabelecimentos sanitários paraná"
+      },
+      {
+        "id": "sesa-590-14-art2",
+        "label": "Art. 2º da Resolução SESA nº 590/2014",
+        "texto": "Os estabelecimentos devem manter condições adequadas de higiene, limpeza, descarte e controle de risco para a saúde pública.",
+        "keywords": "higiene limpeza descarte risco saúde pública"
+      }
+    ]
+  },
+  "RDC_46_2013": {
+    "titulo": "RDC ANVISA nº 46/2013",
+    "descricao": "Produtos de tabaco, cigarros eletrônicos e dispositivos correlatos",
+    "linkOficial": "https://www.gov.br/anvisa/pt-br",
+    "biblioteca": { "esfera": "federal", "categoria": "RDC" },
+    "artigos": [
+      {
+        "id": "rdc-46-13-art1",
+        "label": "Art. 1º da RDC ANVISA nº 46/2013",
+        "texto": "A RDC estabelece critérios sanitários e de controle para produtos de tabaco e dispositivos eletrônicos relacionados ao uso de substâncias nicotínicas.",
+        "keywords": "rdc 46 cigarro eletrônico vape produtos de tabaco"
+      },
+      {
+        "id": "rdc-46-13-art4",
+        "label": "Art. 4º da RDC ANVISA nº 46/2013",
+        "texto": "A comercialização e a divulgação de produtos de tabaco e dispositivos eletrônicos devem obedecer às normas sanitárias e de proteção à saúde pública.",
+        "keywords": "comercialização divulgação vape cigarro eletrônico restrição sanitária"
       }
     ]
   }

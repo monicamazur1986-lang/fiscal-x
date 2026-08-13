@@ -90,7 +90,7 @@ export default function IdentidadeMunicipalPage() {
   }, [config, selectedRoteiroId])
 
   const resetToDefaultHeader = () => {
-    const cityName = config.municipioNome || effectiveMunicipioNome || "PRUDENTÓPOLIS";
+    const cityName = config.municipioNome || effectiveMunicipioNome || "MUNICÍPIO";
     const initial = `
       <div style="text-align: center;">
         <p style="margin: 0; font-size: 10.5pt;"><strong>PREFEITURA MUNICIPAL DE ${cityName.toUpperCase()}</strong></p>

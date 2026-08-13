@@ -33,15 +33,15 @@ export function AppSidebar() {
   return (
     <div className="h-full border-r bg-muted/30 no-print">
       <div className="flex h-full max-h-screen flex-col gap-2">
-        <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
+        <div className="flex h-14 items-center justify-center border-b px-2 lg:h-[60px] lg:justify-start lg:px-6">
           <Link href="/" className="flex items-center gap-2 group">
-            <div className="scale-75 -ml-2">
+            <div className="scale-75 -ml-2 lg:scale-100 lg:-ml-0">
               <SentinelaMascot className="w-12 h-12" />
             </div>
           </Link>
         </div>
-        <div className="flex-1">
-          <nav className="grid items-start px-2 text-sm font-medium lg:px-4 py-4 space-y-1">
+        <div className="flex-1 overflow-hidden">
+          <nav className="grid items-start px-1.5 py-3 text-sm font-medium lg:px-3 space-y-1.5">
             {navItems.map((item) => {
                 const isActive = item.href === '/dashboard' ? pathname === item.href : pathname.startsWith(item.href);
                 return (
@@ -49,19 +49,21 @@ export function AppSidebar() {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "flex items-center gap-3 rounded-lg px-4 py-3 text-muted-foreground transition-all hover:text-primary hover:bg-primary/5",
+                      "flex min-w-0 items-center justify-center gap-2 rounded-lg px-2 py-2.5 text-muted-foreground transition-all hover:text-primary hover:bg-primary/5 lg:justify-start lg:gap-3 lg:px-4",
                       isActive && "bg-primary/10 text-primary font-bold shadow-sm"
                     )}
                   >
-                    <item.icon className={cn("h-5 w-5", isActive ? "text-primary" : "text-muted-foreground")} />
-                    <span className="text-xs font-black uppercase tracking-widest">{item.label}</span>
+                    <item.icon className={cn("h-4 w-4 shrink-0 sm:h-5 sm:w-5", isActive ? "text-primary" : "text-muted-foreground")} />
+                    <span className="hidden text-[9px] font-black uppercase tracking-[0.16em] text-current lg:inline lg:text-[10px]">
+                      {item.label}
+                    </span>
                   </Link>
                 )
             })}
           </nav>
         </div>
-        <div className="p-4 mt-auto border-t bg-card/50">
-          <p className="text-[9px] text-muted-foreground text-center uppercase tracking-widest font-black opacity-40">
+        <div className="mt-auto border-t bg-card/50 p-2 lg:p-4">
+          <p className="text-[8px] text-muted-foreground text-center uppercase tracking-[0.16em] font-black opacity-40 lg:text-[9px]">
             Vigilância Sanitária PR
           </p>
         </div>

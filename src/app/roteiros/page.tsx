@@ -17,6 +17,11 @@ import {
   Trash2,
   Loader2,
   Radiation,
+  ScanLine,
+  Stethoscope,
+  Building,
+  Ambulance,
+  Activity,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import Link from "next/link"
@@ -42,6 +47,7 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
 import { normalizeId } from "@/lib/utils"
 import municipiosPR from "@/lib/municipios-pr.json"
+import { roteirosCatalog } from "@/lib/roteiros/catalog"
 
 // ÍCONE CUSTOMIZADO: DENTE (ODONTOLOGIA)
 const ToothIcon = ({ className }: { className?: string }) => (
@@ -58,56 +64,162 @@ const ToothIcon = ({ className }: { className?: string }) => (
   </svg>
 )
 
-// Contagem de itens respondíveis de cada roteiro (sem contar linhas de
-// agrupamento/isHeader) — mantida à mão aqui, igual ao campo `base`, porque
-// dá pro fiscal uma noção real de tamanho/tempo antes de abrir. Se um
-// roteiro for editado em roteiros/[id]/page.tsx, atualizar o número aqui.
-const roteiros = [
-  { id: 'odontologia', titulo: 'Roteiro de Inspeção de Odontologia', categoria: 'Saúde', icone: ToothIcon, base: 'Resolução SESA nº 0414/2001', itens: 183 },
-  // Exclusivos de Prudentópolis — não aparecem pra outros municípios (ver
-  // filtro por municipioId logo abaixo).
-  { id: 'odontologia-prudentopolis', titulo: 'Guia de Inspeção Consultórios/Clínicas Odontológicas', categoria: 'Saúde', icone: ToothIcon, base: 'RDC 063/11 e Res. SESA', municipioId: 'prudentopolis', itens: 57 },
-  { id: 'clinica-estetica-prudentopolis', titulo: 'Guia de Inspeção para Clínica de Estética', categoria: 'Saúde', icone: Syringe, base: 'RDC 63/2011 e Dec. Est. 5.711/2002', municipioId: 'prudentopolis', itens: 60 },
-  // Nível estadual/federal — sem municipioId, visível a qualquer município.
-  { id: 'alimentacao', titulo: 'Roteiro de Inspeção de Serviços de Alimentação', categoria: 'Saúde', icone: UtensilsCrossed, base: 'RDC 275/2002 e RDC 216/2004', itens: 108 },
-  { id: 'farmacia', titulo: 'Roteiro de Auto-Inspeção de Farmácias e Drogarias', categoria: 'Saúde', icone: Pill, base: 'Lei 5.991/1973 e RDC 44/2009', itens: 101 },
-  // ROI da ANVISA — grupo próprio na tela: não se respondem com SIM/NÃO/ND e
-  // sim por nota de 0 a 5, então misturá-los aos demais confundiria o fiscal
-  // sobre o que esperar ao abrir. `tipo: 'roi'` é o que os separa.
-  { id: 'roi-radiografia-medica', titulo: 'ROI — Radiografia Médica', categoria: 'Saúde', icone: Radiation, base: 'RDC 611/2022 e RDC 63/2011', itens: 36, tipo: 'roi' },
-]
+const roteiros = roteirosCatalog.map((roteiro) => ({
+  ...roteiro,
+  icone: {
+    tooth: ToothIcon,
+    utensils: UtensilsCrossed,
+    pill: Pill,
+    syringe: Syringe,
+    radiation: Radiation,
+    scan: ScanLine,
+    stethoscope: Stethoscope,
+    building: Building,
+    ambulance: Ambulance,
+    activity: Activity,
+  }[roteiro.iconName],
+}));
 
 type Roteiro = (typeof roteiros)[number];
 
-// Selo colorido do ícone: latão pros roteiros exclusivos do município (reforça
-// "isso é só seu"), verde-petróleo pros de abrangência estadual/federal
-// (reforça "isso vale em qualquer lugar") — a cor já carrega o significado,
-// não é só decoração.
+function getPalette(roteiro: Roteiro) {
+  const isMunicipal = 'municipioId' in roteiro;
+
+  if (roteiro.tipo === 'roi') {
+    const roiPaletteById: Record<string, { icon: string; badge: string; chip: string; glow: string }> = {
+      'roi-radiografia-medica': {
+        icon: 'bg-gradient-to-br from-sky-400 via-sky-500 to-sky-600 text-white shadow-sm',
+        badge: 'bg-sky-100 text-sky-700 border border-sky-200',
+        chip: 'bg-sky-50 text-sky-700 border border-sky-200',
+        glow: 'from-sky-50 to-slate-50',
+      },
+      'roi-mamografia': {
+        icon: 'bg-gradient-to-br from-pink-300 via-rose-400 to-rose-500 text-white shadow-sm',
+        badge: 'bg-rose-100 text-rose-700 border border-rose-200',
+        chip: 'bg-rose-50 text-rose-700 border border-rose-200',
+        glow: 'from-rose-50 to-stone-50',
+      },
+      'roi-radiologia-intervencionista': {
+        icon: 'bg-gradient-to-br from-emerald-400 via-teal-500 to-teal-600 text-white shadow-sm',
+        badge: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+        chip: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+        glow: 'from-emerald-50 to-teal-50',
+      },
+      'roi-endoscopia': {
+        icon: 'bg-gradient-to-br from-amber-400 via-orange-400 to-orange-500 text-white shadow-sm',
+        badge: 'bg-orange-100 text-orange-700 border border-orange-200',
+        chip: 'bg-orange-50 text-orange-700 border border-orange-200',
+        glow: 'from-orange-50 to-amber-50',
+      },
+      'roi-urgencia-e-emergencia': {
+        icon: 'bg-gradient-to-br from-red-400 via-rose-400 to-rose-500 text-white shadow-sm',
+        badge: 'bg-red-100 text-red-700 border border-red-200',
+        chip: 'bg-red-50 text-red-700 border border-red-200',
+        glow: 'from-red-50 to-rose-50',
+      },
+    };
+
+    return roiPaletteById[roteiro.id] || {
+      icon: 'bg-gradient-to-br from-amber-300 via-orange-300 to-amber-500 text-white shadow-sm',
+      badge: 'bg-amber-100 text-amber-700 border border-amber-200',
+      chip: 'bg-amber-50 text-amber-700 border border-amber-200',
+      glow: 'from-amber-50 to-orange-50',
+    };
+  }
+
+  const paletteByIcon: Record<string, { icon: string; badge: string; chip: string; glow: string }> = {
+    tooth: {
+      icon: 'bg-gradient-to-br from-rose-500 via-pink-500 to-fuchsia-600 text-white shadow-sm',
+      badge: 'bg-rose-100 text-rose-700 border border-rose-200',
+      chip: 'bg-pink-50 text-pink-700 border border-pink-200',
+      glow: 'from-rose-50 to-pink-50',
+    },
+    utensils: {
+      icon: 'bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 text-white shadow-sm',
+      badge: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+      chip: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+      glow: 'from-emerald-50 to-teal-50',
+    },
+    pill: {
+      icon: 'bg-gradient-to-br from-sky-500 via-cyan-500 to-blue-600 text-white shadow-sm',
+      badge: 'bg-sky-100 text-sky-700 border border-sky-200',
+      chip: 'bg-sky-50 text-sky-700 border border-sky-200',
+      glow: 'from-sky-50 to-cyan-50',
+    },
+    syringe: {
+      icon: 'bg-gradient-to-br from-violet-500 via-purple-500 to-indigo-600 text-white shadow-sm',
+      badge: 'bg-violet-100 text-violet-700 border border-violet-200',
+      chip: 'bg-violet-50 text-violet-700 border border-violet-200',
+      glow: 'from-violet-50 to-purple-50',
+    },
+    radiation: {
+      icon: 'bg-gradient-to-br from-amber-400 via-yellow-400 to-orange-500 text-white shadow-sm',
+      badge: 'bg-yellow-100 text-yellow-700 border border-yellow-200',
+      chip: 'bg-yellow-50 text-yellow-700 border border-yellow-200',
+      glow: 'from-yellow-50 to-orange-50',
+    },
+  };
+
+  const palette = paletteByIcon[roteiro.iconName] || {
+    icon: 'bg-gradient-to-br from-slate-500 to-slate-600 text-white shadow-sm',
+    badge: 'bg-slate-100 text-slate-700 border border-slate-200',
+    chip: 'bg-slate-50 text-slate-700 border border-slate-200',
+    glow: 'from-slate-50 to-slate-100',
+  };
+
+  if (isMunicipal) {
+    return {
+      ...palette,
+      icon: 'bg-gradient-to-br from-[#d9b56d] via-[#c99438] to-[#9c6d1d] text-white shadow-sm',
+      badge: 'bg-[#f7edd9] text-[#7a5a1e] border border-[#e7cf93]',
+      chip: 'bg-[#fff6e8] text-[#7a5a1e] border border-[#ecd8a7]',
+      glow: 'from-[#fffaf2] to-[#f7f0df]',
+    };
+  }
+
+  return palette;
+}
+
 function RoteiroCard({ roteiro }: { roteiro: Roteiro }) {
   const isMunicipal = 'municipioId' in roteiro;
+  const href = `/roteiros/${roteiro.id}`;
+  const palette = getPalette(roteiro);
+
   return (
     <Link
-      href={`/roteiros/${roteiro.id}`}
-      className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-[#FAF8F3] transition-colors"
+      href={href}
+      className={cn(
+        "group flex items-center justify-between gap-4 px-4 py-3.5 transition-all duration-200 hover:bg-[#FAF8F3] hover:shadow-[0_2px_8px_rgba(38,36,32,0.04)]",
+        `bg-gradient-to-r ${palette.glow}`
+      )}
     >
       <div className="min-w-0 flex-1 flex items-center gap-4">
         <div className={cn(
-          "h-10 w-10 rounded-xl flex items-center justify-center shrink-0",
-          isMunicipal ? "bg-[#F1E9D6] text-[#9C7A3C]" : "bg-[#E4EEEC] text-[#0E4A44]"
+          "h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-[1.02]",
+          palette.icon
         )}>
           <roteiro.icone className="h-5 w-5" />
         </div>
-        <div className="min-w-0">
-          <p className="font-serif text-[16px] text-[#262420] leading-snug line-clamp-2">{roteiro.titulo}</p>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-serif text-[16px] text-[#262420] leading-snug line-clamp-2">{roteiro.titulo}</p>
+            {isMunicipal && (
+              <span className={cn("rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.14em]", palette.badge)}>
+                município
+              </span>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
-            <span className="text-[11px] font-semibold text-[#6B6659] bg-[#F1EEE4] rounded-md px-2 py-0.5">
+            <span className={cn("text-[11px] font-semibold rounded-md px-2 py-0.5", palette.badge)}>
               {roteiro.itens} itens
             </span>
-            <span className="text-xs text-[#6B6659]">Base: {roteiro.base}</span>
+            <span className={cn("text-[11px] rounded-md px-2 py-0.5 font-medium", palette.chip)}>
+              {roteiro.base}
+            </span>
           </div>
         </div>
       </div>
-      <ChevronRight className="h-4 w-4 text-[#C9C2AC] shrink-0" />
+      <ChevronRight className="h-4 w-4 text-[#C9C2AC] shrink-0 transition-transform duration-200 group-hover:translate-x-0.5" />
     </Link>
   );
 }
@@ -327,13 +439,20 @@ export default function RoteirosPage() {
         )}
 
         {roteirosRoi.length > 0 && (
-          <div className="space-y-2">
-            <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">
-              <Radiation className="h-3.5 w-3.5" />
-              Roteiros Objetivos de Inspeção — ANVISA
-            </h2>
-            <p className="text-[11px] text-[#6B6659] leading-relaxed">
-              Avaliação por nota de 0 a 5 em cada indicador, conforme o modelo da ANVISA — não é o SIM/NÃO dos demais roteiros.
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#E4D7B7] bg-[#F8F1E2] px-4 py-3 shadow-[0_1px_2px_rgba(38,36,32,0.04)]">
+              <h2 className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[#7A5A1E]">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#F5E3B4] text-[#7A5A1E]">
+                  <Radiation className="h-3.5 w-3.5" />
+                </span>
+                ROIs — ANVISA
+              </h2>
+              <span className="rounded-full border border-[#E7CF93] bg-white/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#7A5A1E]">
+                nota 0–5
+              </span>
+            </div>
+            <p className="px-1 text-[11px] text-[#6B6659] leading-relaxed">
+              Avaliação por nota de 0 a 5 em cada indicador, conforme o modelo da ANVISA — diferente do SIM/NÃO usado nos demais roteiros.
             </p>
             <div className="bg-white border border-[#E4DFD1] rounded-lg divide-y divide-[#F1EEE4] overflow-hidden shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
               {roteirosRoi.map((r) => <RoteiroCard key={r.id} roteiro={r} />)}
