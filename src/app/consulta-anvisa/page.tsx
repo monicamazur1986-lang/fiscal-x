@@ -6,7 +6,6 @@ import { Search, Loader2, Landmark, Info, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
@@ -113,6 +112,7 @@ function DatasetPanel({ dataset }: { dataset: AnvisaDataset }) {
 
 export default function ConsultaAnvisaPage() {
   const [activeTab, setActiveTab] = useState(ANVISA_DATASETS[0].key);
+  const activeDataset = ANVISA_DATASETS.find((dataset) => dataset.key === activeTab) ?? ANVISA_DATASETS[0];
 
   return (
     <div className="max-w-5xl mx-auto w-full p-4 md:p-8 space-y-6 pb-40">
@@ -133,19 +133,53 @@ export default function ConsultaAnvisaPage() {
         </p>
       </div>
 
-      <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full flex-wrap h-auto">
-            {ANVISA_DATASETS.map(ds => (
-              <TabsTrigger key={ds.key} value={ds.key} className="flex-1">{ds.label}</TabsTrigger>
-            ))}
-          </TabsList>
-          {ANVISA_DATASETS.map(ds => (
-            <TabsContent key={ds.key} value={ds.key} className="pt-6">
-              <DatasetPanel dataset={ds} />
-            </TabsContent>
-          ))}
-        </Tabs>
+      <div className="bg-white p-4 md:p-6 rounded-[2.5rem] border border-slate-200 shadow-sm">
+        <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <aside className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-2">
+            <div className="mb-2 flex items-center justify-between gap-2 px-2 pt-1">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Objeto da pesquisa</p>
+              <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-sky-700">
+                {activeDataset.label}
+              </span>
+            </div>
+
+            <div className="max-h-[60vh] space-y-1 overflow-y-auto pr-1 custom-scrollbar">
+              {ANVISA_DATASETS.map(ds => {
+                const selected = activeTab === ds.key;
+
+                return (
+                  <button
+                    key={ds.key}
+                    type="button"
+                    onClick={() => setActiveTab(ds.key)}
+                    className={cn(
+                      "w-full rounded-2xl border px-3 py-3 text-left transition-all",
+                      selected
+                        ? "border-sky-500 bg-white shadow-sm"
+                        : "border-transparent bg-transparent hover:border-slate-200 hover:bg-white/60"
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] md:text-[11px] font-black uppercase tracking-[0.14em] text-slate-700">
+                        {ds.label}
+                      </span>
+                      {selected && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-100 text-sky-700">
+                        <span className="h-2 w-2 rounded-full bg-sky-600" />
+                      </span>}
+                    </div>
+                    <p className="mt-2 text-[9px] leading-relaxed text-slate-500">
+                      {ds.description}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+
+          <div className="min-w-0 rounded-[1.5rem] border border-slate-200 bg-slate-50/60 p-3 md:p-5">
+            <DatasetPanel dataset={activeDataset} />
+          </div>
+        </div>
       </div>
     </div>
   );

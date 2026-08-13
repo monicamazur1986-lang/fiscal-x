@@ -61,7 +61,8 @@ const individualLawOptions = Object.entries(
     id: lawKey,
     label: law.titulo,
     group: law.municipioId ? 'Código Municipal' : 'Código Sanitário Estadual',
-  }));
+  }))
+  .sort((a, b) => a.label.localeCompare(b.label));
 
 interface GerarRascunhoProps {
   caseDescription: string;
@@ -348,7 +349,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                 </button>
 
                 {isLegalMenuOpen && (
-                  <div className="absolute z-20 mt-2 w-full rounded-xl border border-zinc-200 bg-white p-2 shadow-xl max-h-[60vh] overflow-y-auto custom-scrollbar overscroll-contain">
+                  <div className="absolute z-50 mt-2 w-full rounded-xl border border-zinc-200 bg-white p-2 shadow-[0_20px_50px_rgba(0,0,0,0.18)] max-h-[55vh] overflow-y-auto custom-scrollbar overscroll-contain">
                     <div className="space-y-2">
                       <div className="px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Geral</div>
                       {lawOptions.map((opt) => {

@@ -37,49 +37,75 @@ export const DEFAULT_MAX_WRITES_PER_RUN = 15000;
 // Campo que identifica cada linha de forma única por dataset — vira o ID do
 // documento no Firestore. Mapeado explicitamente (em vez de adivinhado por
 // regex) porque só existem 4 datasets fixos, todos já conhecidos.
-const ID_FIELD: Record<string, string> = {
-  empresas: 'NU_CNPJ',
-  'produtos-saude': 'NU_REGISTRO_PRODUTO',
-  medicamentos: 'NU_REGISTRO_PRODUTO',
-  saneantes: 'NUMERO_REGISTRO',
+const ID_FIELD: Record<string, string[]> = {
+  empresas: ['NU_CNPJ'],
+  'produtos-saude': ['NU_REGISTRO_PRODUTO', 'NUMERO_REGISTRO', 'REGISTRO', 'NU_REGISTRO'],
+  medicamentos: ['NU_REGISTRO_PRODUTO', 'NUMERO_REGISTRO', 'REGISTRO', 'NU_REGISTRO'],
+  saneantes: ['NUMERO_REGISTRO', 'NU_REGISTRO', 'REGISTRO'],
+  alimentos: ['NUMERO_REGISTRO', 'NU_REGISTRO', 'REGISTRO', 'NU_CNPJ'],
+  cosmeticos: ['NUMERO_REGISTRO', 'NU_REGISTRO', 'REGISTRO', 'NU_CNPJ'],
+  'ensaios-clinicos': ['NU_REGISTRO', 'NUMERO_REGISTRO', 'REGISTRO'],
+  cannabis: ['NUMERO_REGISTRO', 'NU_REGISTRO', 'REGISTRO', 'NU_CNPJ'],
+  tabaco: ['NUMERO_REGISTRO', 'NU_REGISTRO', 'REGISTRO', 'NU_CNPJ'],
 };
 
-const CNPJ_FIELD: Record<string, string | undefined> = {
-  empresas: 'NU_CNPJ',
-  'produtos-saude': 'NU_CNPJ_EMPRESA',
-  medicamentos: 'NU_CNPJ_EMPRESA',
-  saneantes: undefined,
+const CNPJ_FIELD: Record<string, string[]> = {
+  empresas: ['NU_CNPJ'],
+  'produtos-saude': ['NU_CNPJ_EMPRESA', 'CNPJ', 'NU_CNPJ'],
+  medicamentos: ['NU_CNPJ_EMPRESA', 'CNPJ', 'NU_CNPJ'],
+  saneantes: ['NU_CNPJ', 'CNPJ', 'CNPJ_EMPRESA'],
+  alimentos: ['NU_CNPJ', 'CNPJ'],
+  cosmeticos: ['NU_CNPJ', 'CNPJ'],
+  'ensaios-clinicos': ['NU_CNPJ', 'CNPJ'],
+  cannabis: ['NU_CNPJ', 'CNPJ'],
+  tabaco: ['NU_CNPJ', 'CNPJ'],
 };
 
-const NAME_FIELD: Record<string, string> = {
-  empresas: 'NO_RAZAO_SOCIAL',
-  'produtos-saude': 'NO_PRODUTO',
-  medicamentos: 'NO_PRODUTO',
-  saneantes: 'NOME_PRODUTO',
+const NAME_FIELD: Record<string, string[]> = {
+  empresas: ['NO_RAZAO_SOCIAL', 'RAZAO_SOCIAL', 'NOME_EMPRESA', 'NO_FANTASIA'],
+  'produtos-saude': ['NO_PRODUTO', 'NOME_PRODUTO', 'DESCRICAO_PRODUTO'],
+  medicamentos: ['NO_PRODUTO', 'NOME_PRODUTO', 'DESCRICAO_PRODUTO'],
+  saneantes: ['NOME_PRODUTO', 'NO_PRODUTO', 'DESCRICAO_PRODUTO'],
+  alimentos: ['NOME_PRODUTO', 'NO_PRODUTO', 'DESCRICAO_PRODUTO', 'RAZAO_SOCIAL'],
+  cosmeticos: ['NOME_PRODUTO', 'NO_PRODUTO', 'DESCRICAO_PRODUTO', 'RAZAO_SOCIAL'],
+  'ensaios-clinicos': ['NO_PRODUTO', 'NOME_PRODUTO', 'DESCRICAO_PRODUTO', 'RAZAO_SOCIAL'],
+  cannabis: ['NOME_PRODUTO', 'NO_PRODUTO', 'DESCRICAO_PRODUTO', 'RAZAO_SOCIAL'],
+  tabaco: ['NOME_PRODUTO', 'NO_PRODUTO', 'DESCRICAO_PRODUTO', 'RAZAO_SOCIAL'],
 };
+
+function normalizeRowKey(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+}
+
+function pickFirstField(row: Record<string, string>, candidates: string[]): string {
+  const map = Object.fromEntries(Object.entries(row).map(([key, value]) => [normalizeRowKey(key), value || '']));
+  for (const candidate of candidates) {
+    const value = map[normalizeRowKey(candidate)];
+    if (value && value.trim()) return value.trim();
+  }
+  return '';
+}
 
 function resolveDocId(dataset: AnvisaDataset, row: Record<string, string>): string | null {
-  const idField = ID_FIELD[dataset.key];
-  const raw = (row[idField] || '').trim();
+  const raw = pickFirstField(row, ID_FIELD[dataset.key] ?? ['NU_REGISTRO', 'NUMERO_REGISTRO', 'REGISTRO', 'ID', 'NU_CNPJ']);
   if (!raw) return null;
 
   if (dataset.key === 'empresas') {
     const cnpj = onlyDigits(raw);
     return cnpj.length >= 11 ? cnpj : null;
   }
-  // Sanitiza pra virar um ID de documento válido no Firestore (sem "/").
-  return raw.replace(/[/\s]/g, '_').slice(0, 300);
+
+  const sanitized = raw.replace(/[\/\s]/g, '_').slice(0, 300);
+  return sanitized || null;
 }
 
 function buildSearchFields(dataset: AnvisaDataset, row: Record<string, string>): Record<string, string> {
   const fields: Record<string, string> = {
-    searchName: normalizeText((row[NAME_FIELD[dataset.key]] || '').trim()),
+    searchName: normalizeText(pickFirstField(row, NAME_FIELD[dataset.key] ?? ['NOME_PRODUTO', 'NO_PRODUTO', 'RAZAO_SOCIAL']).trim()),
   };
-  const cnpjField = CNPJ_FIELD[dataset.key];
-  if (cnpjField) {
-    const digits = onlyDigits(row[cnpjField] || '');
-    if (digits) fields.searchCnpj = digits;
-  }
+  const cnpjValue = pickFirstField(row, CNPJ_FIELD[dataset.key] ?? ['NU_CNPJ', 'CNPJ']);
+  const digits = onlyDigits(cnpjValue || '');
+  if (digits) fields.searchCnpj = digits;
   return fields;
 }
 
@@ -105,7 +131,7 @@ function isRowActive(dataset: AnvisaDataset, row: Record<string, string>): boole
 function buildDocData(dataset: AnvisaDataset, row: Record<string, string>): Record<string, string> {
   const data: Record<string, string> = {};
   for (const col of dataset.displayColumns) {
-    data[col.key] = row[col.key] || '';
+    data[col.key] = pickFirstField(row, [col.key]) || '';
   }
   return { ...data, ...buildSearchFields(dataset, row) };
 }

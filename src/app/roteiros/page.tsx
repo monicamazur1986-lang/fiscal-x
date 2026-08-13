@@ -82,6 +82,13 @@ const roteiros = roteirosCatalog.map((roteiro) => ({
 
 type Roteiro = (typeof roteiros)[number];
 
+function getSafeDate(value: unknown) {
+  if (!value) return null;
+
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function getPalette(roteiro: Roteiro) {
   const isMunicipal = 'municipioId' in roteiro;
 
@@ -358,6 +365,8 @@ export default function RoteirosPage() {
               {emAndamento.map((insp) => {
                 const roteiro = roteirosPorId.get(insp.checklistData!.roteiroId);
                 const Icone = roteiro?.icone || ClipboardList;
+                const salvoEm = getSafeDate(insp.updatedAt);
+
                 return (
                   <div key={insp.id} className="flex items-center gap-1 pr-3 hover:bg-[#FAF8F3] transition-colors">
                     <Link
@@ -374,7 +383,7 @@ export default function RoteirosPage() {
                             <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 rounded-md px-2 py-0.5 truncate max-w-[220px]">
                               {roteiro?.titulo || "Roteiro"}
                             </span>
-                            <span className="text-xs text-[#6B6659]">Salvo às {insp.updatedAt ? format(new Date(insp.updatedAt), "HH:mm 'de' dd/MM") : "..."}</span>
+                            <span className="text-xs text-[#6B6659]">Salvo às {salvoEm ? format(salvoEm, "HH:mm 'de' dd/MM") : "..."}</span>
                           </div>
                         </div>
                       </div>
