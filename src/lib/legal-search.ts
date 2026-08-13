@@ -85,18 +85,24 @@ function matchesPreference(artMunicipioId: string | undefined, artLawKey: string
   const prefs = normalizeLawPreferenceSelection(pref);
   const specificLawKeys = prefs.filter(value => value !== 'todas' && value !== 'municipal' && value !== 'estadual');
 
-  if (specificLawKeys.length > 0) {
-    return specificLawKeys.includes(artLawKey);
-  }
-
   if (prefs.includes('todas')) return true;
+
   const isMunicipal = !!artMunicipioId;
   const selectedMunicipal = prefs.includes('municipal');
   const selectedEstadual = prefs.includes('estadual');
-  if (selectedMunicipal && selectedEstadual) return true;
-  if (selectedMunicipal) return isMunicipal;
-  if (selectedEstadual) return !isMunicipal;
-  return true;
+
+  const matchesGroup = (() => {
+    if (selectedMunicipal && selectedEstadual) return true;
+    if (selectedMunicipal) return isMunicipal;
+    if (selectedEstadual) return !isMunicipal;
+    return false;
+  })();
+
+  if (specificLawKeys.length > 0) {
+    return matchesGroup || specificLawKeys.includes(artLawKey);
+  }
+
+  return matchesGroup;
 }
 
 // Lei sem `municipioId` = nível estadual/federal, vale pra qualquer fiscal.

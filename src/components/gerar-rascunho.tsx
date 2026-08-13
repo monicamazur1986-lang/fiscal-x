@@ -22,7 +22,8 @@ import {
   Info,
   RotateCcw,
   Eraser,
-  MessageSquareWarning
+  MessageSquareWarning,
+  ChevronDown
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -328,64 +329,74 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
 
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-zinc-500">Base legal</Label>
-              <Select open={isLegalMenuOpen} onOpenChange={setIsLegalMenuOpen} value={lawPreferences[0] ?? 'estadual'}>
-                <SelectTrigger className="h-11 rounded-xl bg-primary/5 border-primary/30 text-sm font-medium">
-                  <SelectValue placeholder="Selecionar base legal..." />
-                </SelectTrigger>
-                <SelectContent className="max-h-80 overflow-y-auto p-2">
-                  <div className="space-y-2">
-                    {lawOptions.map((opt) => {
-                      const selected = lawPreferences.includes(opt.id as LawPreference);
-                      return (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={() => {
-                            toggleLawPreference(opt.id as LawPreference);
-                            setIsLegalMenuOpen(false);
-                          }}
-                          className={cn(
-                            'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors',
-                            selected ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
-                          )}
-                        >
-                          <span className="flex items-center gap-2">
-                            <opt.icon className="h-3.5 w-3.5" />
-                            {opt.label}
-                          </span>
-                          {selected ? <Check className="h-3.5 w-3.5" /> : null}
-                        </button>
-                      );
-                    })}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsLegalMenuOpen((prev) => !prev)}
+                  className="flex h-11 w-full items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-3 text-left text-sm font-medium text-zinc-700 transition-colors hover:border-primary/50"
+                >
+                  <span className="truncate">{legalSelectionSummary}</span>
+                  <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', isLegalMenuOpen && 'rotate-180')} />
+                </button>
 
-                    <div className="my-1 h-px bg-zinc-200" />
+                {isLegalMenuOpen && (
+                  <div className="absolute z-20 mt-2 w-full rounded-xl border border-zinc-200 bg-white p-2 shadow-xl max-h-[60vh] overflow-y-auto overscroll-contain">
+                    <div className="space-y-2">
+                      <div className="px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Geral</div>
+                      {lawOptions.map((opt) => {
+                        const selected = lawPreferences.includes(opt.id as LawPreference);
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              toggleLawPreference(opt.id as LawPreference);
+                            }}
+                            className={cn(
+                              'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors',
+                              selected ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
+                            )}
+                          >
+                            <span className="flex items-center gap-2">
+                              <opt.icon className="h-3.5 w-3.5" />
+                              {opt.label}
+                            </span>
+                            {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                          </button>
+                        );
+                      })}
 
-                    {individualLawOptions.map((opt) => {
-                      const selected = lawPreferences.includes(opt.id);
-                      return (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          onClick={() => {
-                            toggleLawPreference(opt.id);
-                            setIsLegalMenuOpen(false);
-                          }}
-                          className={cn(
-                            'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors',
-                            selected ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
-                          )}
-                        >
-                          <div className="flex flex-col">
-                            <span>{opt.label}</span>
-                            <span className="text-[9px] uppercase text-zinc-500">{opt.group}</span>
-                          </div>
-                          {selected ? <Check className="h-3.5 w-3.5" /> : null}
-                        </button>
-                      );
-                    })}
+                      <div className="my-1 h-px bg-zinc-200" />
+
+                      <div className="px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Leis individuais</div>
+                      <div className="space-y-2 pr-1">
+                        {individualLawOptions.map((opt) => {
+                          const selected = lawPreferences.includes(opt.id);
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => {
+                                toggleLawPreference(opt.id);
+                              }}
+                              className={cn(
+                                'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors',
+                                selected ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
+                              )}
+                            >
+                              <div className="flex flex-col">
+                                <span>{opt.label}</span>
+                                <span className="text-[9px] uppercase text-zinc-500">{opt.group}</span>
+                              </div>
+                              {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
-                </SelectContent>
-              </Select>
+                )}
+              </div>
             </div>
           </div>
 
