@@ -32,6 +32,11 @@ interface UserProfile {
   adminFeedback?: string;
   municipioNome?: string;
   fcmTokens?: string[];
+  /** ISO. Presente em contas criadas via registerWithEmailPassword; usado
+   * pra calcular o vencimento do acesso de teste (ver useAppConfig e
+   * AuthGuard) — contas antigas sem esse campo nunca são bloqueadas por
+   * prazo (falha aberta, nunca bloqueia por falta de dado). */
+  createdAt?: string;
   /**
    * Padrão PESSOAL de "Considerações Gerais" e "Conclusão e Prazo Legal" por
    * id de roteiro, salvo pelo botão "Salvar como meu padrão" na tela de
@@ -47,6 +52,12 @@ interface UserProfile {
    * são anexados ao final automaticamente — ver dashboard-menu-grid.tsx.
    */
   menuPreferences?: { order: string[]; favoritos: string[] };
+  /**
+   * Mesma ideia do menuPreferences acima, mas para o catálogo de Roteiros
+   * (checklists técnicos) — chaveado pelo `id` de cada roteiro em vez de
+   * href. Ver src/app/roteiros/page.tsx.
+   */
+  roteirosPreferences?: { order: string[]; favoritos: string[] };
   /**
    * Data/hora (ISO) em que o usuário confirmou o aviso de fase de testes
    * (ver src/components/beta-notice-gate.tsx). Enquanto ausente, o AuthGuard

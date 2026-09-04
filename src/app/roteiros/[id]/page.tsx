@@ -2122,6 +2122,14 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   }), [id]);
 
   const [idData, setIdData] = useState(buildInitialIdData)
+  // Responsável Técnico e e-mail são opcionais — somem da tela até o fiscal
+  // clicar para adicionar, igual ao padrão do "+ Responsável Técnico" na
+  // autuação (documento-oficial-body.tsx). Continuam aparecendo sozinhos se a
+  // inspeção já tiver esses dados (ex.: ao reabrir um rascunho). Já o
+  // responsável que acompanhou a inspeção é praticamente sempre preenchido,
+  // então fica sempre visível (sem toggle).
+  const [mostrarResponsavelTecnico, setMostrarResponsavelTecnico] = useState(false)
+  const [mostrarEmail, setMostrarEmail] = useState(false)
 
   const [currentInspecaoId, setCurrentInspecaoId] = useState<string | null>(null);
   // Status da inspeção carregada — null enquanto é uma inspeção nova/em
@@ -2985,12 +2993,12 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
 
               <div data-pdf-block className="mb-4">
                   <div className="sub-header-row">1. IDENTIFICAÇÃO DO ESTABELECIMENTO</div>
-                  <table className="form-table-clean border-black w-full" style={{ borderCollapse: 'collapse' }}>
+                  <table className="w-full border border-slate-300" style={{ borderCollapse: 'collapse' }}>
                       <tbody>
                           {linhasIdentificacao.map((linha, i) => (
                             <tr key={i}>
                               {linha.map((campo) => (
-                                <td key={campo.label} colSpan={linha.length === 1 ? 2 : 1} style={{ padding: '3pt 8pt' }}>
+                                <td key={campo.label} colSpan={linha.length === 1 ? 2 : 1} className="border border-slate-200" style={{ padding: '3pt 8pt' }}>
                                   <span className="data-label">{campo.label}:</span>
                                   <div className={campo.classe || "font-bold text-[10pt]"}>{campo.valor}</div>
                                 </td>
@@ -3005,7 +3013,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
               <div data-pdf-block className="mb-4">
                   <div className="sub-header-row">2. CONSIDERAÇÕES GERAIS</div>
                   <div
-                    className="border border-[#171717] p-4 bg-zinc-50/50"
+                    className="border border-slate-300 p-4 bg-zinc-50/50"
                     style={{ fontSize: '10pt', lineHeight: 1.6, textAlign: 'justify', fontWeight: 500, color: '#18181b' }}
                     dangerouslySetInnerHTML={{ __html: sanitizeHtml(introducaoHtml) }}
                   />
@@ -3101,7 +3109,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
               <div data-pdf-block className="mb-6">
                   <div className="sub-header-row">4. CONCLUSÃO E PRAZO LEGAL</div>
                   <div
-                    className="border border-[#171717] p-4 bg-zinc-50/50"
+                    className="border border-slate-300 p-4 bg-zinc-50/50"
                     style={{ fontSize: '10pt', lineHeight: 1.6, textAlign: 'justify', fontWeight: 500, color: '#18181b' }}
                     dangerouslySetInnerHTML={{ __html: sanitizeHtml(conclusaoHtml) }}
                   />
@@ -3139,7 +3147,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   }
 
   return (
-    <div className="max-w-4xl mx-auto w-full p-4 md:p-8 space-y-6 md:space-y-8 pb-40 font-sans">
+    <div className="max-w-6xl mx-auto w-full p-4 md:p-8 space-y-6 md:space-y-8 pb-40 font-sans">
       <header className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 md:p-6 rounded-lg border border-[#E4DFD1] shadow-sm no-print">
         <div className="flex items-center gap-4">
           <div className="p-4 rounded-xl bg-[#E4EEEC] text-[#0E4A44]"><ClipboardList className="h-6 w-6" /></div>
@@ -3250,41 +3258,48 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             </div>
           )}
 
-          <div className="bg-white p-6 md:p-8 rounded-lg border border-[#E4DFD1] shadow-sm space-y-5">
-            <div className="space-y-3">
+          <div className="bg-white p-4 md:p-6 border border-[#E4DFD1] shadow-sm space-y-4">
+            <div className="space-y-2">
                 <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Building2 className="h-4 w-4 text-primary" /> Estabelecimento</h2>
-                <div className="rounded-lg bg-[#FAF8F3] border border-[#E4DFD1] divide-y divide-[#E4DFD1] overflow-hidden">
-                   <div className="flex items-center gap-3 px-4 h-11">
-                      <Label className="w-32 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Razão Social</Label>
+                <div className="bg-[#FAF8F3] border border-[#E4DFD1] divide-y divide-[#E4DFD1]">
+                   <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
+                      <Label className="sm:w-28 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Razão Social</Label>
                       <Input value={idData.fantasia} onChange={e => setIdData({...idData, fantasia: e.target.value.toUpperCase()})} className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold uppercase focus-visible:ring-0 focus-visible:ring-offset-0" />
                    </div>
-                   <div className="flex items-center gap-3 px-4 h-11">
-                      <Label className="w-32 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">CNPJ / CPF</Label>
-                      <Input value={idData.cnpj} onChange={e => setIdData({...idData, cnpj: e.target.value})} placeholder="00.000.000/0000-00" className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
-                      <Button onClick={handleCnpjLookup} disabled={isSearchingCnpj} variant="ghost" size="icon" className="h-8 w-8 rounded-lg shrink-0 text-primary hover:bg-primary/10">{isSearchingCnpj ? <Loader2 className="animate-spin h-4 w-4" /> : <Search className="h-4 w-4" />}</Button>
-                   </div>
-                   <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-[#E4DFD1]">
-                      <div className="flex items-center gap-3 px-4 h-11">
-                         <Label className="w-32 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Telefone</Label>
-                         <Input value={idData.telefone} onChange={e => setIdData({...idData, telefone: e.target.value})} placeholder="(00) 00000-0000" className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
-                      </div>
-                      <div className="flex items-center gap-3 px-4 h-11">
-                         <Label className="w-32 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">E-mail</Label>
-                         <Input type="email" value={idData.email} onChange={e => setIdData({...idData, email: e.target.value})} placeholder="contato@estabelecimento.com" className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
+                   <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
+                      <Label className="sm:w-28 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">CNPJ / CPF</Label>
+                      <div className="flex items-center gap-1 flex-1 min-w-0">
+                        <Input value={idData.cnpj} onChange={e => setIdData({...idData, cnpj: e.target.value})} placeholder="00.000.000/0000-00" className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
+                        <Button onClick={handleCnpjLookup} disabled={isSearchingCnpj} variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-primary hover:bg-primary/10">{isSearchingCnpj ? <Loader2 className="animate-spin h-4 w-4" /> : <Search className="h-4 w-4" />}</Button>
                       </div>
                    </div>
-                   <div className="flex items-center gap-3 px-4 h-11">
-                      <Label className="w-32 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Bairro</Label>
+                   <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
+                      <Label className="sm:w-28 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Telefone</Label>
+                      <Input value={idData.telefone} onChange={e => setIdData({...idData, telefone: e.target.value})} placeholder="(00) 00000-0000" className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
+                   </div>
+                   <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
+                      <Label className="sm:w-28 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Bairro</Label>
                       <Input value={idData.bairro} onChange={e => setIdData({...idData, bairro: e.target.value.toUpperCase()})} className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold uppercase focus-visible:ring-0 focus-visible:ring-offset-0" />
                    </div>
-                   <div className="flex items-center gap-3 px-4 h-11">
-                      <Label className="w-32 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Endereço</Label>
+                   <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
+                      <Label className="sm:w-28 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Endereço</Label>
                       <Input value={idData.endereco} onChange={e => setIdData({...idData, endereco: e.target.value.toUpperCase()})} className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold uppercase focus-visible:ring-0 focus-visible:ring-offset-0" />
                    </div>
+                   {(mostrarEmail || idData.email) ? (
+                     <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
+                        <Label className="sm:w-28 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">E-mail</Label>
+                        <Input type="email" value={idData.email} onChange={e => setIdData({...idData, email: e.target.value})} placeholder="contato@estabelecimento.com" className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
+                        <button type="button" onClick={() => { setIdData({...idData, email: ''}); setMostrarEmail(false); }} className="shrink-0 h-6 w-6 flex items-center justify-center text-[#A39D8C] hover:text-rose-500" title="Remover e-mail"><X className="h-3.5 w-3.5" /></button>
+                     </div>
+                   ) : (
+                     <button type="button" onClick={() => setMostrarEmail(true)} className="w-full flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-primary/70 hover:text-primary hover:bg-primary/5 transition-colors">
+                        <Plus className="h-3.5 w-3.5" /> Adicionar e-mail
+                     </button>
+                   )}
                 </div>
 
                 {foundCnaes.length > 0 && (
-                  <div className="p-6 bg-blue-50 border border-blue-100 rounded-3xl space-y-4">
+                  <div className="p-4 bg-blue-50 border border-blue-100 space-y-3">
                     {/* Um estabelecimento pode ter dezenas de atividades e
                         raramente todas são objeto da inspeção — daí a seleção
                         manual, com atalho pra marcar/limpar todas de uma vez
@@ -3327,9 +3342,9 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                               const newItems = isSelected ? items.filter((item) => item !== cUpper) : [...items, cUpper];
                               setIdData({ ...idData, cnae: newItems.join('; ') });
                             }}
-                            className={cn("w-full text-left p-4 rounded-2xl text-[11px] font-bold uppercase transition-all border flex items-center gap-4", isSelected ? "bg-blue-600 border-blue-600 text-white" : "bg-white border-blue-100 text-blue-500")}
+                            className={cn("w-full text-left p-3 text-[11px] font-bold uppercase transition-all border flex items-center gap-3", isSelected ? "bg-blue-600 border-blue-600 text-white" : "bg-white border-blue-100 text-blue-500")}
                           >
-                            {isSelected ? <Check className="h-4 w-4" /> : <div className="h-4 w-4 rounded border border-blue-200" />}
+                            {isSelected ? <Check className="h-4 w-4" /> : <div className="h-4 w-4 border border-blue-200" />}
                             <span className="flex-1 leading-tight">{c}</span>
                           </button>
                         );
@@ -3341,14 +3356,44 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
 
             <div className="h-px bg-[#F1EEE4]" />
 
-            <div className="space-y-3">
+            <div className="space-y-2">
                 <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Building2 className="h-4 w-4 text-primary" /> Responsáveis e Data da Inspeção</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                   <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-black uppercase text-[#6B6659]">Responsável Legal (acompanhou a inspeção)</Label><Input value={idData.responsavel} onChange={e => setIdData({...idData, responsavel: e.target.value.toUpperCase()})} className="h-10 rounded-xl bg-[#FAF8F3] border-none font-bold uppercase" /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-[#6B6659]">CPF do Responsável Legal</Label><Input value={idData.responsavelCpf} onChange={e => setIdData({...idData, responsavelCpf: e.target.value})} placeholder="000.000.000-00" className="h-10 rounded-xl bg-[#FAF8F3] border-none font-bold" /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-[#6B6659]">Responsável Técnico</Label><Input value={idData.responsavelTecnico} onChange={e => setIdData({...idData, responsavelTecnico: e.target.value.toUpperCase()})} placeholder="NOME DO RESPONSÁVEL TÉCNICO" className="h-10 rounded-xl bg-[#FAF8F3] border-none font-bold uppercase" /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-[#6B6659]">Registro Profissional (ex.: CRO)</Label><Input value={idData.responsavelTecnicoRegistro} onChange={e => setIdData({...idData, responsavelTecnicoRegistro: e.target.value})} placeholder="CRO-PR 00000" className="h-10 rounded-xl bg-[#FAF8F3] border-none font-bold" /></div>
-                   <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-[#6B6659]">Data e Horário da Inspeção</Label><Input type="datetime-local" value={idData.dataHorario} onChange={e => setIdData({...idData, dataHorario: e.target.value})} className="h-10 rounded-xl bg-[#FAF8F3] border-none font-bold" /></div>
+
+                {(mostrarResponsavelTecnico || idData.responsavelTecnico || idData.responsavelTecnicoRegistro) ? (
+                  <div className="bg-[#FAF8F3] border border-[#E4DFD1] relative">
+                     <button type="button" onClick={() => { setIdData({...idData, responsavelTecnico: '', responsavelTecnicoRegistro: ''}); setMostrarResponsavelTecnico(false); }} className="absolute right-2 top-2 h-6 w-6 flex items-center justify-center text-[#A39D8C] hover:text-rose-500 z-10" title="Remover responsável técnico"><X className="h-3.5 w-3.5" /></button>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-[#E4DFD1]">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
+                           <Label className="sm:w-40 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Responsável Técnico</Label>
+                           <Input value={idData.responsavelTecnico} onChange={e => setIdData({...idData, responsavelTecnico: e.target.value.toUpperCase()})} className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold uppercase focus-visible:ring-0 focus-visible:ring-offset-0 pr-6" />
+                        </div>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
+                           <Label className="sm:w-40 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Registro (ex.: CRO)</Label>
+                           <Input value={idData.responsavelTecnicoRegistro} onChange={e => setIdData({...idData, responsavelTecnicoRegistro: e.target.value})} placeholder="CRO-PR 00000" className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
+                        </div>
+                     </div>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setMostrarResponsavelTecnico(true)} className="w-full flex items-center gap-2 px-4 py-2.5 border border-dashed border-primary/30 text-[10px] font-black uppercase tracking-widest text-primary/70 hover:text-primary hover:bg-primary/5 transition-colors">
+                    <Plus className="h-3.5 w-3.5" /> Adicionar responsável técnico
+                  </button>
+                )}
+
+                <div className="bg-[#FAF8F3] border border-[#E4DFD1] divide-y divide-[#E4DFD1]">
+                   <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr] divide-y sm:divide-y-0 sm:divide-x divide-[#E4DFD1]">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
+                         <Label className="sm:w-40 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Responsável (acompanhou a inspeção)</Label>
+                         <Input value={idData.responsavel} onChange={e => setIdData({...idData, responsavel: e.target.value.toUpperCase()})} className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold uppercase focus-visible:ring-0 focus-visible:ring-offset-0" />
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
+                         <Label className="sm:w-20 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">RG/CPF</Label>
+                         <Input value={idData.responsavelCpf} onChange={e => setIdData({...idData, responsavelCpf: e.target.value})} placeholder="000.000.000-00" className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
+                      </div>
+                   </div>
+                   <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
+                      <Label className="sm:w-40 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Data e Horário da Inspeção</Label>
+                      <Input type="datetime-local" value={idData.dataHorario} onChange={e => setIdData({...idData, dataHorario: e.target.value})} className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
+                   </div>
                 </div>
             </div>
 

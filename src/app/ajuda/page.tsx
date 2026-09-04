@@ -244,7 +244,7 @@ export default function AjudaPage() {
         ) : undefined}
       />
 
-      <div className="max-w-3xl mx-auto w-full p-4 sm:p-8 space-y-8 pb-40">
+      <div className="max-w-5xl mx-auto w-full p-4 sm:p-8 space-y-8 pb-40">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A39D8C]" />
           <Input

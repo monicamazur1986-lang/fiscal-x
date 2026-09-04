@@ -1,11 +1,13 @@
 'use client';
 
 import { useAuth } from "@/hooks/use-auth";
+import { useAppConfig } from "@/hooks/use-app-config";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FileWarning, LogOut, Loader2 } from "lucide-react";
 import { Button } from "./ui/button";
 import { BetaNoticeGate } from "./beta-notice-gate";
+import { AccessExpiredGate } from "./access-expired-gate";
 
 /**
  * AuthGuard - Proteção de rotas resiliente.
@@ -13,9 +15,21 @@ import { BetaNoticeGate } from "./beta-notice-gate";
  */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, isAuthorized, profile, loading, logout } = useAuth();
+  const { betaAccessDurationDays } = useAppConfig();
   const router = useRouter();
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
+
+  // Prazo de acesso de teste (dias, contado a partir de profile.createdAt) —
+  // configurável em admin/configuracoes/sistema, root nunca expira. Falta de
+  // dado (createdAt ausente, ex.: contas antigas) nunca bloqueia por si só.
+  const isAccessExpired = useMemo(() => {
+    if (profile?.role === 'root' || !betaAccessDurationDays || !profile?.createdAt) return false;
+    const createdAtMs = new Date(profile.createdAt).getTime();
+    if (Number.isNaN(createdAtMs)) return false;
+    const expiresAtMs = createdAtMs + betaAccessDurationDays * 24 * 60 * 60 * 1000;
+    return Date.now() > expiresAtMs;
+  }, [profile?.role, profile?.createdAt, betaAccessDurationDays]);
 
   useEffect(() => {
     setMounted(true);
@@ -71,6 +85,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (profile?.role === 'root' || isAuthorized) {
+    if (isAccessExpired) {
+      return <AccessExpiredGate />;
+    }
     if (!profile?.betaTermsAcceptedAt) {
       return <BetaNoticeGate />;
     }

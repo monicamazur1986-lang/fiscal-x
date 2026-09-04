@@ -31,19 +31,17 @@ import { RichTextEditor } from "@/components/rich-text-editor"
 import { DEFAULT_PRAZO_TEXT } from "@/lib/schema"
 import { normalizeId } from "@/lib/utils"
 import municipiosPR from "@/lib/municipios-pr.json"
-import { useMunicipioTemGestor } from "@/hooks/use-municipio-tem-gestor"
 import { ROTEIRO_TEXTO_OPTIONS, getDefaultIntroHtml, getDefaultConclusaoHtml } from "@/lib/roteiro-textos-padrao"
 
 
 export default function IdentidadeMunicipalPage() {
   const { profile, loading: authLoading } = useAuth()
   const isRoot = profile?.role === 'root'
-  const { temGestor, loading: temGestorLoading } = useMunicipioTemGestor()
-  // Fiscal só entra aqui se o município dele não tiver gestor cadastrado —
-  // ver src/hooks/use-municipio-tem-gestor.ts e o motivo em
-  // src/app/api/municipio/config/route.ts (a gravação real é reconfirmada
-  // no servidor, esta checagem aqui só controla a navegação/UI).
-  const fiscalSemGestor = profile?.role === 'fiscal' && !temGestorLoading && !temGestor
+  // Qualquer fiscal pode editar cabeçalho/logo/rodapé/prazo do seu município,
+  // não só quando não há gestor cadastrado — a gravação real passa pela rota
+  // com Admin SDK (ver src/app/api/municipio/config/route.ts), esta checagem
+  // aqui só controla a navegação/UI.
+  const podeEditar = profile?.role === 'admin' || profile?.role === 'root' || profile?.role === 'fiscal'
   const [selectedMunicipio, setSelectedMunicipio] = useState("")
   const { config, updateConfig, updateLogo, loading: configLoading, needsMunicipioSelection } = useAppConfig(
     isRoot ? { municipioIdOverride: selectedMunicipio || undefined } : undefined
@@ -101,20 +99,16 @@ export default function IdentidadeMunicipalPage() {
     setHeaderHtml(initial);
   };
 
-  // Proteção de Rota — libera também o fiscal quando o município dele não
-  // tem gestor cadastrado (fiscalSemGestor). Espera a checagem de gestor
-  // terminar (temGestorLoading) antes de decidir redirecionar, senão um
-  // fiscal sem gestor seria expulso da tela no instante entre o mount e a
-  // resposta da checagem.
+  // Proteção de Rota — admin, root e qualquer fiscal.
   useEffect(() => {
-    if (mounted && !authLoading && profile && !temGestorLoading) {
-      if (profile.role !== 'admin' && profile.role !== 'root' && !fiscalSemGestor) {
+    if (mounted && !authLoading && profile) {
+      if (!podeEditar) {
         router.replace("/dashboard");
       }
     }
-  }, [profile, authLoading, router, mounted, temGestorLoading, fiscalSemGestor]);
+  }, [profile, authLoading, router, mounted, podeEditar]);
 
-  if (!mounted || authLoading || configLoading || temGestorLoading || !profile) {
+  if (!mounted || authLoading || configLoading || !profile) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -122,7 +116,7 @@ export default function IdentidadeMunicipalPage() {
     )
   }
 
-  if (profile.role !== 'admin' && profile.role !== 'root' && !fiscalSemGestor) return null;
+  if (!podeEditar) return null;
 
   // Extrai o caminho (ex.: "municipios/prudentopolis/shield_123") de uma URL
   // de download do Storage — em vez de confiar que ref() aceita a URL https
@@ -223,7 +217,7 @@ export default function IdentidadeMunicipalPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto w-full p-4 sm:p-8 space-y-10 font-sans pb-32">
+    <div className="max-w-[1400px] mx-auto w-full p-4 sm:p-8 space-y-10 font-sans pb-32">
       <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div className="space-y-1">
           <div className="flex items-center gap-3">

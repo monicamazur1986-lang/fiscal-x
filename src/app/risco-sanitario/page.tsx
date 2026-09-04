@@ -124,7 +124,7 @@ export default function RiscoSanitarioPage() {
         subtitle="Nível de risco e porte de fiscalização por CNAE, a partir do CNPJ"
       />
 
-      <div className="max-w-3xl mx-auto w-full p-4 sm:p-8 pb-40 space-y-8">
+      <div className="max-w-5xl mx-auto w-full p-4 sm:p-8 pb-40 space-y-8">
         {!data ? (
           <div className="bg-white border border-[#E4DFD1] rounded-lg p-6 sm:p-10 shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)] space-y-6">
             <div className="flex items-center gap-3">

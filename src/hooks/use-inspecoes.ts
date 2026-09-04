@@ -142,6 +142,15 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
             ...data,
             id: doc.id,
             data: data.data instanceof Timestamp ? data.data.toDate() : new Date(data.data),
+            // updatedAt é gravado como Timestamp do Firestore (ver saveInspecao
+            // abaixo), mas o tipo Inspecao.updatedAt é string (ISO) — sem essa
+            // conversão, ficava um Timestamp cru no objeto, e qualquer
+            // `new Date(insp.updatedAt)` (ex.: no diálogo "Minhas Inspeções")
+            // virava Invalid Date, derrubando o app com "RangeError: Invalid
+            // time value" assim que a lista tinha pelo menos um item — por
+            // isso nunca acontecia pro root (ele nunca chega a carregar
+            // inspeções reais nesta tela sem escolher um município antes).
+            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
           } as Inspecao;
         });
 
@@ -162,6 +171,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
                     ...raw,
                     id,
                     data: raw.data instanceof Timestamp ? raw.data.toDate() : new Date(raw.data),
+                    updatedAt: raw.updatedAt instanceof Timestamp ? raw.updatedAt.toDate().toISOString() : raw.updatedAt,
                   } as Inspecao;
                 }),
             ];
@@ -340,6 +350,20 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
     }
   }, [db, configError]);
 
+  const toggleFavorito = useCallback(async (id: string, favorito: boolean) => {
+    const stringId = String(id);
+
+    setInspecoes(prev => {
+      const updated = prev.map(i => String(i.id) === stringId ? { ...i, favorito } : i);
+      try { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated)); } catch (e) {}
+      return updated;
+    });
+
+    if (db && !configError) {
+      await setDoc(doc(db, "inspecoes", stringId), { favorito }, { merge: true });
+    }
+  }, [db, configError]);
+
   return {
     inspecoes,
     saveInspecao,
@@ -347,6 +371,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
     bulkMoveToFolder,
     bulkDelete,
     permanentDelete,
+    toggleFavorito,
     loading,
     isOnline,
     needsMunicipioSelection,

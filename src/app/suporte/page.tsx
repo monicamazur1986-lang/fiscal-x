@@ -59,7 +59,7 @@ export default function SuportePage() {
   };
 
   return (
-    <div className="flex-1 max-w-4xl mx-auto w-full p-4 sm:p-8 font-sans space-y-6">
+    <div className="flex-1 max-w-6xl mx-auto w-full p-4 sm:p-8 font-sans space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-3">

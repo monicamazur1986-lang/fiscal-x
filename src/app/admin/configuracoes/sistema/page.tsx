@@ -15,22 +15,30 @@ import {
   CheckCircle2,
   Image as ImageIcon,
   AlertCircle,
-  CloudOff
+  CloudOff,
+  CalendarClock,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 
 export default function ConfigSistemaGlobalPage() {
   const { profile, loading: authLoading } = useAuth()
-  const { systemLogo, updateSystemLogo } = useAppConfig()
+  const { systemLogo, updateSystemLogo, betaAccessDurationDays, updateBetaAccessDurationDays } = useAppConfig()
   const { toast } = useToast()
   const router = useRouter()
-  
+
   const [uploading, setUploading] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [prazoInput, setPrazoInput] = useState("")
+  const [savingPrazo, setSavingPrazo] = useState(false)
+
+  useEffect(() => {
+    setPrazoInput(betaAccessDurationDays != null ? String(betaAccessDurationDays) : "")
+  }, [betaAccessDurationDays])
 
   useEffect(() => {
     setMounted(true)
@@ -107,8 +115,26 @@ export default function ConfigSistemaGlobalPage() {
     }
   }
 
+  const handleSavePrazo = async () => {
+    const trimmed = prazoInput.trim();
+    const days = trimmed === "" ? null : parseInt(trimmed, 10);
+    if (days !== null && (Number.isNaN(days) || days <= 0)) {
+      toast({ variant: "destructive", title: "Informe um número de dias válido (ou deixe em branco para não limitar)" });
+      return;
+    }
+    setSavingPrazo(true);
+    try {
+      await updateBetaAccessDurationDays(days);
+      toast({ title: days ? "Prazo de teste atualizado" : "Limite de prazo removido" });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro ao salvar", description: e?.message });
+    } finally {
+      setSavingPrazo(false);
+    }
+  }
+
   return (
-    <div className="max-w-4xl mx-auto w-full p-4 sm:p-8 space-y-10 font-sans pb-32">
+    <div className="max-w-6xl mx-auto w-full p-4 sm:p-8 space-y-10 font-sans pb-32">
       <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
@@ -162,6 +188,38 @@ export default function ConfigSistemaGlobalPage() {
                             </Label>
                         </div>
                     </div>
+                </CardContent>
+            </Card>
+
+            <Card className="bg-white border-2 border-[#E4DFD1] rounded-lg overflow-hidden shadow-sm">
+                <CardHeader className="p-10 text-center space-y-2">
+                    <CardTitle className="font-serif text-2xl text-[#262420] flex items-center justify-center gap-3">
+                        <CalendarClock className="h-6 w-6 text-primary" /> Prazo de Acesso de Teste
+                    </CardTitle>
+                    <CardDescription className="text-[#A39D8C] font-bold uppercase text-[9px] tracking-widest">
+                        Contado a partir do cadastro de cada usuário — sua conta (root) nunca é bloqueada
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="p-10 space-y-6">
+                    <div className="flex flex-col sm:flex-row items-center gap-4 max-w-sm mx-auto">
+                        <Input
+                            type="number"
+                            min={1}
+                            placeholder="Ex.: 90"
+                            value={prazoInput}
+                            onChange={(e) => setPrazoInput(e.target.value)}
+                            className="h-14 rounded-xl border-[#E4DFD1] text-center text-lg font-bold"
+                        />
+                        <Button onClick={handleSavePrazo} disabled={savingPrazo} className="h-14 w-full sm:w-auto px-8 rounded-xl font-black uppercase text-[11px] tracking-widest">
+                            {savingPrazo ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
+                        </Button>
+                    </div>
+                    <p className="text-center text-[10px] font-bold uppercase tracking-widest text-[#A39D8C]">
+                        {betaAccessDurationDays
+                            ? `Ativo: ${betaAccessDurationDays} dias após o cadastro de cada usuário`
+                            : "Sem limite definido — nenhuma conta é bloqueada por prazo"}
+                        <br />Deixe o campo em branco e salve para remover o limite.
+                    </p>
                 </CardContent>
             </Card>
       </div>

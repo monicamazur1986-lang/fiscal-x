@@ -75,7 +75,7 @@ function EscolherTipoAutuacao() {
 
   return (
     <div className="min-h-screen bg-[#F5F2EA] p-4 sm:p-8">
-      <div className="max-w-3xl mx-auto w-full space-y-8 py-8">
+      <div className="max-w-5xl mx-auto w-full space-y-8 py-8">
         <div className="space-y-2 text-center sm:text-left">
           <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#9C7A3C]">Nova Autuação</p>
           <h1 className="font-serif text-2xl sm:text-3xl text-[#262420]">Qual documento você vai lavrar?</h1>

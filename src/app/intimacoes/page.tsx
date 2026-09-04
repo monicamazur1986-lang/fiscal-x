@@ -35,7 +35,8 @@ import {
   FolderPlus,
   Cloud,
   Save,
-  ClipboardList
+  ClipboardList,
+  Star
 } from "lucide-react"
 
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
@@ -119,7 +120,7 @@ export default function DocumentosPage() {
   const [municipioPickerOpen, setMunicipioPickerOpen] = useState(false);
   const [municipioSearchTerm, setMunicipioSearchTerm] = useState("");
 
-  const { intimacoes, bulkMoveToFolder, bulkDelete, permanentDelete, saveIntimacao, loading: loadingInt, isOnline, needsMunicipioSelection } = useIntimacoes(
+  const { intimacoes, bulkMoveToFolder, bulkDelete, permanentDelete, saveIntimacao, toggleFavorito: toggleFavoritoIntimacao, loading: loadingInt, isOnline, needsMunicipioSelection } = useIntimacoes(
     isRoot ? { municipioIdOverride: selectedMunicipioForRoot || undefined } : undefined
   );
   // Relatórios de vistoria finalizados (roteiros) entram no mesmo arquivo
@@ -130,6 +131,7 @@ export default function DocumentosPage() {
     bulkMoveToFolder: bulkMoveRelatorios,
     bulkDelete: bulkDeleteRelatorios,
     permanentDelete: permanentDeleteRelatorios,
+    toggleFavorito: toggleFavoritoRelatorio,
     loading: loadingInsp,
   } = useInspecoes(isRoot ? { municipioIdOverride: selectedMunicipioForRoot || undefined } : undefined);
   const { folders, createFolder, loading: loadingFold } = useFolders('intimacoes');
@@ -151,6 +153,7 @@ export default function DocumentosPage() {
     data?: Date;
     deleted: boolean;
     folderId?: string;
+    favorito: boolean;
     href: string;
     intimacao?: Intimacao;
     inspecao?: Inspecao;
@@ -168,6 +171,7 @@ export default function DocumentosPage() {
       data: i.dataIntimacao,
       deleted: i.deleted === true,
       folderId: i.folderId,
+      favorito: i.favorito === true,
       href: `/intimacoes/${i.id}`,
       intimacao: i,
     }));
@@ -185,6 +189,7 @@ export default function DocumentosPage() {
         data: i.data,
         deleted: i.deleted === true,
         folderId: i.folderId,
+        favorito: i.favorito === true,
         href: `/roteiros/${roteiroId}?inspecaoId=${i.id}`,
         inspecao: i,
       };
@@ -250,24 +255,29 @@ export default function DocumentosPage() {
   }, [intimacoes]);
 
   const filteredDocumentos = useMemo(() => {
-    return documentos.filter(d => {
-      if (activeFolderId === "trash") {
-        if (!d.deleted) return false;
-      } else {
-        if (d.deleted) return false;
-      }
+    return documentos
+      .filter(d => {
+        if (activeFolderId === "trash") {
+          if (!d.deleted) return false;
+        } else {
+          if (d.deleted) return false;
+        }
 
-      const search = searchQuery.toLowerCase();
-      const matchesSearch = d.assunto.toLowerCase().includes(search) ||
-                          d.numero.toLowerCase().includes(search) ||
-                          d.createdByName.toLowerCase().includes(search);
+        const search = searchQuery.toLowerCase();
+        const matchesSearch = d.assunto.toLowerCase().includes(search) ||
+                            d.numero.toLowerCase().includes(search) ||
+                            d.createdByName.toLowerCase().includes(search);
 
-      if (!matchesSearch) return false;
-      if (filterByFiscal && d.createdBy !== filterByFiscal) return false;
-      if (activeFolderId !== "all" && activeFolderId !== "trash" && d.folderId !== activeFolderId) return false;
+        if (!matchesSearch) return false;
+        if (filterByFiscal && d.createdBy !== filterByFiscal) return false;
+        if (activeFolderId !== "all" && activeFolderId !== "trash" && d.folderId !== activeFolderId) return false;
 
-      return true;
-    });
+        return true;
+      })
+      // Favoritos sempre no topo — fixados pelo próprio fiscal (estrela em
+      // cada item), sem mexer na ordem relativa dentro de cada grupo
+      // (Array.prototype.sort é estável).
+      .sort((a, b) => Number(b.favorito) - Number(a.favorito));
   }, [documentos, searchQuery, activeFolderId, filterByFiscal]);
 
   // Documentos salvos deste fiscal (não excluídos), para o aviso de limite de 100.
@@ -576,7 +586,7 @@ export default function DocumentosPage() {
         ) : undefined}
       />
 
-      <div className="max-w-7xl mx-auto w-full p-4 sm:p-8 pb-40">
+      <div className="max-w-[1600px] mx-auto w-full p-4 sm:p-8 pb-40">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
         <aside className="lg:col-span-3 space-y-6">
@@ -784,6 +794,21 @@ export default function DocumentosPage() {
                         onCheckedChange={() => toggleSelect(item.itemId)}
                         className="h-4 w-4 rounded border-[#C9C2AC] data-[state=checked]:bg-[#0E4A44] data-[state=checked]:border-[#0E4A44]"
                         />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              if (isRelatorio) await toggleFavoritoRelatorio(item.id, !item.favorito);
+                              else await toggleFavoritoIntimacao(item.id, !item.favorito);
+                            } catch (e) {
+                              toast({ variant: "destructive", title: "Erro ao favoritar" });
+                            }
+                          }}
+                          aria-label={item.favorito ? "Remover dos favoritos" : "Marcar como favorito"}
+                          className="h-7 w-7 rounded-md flex items-center justify-center text-[#C9C2AC] hover:bg-[#F5F2EA] hover:text-amber-500 transition-colors shrink-0"
+                        >
+                          <Star className={cn("h-4 w-4", item.favorito && "fill-amber-400 text-amber-400")} />
+                        </button>
                         <span className={cn(
                           "h-7 w-7 rounded-full border flex items-center justify-center font-serif text-[13px] shrink-0",
                           isFinal ? "border-[#1F7A5C] text-[#1F7A5C]" : "border-[#E4DFD1] text-[#A39D8C]"

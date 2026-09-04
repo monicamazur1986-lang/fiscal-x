@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     title: 'Fiscal-X',
   },
   icons: {
-    // Ícone próprio (escudo + check) gerado em tamanho real por resolução —
+    // Ícone do mascote oficial, recortado em tamanho real por resolução —
     // antes todos os tamanhos declarados apontavam pro mesmo JPEG grande da
     // ilustração completa (o navegador só reamostrava), e o favicon.ico
     // estático em src/app/favicon.ico tinha uma versão ainda mais antiga
@@ -32,11 +32,11 @@ export const metadata: Metadata = {
     // mesmo depois de trocar o arquivo do logo. Query ?v= força os
     // navegadores/PWA a descartar qualquer cópia em cache.
     icon: [
-      { url: '/app-icon-192.png?v=20260903', sizes: '192x192', type: 'image/png' },
-      { url: '/app-icon-512.png?v=20260903', sizes: '512x512', type: 'image/png' },
+      { url: '/app-icon-192.png?v=20260904', sizes: '192x192', type: 'image/png' },
+      { url: '/app-icon-512.png?v=20260904', sizes: '512x512', type: 'image/png' },
     ],
-    shortcut: '/favicon.ico?v=20260903',
-    apple: '/app-icon-180.png?v=20260903',
+    shortcut: '/favicon.ico?v=20260904',
+    apple: '/app-icon-180.png?v=20260904',
   },
 };
 
@@ -44,8 +44,12 @@ export const viewport: Viewport = {
   themeColor: '#f1f5f9',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // maximumScale: 1 + userScalable: false travava o pinch-to-zoom em toda
+  // tela do sistema — quem precisasse ampliar um texto pequeno no celular
+  // simplesmente não conseguia. Liberado até 5x, mantendo o zoom inicial
+  // em 1x (não muda nada pra quem não tenta ampliar).
+  maximumScale: 5,
+  userScalable: true,
   viewportFit: 'cover',
 };
 

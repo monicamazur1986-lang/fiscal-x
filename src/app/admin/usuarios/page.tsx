@@ -241,7 +241,7 @@ export default function GestaoEquipePage() {
   const authorizedUsers = filteredUsers.filter(u => u.isAuthorized && u.role !== 'root');
 
   return (
-    <div className="max-w-6xl mx-auto w-full p-4 sm:p-8 space-y-10 font-sans pb-32">
+    <div className="max-w-[1400px] mx-auto w-full p-4 sm:p-8 space-y-10 font-sans pb-32">
       <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div className="space-y-1">
           <div className="flex items-center gap-3">

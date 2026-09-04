@@ -101,6 +101,12 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
             id: doc.id,
             dataIntimacao: data.dataIntimacao instanceof Timestamp ? data.dataIntimacao.toDate() : new Date(data.dataIntimacao),
             dataRecebimento: data.dataRecebimento instanceof Timestamp ? data.dataRecebimento.toDate() : data.dataRecebimento ? new Date(data.dataRecebimento) : undefined,
+            // Mesmo cuidado de use-inspecoes.ts: updatedAt é gravado como
+            // Timestamp do Firestore (saveIntimacao mais abaixo), mas sem
+            // essa conversão qualquer `new Date(item.updatedAt)` vira
+            // Invalid Date e pode derrubar a tela com "RangeError: Invalid
+            // time value".
+            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
           } as Intimacao;
         });
 
@@ -291,13 +297,28 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     }
   }, [db, configError]);
 
-  return { 
-    intimacoes, 
-    saveIntimacao, 
+  const toggleFavorito = useCallback(async (id: string, favorito: boolean) => {
+    const stringId = String(id);
+
+    setIntimacoes(prev => {
+      const updated = prev.map(i => String(i.id) === stringId ? { ...i, favorito } : i);
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+      return [...updated];
+    });
+
+    if (db && !configError) {
+      await setDoc(doc(db, "intimacoes", stringId), { favorito }, { merge: true });
+    }
+  }, [db, configError]);
+
+  return {
+    intimacoes,
+    saveIntimacao,
     generateNewNumeroProcesso,
     bulkDelete,
     permanentDelete,
     bulkMoveToFolder,
+    toggleFavorito,
     getIntimacaoById: (id: string) => intimacoes.find(i => String(i.id) === String(id)) || null,
     loading,
     isOnline,

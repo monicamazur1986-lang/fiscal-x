@@ -142,7 +142,7 @@ export default function ModeloDocfacilPage({ params }: { params: Promise<{ id: s
         }
       />
 
-      <div className="max-w-4xl mx-auto w-full py-6 space-y-4 pb-40">
+      <div className="max-w-6xl mx-auto w-full py-6 space-y-4 pb-40">
         {/* Faixa de propriedades — compacta, tudo numa linha só, pra não competir com a folha do editor abaixo */}
         <div className="flex flex-wrap items-center gap-3 px-4 sm:px-0">
           <span className="text-xs text-zinc-400 tabular-nums shrink-0">

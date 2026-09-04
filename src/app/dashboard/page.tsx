@@ -76,7 +76,7 @@ export default function Dashboard() {
 
   return (
     <div className="flex-1 flex flex-col min-h-screen bg-[#F5F2EA] p-4 sm:p-6 lg:p-8">
-      <div className="max-w-3xl mx-auto w-full space-y-8">
+      <div className="max-w-6xl mx-auto w-full space-y-8">
 
         <section className="relative overflow-hidden rounded-2xl bg-[#EEEBE3] border border-[#E4DFD1] p-5 sm:p-7 shadow-[0_1px_2px_rgba(38,36,32,0.04),0_12px_28px_-14px_rgba(38,36,32,0.18)]">
           <div className="absolute -top-12 -right-12 w-48 h-48 bg-[#9C7A3C]/10 blur-[80px] rounded-full pointer-events-none" />

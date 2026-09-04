@@ -248,7 +248,7 @@ export default function DocfacilPage() {
         }
       />
 
-      <div className="max-w-5xl mx-auto w-full p-4 sm:p-8 space-y-10 pb-40">
+      <div className="max-w-7xl mx-auto w-full p-4 sm:p-8 space-y-10 pb-40">
         <div className="space-y-3">
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">

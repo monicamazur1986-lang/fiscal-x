@@ -9,8 +9,51 @@ import * as pdfjsLib from 'pdfjs-dist';
 // public/pdf.worker.min.mjs (copiado de node_modules/pdfjs-dist/build/).
 pdfjsLib.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs`;
 
-const LOCAL_STORAGE_KEY = 'fiscal_x_biblioteca_local_v2';
-const MANIFEST_VERSION_KEY = 'fiscal_x_biblioteca_version_v2';
+// v4: bump de propósito (só a chave, não precisa mudar o formato) — descarta
+// qualquer cache local antigo que possa ter ficado congelado numa versão de
+// manifest.json obtida via fetch com cache do navegador (ver cache: 'no-store'
+// abaixo), garantindo que todo mundo resincronize do zero pelo menos uma vez.
+// v4 especificamente descarta o texto extraído com o bug de "uma letra por
+// item" (ver extractPageText) — sem isso, quem já sincronizou continuaria
+// vendo o texto espaçado errado até limpar o cache manualmente.
+const LOCAL_STORAGE_KEY = 'fiscal_x_biblioteca_local_v4';
+const MANIFEST_VERSION_KEY = 'fiscal_x_biblioteca_version_v4';
+
+// Alguns PDFs (comuns em publicações de órgãos públicos) gravam cada letra
+// como um "item" de texto separado, sem espaço nenhum no conteúdo — o join(' ')
+// ingênuo que existia antes colocava um espaço ENTRE CADA LETRA ("G A B I N E
+// T E"). A posição x/y de cada item é real, então em vez de sempre juntar com
+// espaço (ou nunca), só inserimos um espaço quando o vão horizontal entre o
+// fim de um item e o início do próximo é comparável à largura de um espaço de
+// verdade — kerning entre letras da mesma palavra é bem menor que isso.
+function extractPageText(items: any[]): string {
+  let text = '';
+  let last: any = null;
+  for (const item of items) {
+    if (!item?.str) {
+      if (item?.hasEOL) { text += '\n'; last = null; }
+      continue;
+    }
+    if (last) {
+      const sameLine = Math.abs(item.transform[5] - last.transform[5]) < Math.abs(item.transform[0] || 10) * 0.5;
+      if (!sameLine) {
+        text += '\n';
+      } else {
+        const prevEndX = last.transform[4] + (last.width || 0);
+        const gap = item.transform[4] - prevEndX;
+        const fontSize = Math.abs(item.transform[0]) || 10;
+        const alreadySpaced = text.endsWith(' ') || item.str.startsWith(' ');
+        if (!alreadySpaced && gap > fontSize * 0.2) {
+          text += ' ';
+        }
+      }
+    }
+    text += item.str;
+    last = item;
+    if (item.hasEOL) { text += '\n'; last = null; }
+  }
+  return text;
+}
 
 interface ManifestFile {
   version: string;
@@ -18,7 +61,12 @@ interface ManifestFile {
 }
 
 async function fetchManifest(path: string): Promise<ManifestFile | null> {
-  const res = await fetch(path);
+  // cache: 'no-store' força o navegador a sempre buscar a versão atual do
+  // manifest.json na rede — sem isso, um cache HTTP antigo do arquivo (comum
+  // em arquivos estáticos servidos de public/) fazia o app nunca perceber
+  // que a lista de leis mudou no servidor, mesmo com a lógica de versão do
+  // localStorage abaixo estando correta (ela só compara o que já chegou).
+  const res = await fetch(path, { cache: 'no-store' });
   if (!res.ok) return null;
   const text = await res.text();
   if (!text) return null;
@@ -42,7 +90,7 @@ async function processManifestDocuments(
     try {
       setLoadingMessage(`Processando ${index + 1}/${manifest.documents.length}: ${docInfo.titulo}`);
 
-      const pdfResponse = await fetch(docInfo.path);
+      const pdfResponse = await fetch(docInfo.path, { cache: 'no-store' });
       if (!pdfResponse.ok) {
         console.warn(`Arquivo PDF não encontrado em ${docInfo.path}. Pulando.`);
         continue;
@@ -55,7 +103,7 @@ async function processManifestDocuments(
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
-        fullText += textContent.items.map((item: any) => item.str).join(' ') + '\n';
+        fullText += extractPageText(textContent.items as any[]) + '\n';
       }
 
       processedDocs.push({

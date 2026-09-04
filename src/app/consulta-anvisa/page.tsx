@@ -115,7 +115,7 @@ export default function ConsultaAnvisaPage() {
   const activeDataset = ANVISA_DATASETS.find((dataset) => dataset.key === activeTab) ?? ANVISA_DATASETS[0];
 
   return (
-    <div className="max-w-5xl mx-auto w-full p-4 md:p-8 space-y-6 pb-40">
+    <div className="max-w-7xl mx-auto w-full p-4 md:p-8 space-y-6 pb-40">
       <header className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 md:p-6 rounded-[2rem] border border-slate-200 shadow-xl">
         <div className="flex items-center gap-4">
           <div className="p-4 rounded-2xl bg-sky-500/10 text-sky-600"><Landmark className="h-6 w-6" /></div>

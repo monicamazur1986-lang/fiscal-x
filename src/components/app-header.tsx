@@ -17,9 +17,8 @@ import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
 import { usePendingAlerts } from "@/hooks/use-pending-alerts"
-import { useMunicipioTemGestor } from "@/hooks/use-municipio-tem-gestor"
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { ProfileEditDialog } from "./profile-edit-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -134,11 +133,18 @@ export function AppHeader() {
   const router = useRouter()
   const { user, profile, logout } = useAuth()
   const { pendingUsersCount, pendingChamadosCount } = usePendingAlerts()
-  // Libera "Configurações" pro fiscal também quando o município dele não tem
-  // gestor cadastrado — ver src/hooks/use-municipio-tem-gestor.ts.
-  const { temGestor } = useMunicipioTemGestor()
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [isPasswordOpen, setIsPasswordOpen] = useState(false)
+  // ?embed=1 é usado pelo QuickAccessFab pra abrir uma rota inteira dentro de
+  // uma janela sobreposta pequena (iframe) sem duplicar cabeçalho, menu e o
+  // próprio botão de acesso rápido lá dentro. Lido via window.location (não
+  // useSearchParams) de propósito — evita exigir Suspense num componente que
+  // roda em toda página do sistema.
+  const [isEmbed, setIsEmbed] = useState(false)
+
+  useEffect(() => {
+    setIsEmbed(new URLSearchParams(window.location.search).get('embed') === '1')
+  }, [pathname])
 
   const handleLogout = useCallback(async () => {
     try {
@@ -147,7 +153,7 @@ export function AppHeader() {
     } catch (error) {}
   }, [logout, router])
 
-  if (!user || pathname === "/login") return null
+  if (!user || pathname === "/login" || isEmbed) return null
 
   // O link de volta pro Início pode ser "segurado" por uma vistoria em
   // andamento (ver src/hooks/use-checklist-exit-guard.ts) — se houver um
@@ -163,7 +169,10 @@ export function AppHeader() {
   const role = profile?.role
   const isRoot = role === "root" // exclusivo para o root da plataforma
   const isAdmin = role === "admin"
-  const podeConfigurar = isAdmin || isRoot || (role === "fiscal" && !temGestor)
+  // Cabeçalho, logo, rodapé e prazo padrão do município são editáveis por
+  // qualquer papel logado — ver src/app/api/municipio/config/route.ts pra
+  // como a gravação do fiscal é validada no servidor.
+  const podeConfigurar = isAdmin || isRoot || role === "fiscal"
 
   return (
     <>
@@ -232,7 +241,7 @@ export function AppHeader() {
                 {podeConfigurar && (
                   <DropdownMenuItem onClick={() => router.push("/admin/configuracoes")}>
                     <Settings className="mr-2 h-4 w-4" />
-                    <span>Configurações</span>
+                    <span>Identidade Municipal</span>
                   </DropdownMenuItem>
                 )}
                 {isRoot && (

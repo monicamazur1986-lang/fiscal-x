@@ -13,7 +13,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { generateIntimacaoDraft } from "@/ai/flows/generate-intimacao-draft"
+import { generateIntimacaoDraft, type MatchedArticle } from "@/ai/flows/generate-intimacao-draft"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -44,6 +44,7 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
   const [lawPreferences, setLawPreferences] = useState<LawPreference[]>(['estadual'])
   const [draft, setDraft] = useState("")
   const [fundamentacao, setFundamentacao] = useState("")
+  const [matchedArticles, setMatchedArticles] = useState<MatchedArticle[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isUppercase, setIsUppercase] = useState(false)
@@ -101,6 +102,7 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
     setError(null)
     setDraft("")
     setFundamentacao("")
+    setMatchedArticles([])
     try {
       // uid do fiscal logado: sem ele, resolverMunicipioId() (em
       // generate-intimacao-draft.ts) não descobre o município de quem está
@@ -112,6 +114,7 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
       } else {
         setDraft(result.draftIntimacao)
         setFundamentacao(result.fundamentacaoSugerida || "")
+        setMatchedArticles(result.matchedArticles || [])
       }
     } catch (err) {
       setError("FALHA DE CONEXÃO: Verifique sua chave de API ou conexão com a internet.")
@@ -139,6 +142,7 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
     setIsOpen(false);
     setDraft("");
     setFundamentacao("");
+    setMatchedArticles([]);
     setCaseDescription("");
     setError(null);
   }
@@ -301,6 +305,27 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
                 <div className="bg-slate-900 p-4 rounded-xl text-white border-l-4 border-l-primary">
                    <p className="text-[10px] font-semibold uppercase tracking-wide text-primary mb-1">Enquadramento detectado</p>
                    <p className="text-sm font-medium leading-snug">{fundamentacao}</p>
+                   {matchedArticles.length > 0 && (
+                       <Popover>
+                           <PopoverTrigger asChild>
+                               <button type="button" className="mt-2.5 flex items-center gap-1.5 text-[11px] font-medium text-primary hover:text-primary/80 transition-colors">
+                                   <BookOpen className="h-3.5 w-3.5" /> Conferir texto integral ({matchedArticles.length})
+                               </button>
+                           </PopoverTrigger>
+                           <PopoverContent align="start" className="w-[min(26rem,90vw)] max-h-[50vh] overflow-y-auto p-0 bg-white border-zinc-200 rounded-xl shadow-xl">
+                               <div className="p-4 space-y-3">
+                                   <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Base usada na fundamentação</p>
+                                   {matchedArticles.map((art) => (
+                                       <div key={art.id} className="border border-zinc-100 rounded-lg p-3 space-y-1 bg-zinc-50/60">
+                                           <p className="text-[10px] font-semibold uppercase text-primary tracking-wide">{art.lawTitle}</p>
+                                           <p className="text-xs font-semibold text-zinc-700">{art.label}</p>
+                                           <p className="text-xs text-zinc-600 leading-relaxed">{art.texto}</p>
+                                       </div>
+                                   ))}
+                               </div>
+                           </PopoverContent>
+                       </Popover>
+                   )}
                 </div>
               )}
               <div className="space-y-1.5">

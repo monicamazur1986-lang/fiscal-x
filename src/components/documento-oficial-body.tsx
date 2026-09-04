@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from "react"
-import { Loader2, Search, Pencil, Trash2, Plus, X, Landmark } from "lucide-react"
+import { Loader2, Search, Pencil, Trash2, Plus, X, Landmark, Check } from "lucide-react"
 import { format } from "date-fns"
 import type { Control, UseFormWatch, UseFormSetValue, UseFormGetValues, FieldArrayWithId } from "react-hook-form"
 import type { z } from "zod"
@@ -45,7 +45,13 @@ function StaticField({ value, className }: { value?: string | null; className?: 
   return <div className={className}>{value || ""}</div>;
 }
 
-type ItemApreendido = { produto: string; marcaLote: string; quantidade: string; unidade: string };
+type ItemApreendido = { produto: string; marcaLote: string; quantidade: string; unidade: string; extras: Record<string, string> };
+
+// Rol exemplificativo — não é uma lista fechada, o fiscal pode digitar
+// qualquer outra unidade. Serve só de sugestão (autocomplete via <datalist>)
+// pras mais comuns em bens apreendidos de vigilância sanitária.
+const UNIDADES_SUGERIDAS = ['UN', 'KG', 'G', 'L', 'ML', 'CX', 'PCT', 'DZ', 'FRASCO', 'LATA', 'SC'];
+const UNIDADES_DATALIST_ID = 'unidades-apreensao-sugestoes';
 
 /**
  * Relação dos bens alcançados por apreensão e/ou inutilização. A apreensão
@@ -54,16 +60,36 @@ type ItemApreendido = { produto: string; marcaLote: string; quantidade: string; 
  * auto de infração. Depois de finalizado vira tabela estática, sem inputs,
  * porque o html2canvas não fotografa campos de formulário com fidelidade.
  */
-function ItensApreendidosTable({ itens, onChange, disabled }: {
+function ItensApreendidosTable({ itens, onChange, colunas, onColunasChange, disabled }: {
   itens: ItemApreendido[];
   onChange: (itens: ItemApreendido[]) => void;
+  colunas: string[];
+  onColunasChange: (colunas: string[]) => void;
   disabled: boolean;
 }) {
-  const atualizar = (i: number, campo: keyof ItemApreendido, valor: string) => {
+  // Nome da coluna extra em edição — null quando o botão "+" ainda não foi
+  // clicado, string (mesmo vazia) enquanto o fiscal digita o nome.
+  const [novaColuna, setNovaColuna] = useState<string | null>(null);
+
+  const atualizar = (i: number, campo: keyof Omit<ItemApreendido, 'extras'>, valor: string) => {
     onChange(itens.map((item, idx) => (idx === i ? { ...item, [campo]: valor } : item)));
   };
-  const adicionar = () => onChange([...itens, { produto: '', marcaLote: '', quantidade: '', unidade: '' }]);
+  const atualizarExtra = (i: number, coluna: string, valor: string) => {
+    onChange(itens.map((item, idx) => (idx === i ? { ...item, extras: { ...(item.extras || {}), [coluna]: valor } } : item)));
+  };
+  const adicionar = () => onChange([...itens, { produto: '', marcaLote: '', quantidade: '', unidade: '', extras: {} }]);
   const remover = (i: number) => onChange(itens.filter((_, idx) => idx !== i));
+
+  const confirmarNovaColuna = () => {
+    const nome = (novaColuna || '').trim().toUpperCase();
+    if (nome && !colunas.includes(nome)) {
+      onColunasChange([...colunas, nome]);
+    }
+    setNovaColuna(null);
+  };
+  const removerColuna = (col: string) => onColunasChange(colunas.filter((c) => c !== col));
+
+  const totalColunas = 5 + colunas.length + (disabled ? 0 : 1);
 
   return (
     <div className="p-2">
@@ -75,16 +101,64 @@ function ItensApreendidosTable({ itens, onChange, disabled }: {
             <th className="border border-black/20 p-1 text-left w-40">MARCA / LOTE</th>
             <th className="border border-black/20 p-1 text-left w-24">QTD.</th>
             <th className="border border-black/20 p-1 text-left w-24">UNIDADE</th>
-            {!disabled && <th className="border border-black/20 p-1 w-10 no-print" />}
+            {colunas.map((col) => (
+              <th key={col} className="border border-black/20 p-1 text-left w-24">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="truncate">{col}</span>
+                  {!disabled && (
+                    <button type="button" onClick={() => removerColuna(col)} className="no-print text-zinc-400 hover:text-rose-500 shrink-0" aria-label={`Remover coluna ${col}`}>
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              </th>
+            ))}
+            {!disabled && (
+              <th className="border border-black/20 p-1 w-10 no-print text-center">
+                {novaColuna === null ? (
+                  <button type="button" onClick={() => setNovaColuna('')} aria-label="Adicionar coluna" className="text-primary hover:text-primary/70">
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <input
+                      autoFocus
+                      value={novaColuna}
+                      onChange={(e) => setNovaColuna(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); confirmarNovaColuna(); }
+                        if (e.key === 'Escape') setNovaColuna(null);
+                      }}
+                      placeholder="Nome"
+                      className="w-16 bg-white border border-zinc-200 rounded px-1 text-[9pt] font-normal normal-case"
+                    />
+                    <button type="button" onClick={confirmarNovaColuna} aria-label="Confirmar nova coluna" className="text-emerald-600 hover:text-emerald-700 shrink-0">
+                      <Check className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
           {itens.length === 0 && (
-            <tr><td colSpan={disabled ? 5 : 6} className="border border-black/20 p-2 text-center text-zinc-400 italic">Nenhum bem relacionado.</td></tr>
+            <tr><td colSpan={totalColunas} className="border border-black/20 p-2 text-center text-zinc-400 italic">Nenhum bem relacionado.</td></tr>
           )}
           {itens.map((item, i) => (
             <tr key={i}>
-              <td className="border border-black/20 p-1 text-center">{i + 1}</td>
+              <td className="border border-black/20 p-1 text-center">
+                {disabled ? (
+                  i + 1
+                ) : (
+                  <div className="flex items-center justify-center gap-1">
+                    <button type="button" onClick={() => remover(i)} className="no-print text-rose-400 hover:text-rose-600 shrink-0" aria-label={`Remover item ${i + 1}`}>
+                      <X className="h-3 w-3" />
+                    </button>
+                    <span>{i + 1}</span>
+                  </div>
+                )}
+              </td>
               {(['produto', 'marcaLote', 'quantidade', 'unidade'] as const).map((campo) => (
                 <td key={campo} className="border border-black/20 p-1">
                   {disabled
@@ -93,24 +167,35 @@ function ItensApreendidosTable({ itens, onChange, disabled }: {
                         value={item[campo]}
                         onChange={(e) => atualizar(i, campo, e.target.value)}
                         className="w-full bg-transparent outline-none border-none p-0"
+                        list={campo === 'unidade' ? UNIDADES_DATALIST_ID : undefined}
+                        placeholder={campo === 'unidade' ? 'ex.: UN, KG...' : undefined}
                       />}
                 </td>
               ))}
-              {!disabled && (
-                <td className="border border-black/20 p-1 text-center no-print">
-                  <button type="button" onClick={() => remover(i)} className="text-rose-500 hover:text-rose-700" aria-label={`Remover item ${i + 1}`}>
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+              {colunas.map((col) => (
+                <td key={col} className="border border-black/20 p-1">
+                  {disabled
+                    ? <span>{item.extras?.[col] || ''}</span>
+                    : <input
+                        value={item.extras?.[col] || ''}
+                        onChange={(e) => atualizarExtra(i, col, e.target.value)}
+                        className="w-full bg-transparent outline-none border-none p-0"
+                      />}
                 </td>
-              )}
+              ))}
             </tr>
           ))}
         </tbody>
       </table>
       {!disabled && (
-        <button type="button" onClick={adicionar} className="no-print mt-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-primary hover:underline">
-          <Plus className="h-3 w-3" /> Adicionar bem
-        </button>
+        <>
+          <button type="button" onClick={adicionar} className="no-print mt-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-primary hover:underline">
+            <Plus className="h-3 w-3" /> Adicionar bem
+          </button>
+          <datalist id={UNIDADES_DATALIST_ID}>
+            {UNIDADES_SUGERIDAS.map((u) => <option key={u} value={u} />)}
+          </datalist>
+        </>
       )}
     </div>
   );
@@ -518,7 +603,13 @@ export function DocumentoOficialBody({
     ...(estrutura.listaDeItens ? [
       <div key="itens-apreendidos" className="section-box" style={{ borderTop: "none" }}>
         <div className="sub-header-row">4. RELACAO DOS BENS</div>
-        <ItensApreendidosTable itens={watch("itensApreendidos") || []} onChange={(itens) => setValue("itensApreendidos", itens)} disabled={isFinalized} />
+        <ItensApreendidosTable
+          itens={watch("itensApreendidos") || []}
+          onChange={(itens) => setValue("itensApreendidos", itens)}
+          colunas={watch("itensApreendidosColunas") || []}
+          onColunasChange={(colunas) => setValue("itensApreendidosColunas", colunas)}
+          disabled={isFinalized}
+        />
       </div>,
     ] : []),
 

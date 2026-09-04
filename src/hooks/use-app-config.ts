@@ -39,6 +39,10 @@ export function useAppConfig(options?: { municipioIdOverride?: string }) {
   });
 
   const [systemLogo, setSystemLogo] = useState("");
+  // Prazo (em dias) do acesso de teste, contado a partir de createdAt de
+  // cada usuário — null = sem limite. Configurável só pelo root, ver
+  // Marca do Sistema (admin/configuracoes/sistema).
+  const [betaAccessDurationDays, setBetaAccessDurationDays] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   // 1. CARREGAR CONFIGURAÇÃO MUNICIPAL (IDENTIDADE DO GESTOR)
@@ -77,9 +81,11 @@ export function useAppConfig(options?: { municipioIdOverride?: string }) {
 
     const unsub = onSnapshot(doc(db, "configuracoes", "global"), (snap) => {
       if (snap.exists()) {
-        const url = snap.data().appLogoUrl || "";
+        const data = snap.data();
+        const url = data.appLogoUrl || "";
         setSystemLogo(url);
         localStorage.setItem(SYSTEM_CONFIG_KEY, url);
+        setBetaAccessDurationDays(typeof data.betaAccessDurationDays === 'number' ? data.betaAccessDurationDays : null);
       }
     });
     return unsub;
@@ -143,11 +149,21 @@ export function useAppConfig(options?: { municipioIdOverride?: string }) {
     }
   }, [db, profile]);
 
+  const updateBetaAccessDurationDays = useCallback(async (days: number | null) => {
+    if (!db || !(profile?.role === 'root' || profile?.email?.toLowerCase() === ROOT_ADMIN_EMAIL)) {
+      throw new Error('Somente o root pode alterar o prazo de acesso de teste.');
+    }
+    await setDoc(doc(db, "configuracoes", "global"), { betaAccessDurationDays: days }, { merge: true });
+    setBetaAccessDurationDays(days);
+  }, [db, profile]);
+
   return {
     config,
     systemLogo,
+    betaAccessDurationDays,
     updateConfig,
     updateSystemLogo,
+    updateBetaAccessDurationDays,
     updateLogo: (url: string) => updateConfig({ logoUrl: url }),
     loading,
     needsMunicipioSelection: profile?.role === 'root' && !options?.municipioIdOverride,

@@ -40,6 +40,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { Badge } from "@/components/ui/badge"
 import { getBaseLawOptions, getIndividualLawOptions, toggleLawPreference as toggleLawPreferenceValue, type LawPreference } from "@/lib/legal-search"
+import type { MatchedArticle } from "@/ai/flows/generate-intimacao-draft"
 
 type ReportType = 'intimação' | 'infração' | 'apreensão' | 'interdição';
 
@@ -70,6 +71,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
 
   const [draft, setDraft] = useState("")
   const [fundamentacao, setFundamentacao] = useState("")
+  const [matchedArticles, setMatchedArticles] = useState<MatchedArticle[]>([])
   const [engine, setEngine] = useState<'local' | 'cloud' | null>(null)
 
   const [isLoading, setIsLoading] = useState(false)
@@ -145,6 +147,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
     setError(null);
     setDraft("");
     setFundamentacao("");
+    setMatchedArticles([]);
 
     try {
       const result = await generateIntimacaoDraft({
@@ -161,6 +164,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
       } else {
         setDraft(result.draftIntimacao);
         setFundamentacao(result.fundamentacaoSugerida || "");
+        setMatchedArticles(result.matchedArticles || []);
         setEngine(result.engine || 'local');
         if (result.engine === 'cloud') setCoolDown(5);
       }
@@ -176,6 +180,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
     setCaseDescription("");
     setDraft("");
     setFundamentacao("");
+    setMatchedArticles([]);
     setError(null);
     setReportType(undefined);
     setLawPreferences(['estadual']);
@@ -191,6 +196,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
   const handleClearDraft = () => {
     setDraft("");
     setFundamentacao("");
+    setMatchedArticles([]);
     toast({ title: "Rascunho Limpo" });
   }
 
@@ -250,7 +256,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
   }
 
   return (
-    <div className="max-w-3xl mx-auto w-full space-y-5 pt-4 font-sans pb-40 px-4">
+    <div className="max-w-5xl mx-auto w-full space-y-5 pt-4 font-sans pb-40 px-4">
       {/* Cabeçalho discreto — uma linha só, sem repetir informação dentro do card */}
       <div className="flex items-center gap-3 no-print">
         <div className="flex items-center gap-2 text-slate-500">
@@ -427,6 +433,27 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                                       <Badge className={cn("text-[9px] font-medium border-none", engine === 'local' ? "bg-emerald-500/20 text-emerald-400" : "bg-blue-500/20 text-blue-400")}>{engine === 'local' ? "Local" : "Nuvem"}</Badge>
                                   </div>
                                   <p className="text-sm font-medium leading-snug">{fundamentacao}</p>
+                                  {matchedArticles.length > 0 && (
+                                      <Popover>
+                                          <PopoverTrigger asChild>
+                                              <button type="button" className="mt-3 flex items-center gap-1.5 text-[11px] font-medium text-primary hover:text-primary/80 transition-colors">
+                                                  <BookOpen className="h-3.5 w-3.5" /> Conferir texto integral ({matchedArticles.length} {matchedArticles.length === 1 ? 'artigo' : 'artigos'})
+                                              </button>
+                                          </PopoverTrigger>
+                                          <PopoverContent align="start" className="w-[min(28rem,90vw)] max-h-[60vh] overflow-y-auto p-0 bg-white border-zinc-200 rounded-xl shadow-xl">
+                                              <div className="p-4 space-y-3">
+                                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Base usada na fundamentação</p>
+                                                  {matchedArticles.map((art) => (
+                                                      <div key={art.id} className="border border-zinc-100 rounded-lg p-3 space-y-1 bg-zinc-50/60">
+                                                          <p className="text-[10px] font-semibold uppercase text-primary tracking-wide">{art.lawTitle}</p>
+                                                          <p className="text-xs font-semibold text-zinc-700">{art.label}</p>
+                                                          <p className="text-xs text-zinc-600 leading-relaxed">{art.texto}</p>
+                                                      </div>
+                                                  ))}
+                                              </div>
+                                          </PopoverContent>
+                                      </Popover>
+                                  )}
                               </div>
                           )}
 

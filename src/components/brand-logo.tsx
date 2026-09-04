@@ -13,12 +13,13 @@ export function SentinelaMascot({ className, width = 280, height = 280, simplifi
   const { systemLogo } = useAppConfig();
   const [imgError, setImgError] = useState(false);
   // `simplified` (usado em espaços pequenos, ex.: ícone do cabeçalho) usa o
-  // ícone da marca (escudo + check, mesma arte do favicon/PWA) em vez da
-  // ilustração completa do mascote — a composição inteira (personagem +
-  // faixa "FISCAL-X") virava ruído ilegível num espaço de ~36px. Antes essa
-  // condição existia mas apontava pro mesmo arquivo nos dois casos (bug: a
-  // distinção nunca foi implementada de fato).
-  const defaultFallback = simplified ? "/app-icon-512.png?v=20260903" : "/logo-fiscalx-oficial.jpeg?v=20260811";
+  // recorte quadrado do mascote sem a faixa de texto (mesma arte do
+  // favicon/PWA, ver public/app-icon-512.png) em vez da ilustração completa
+  // — a composição inteira (personagem + faixa "FISCAL-X") virava ruído
+  // ilegível num espaço de ~36px. Antes essa condição existia mas apontava
+  // pro mesmo arquivo nos dois casos (bug: a distinção nunca foi
+  // implementada de fato).
+  const defaultFallback = simplified ? "/app-icon-512.png?v=20260904" : "/logo-fiscalx-oficial.jpeg?v=20260811";
   const [fallbackSrc, setFallbackSrc] = useState(defaultFallback);
   const [mounted, setMounted] = useState(false);
 

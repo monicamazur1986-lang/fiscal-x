@@ -23,7 +23,8 @@ export type Intimacao = {
   tipoTermo?: string;
   status: 'finalizado' | 'rascunho';
   createdAt: string;
-  createdBy?: string; 
+  updatedAt?: string;
+  createdBy?: string;
   createdByName?: string; 
   cnpj?: string;
   endereco?: string;
@@ -34,9 +35,11 @@ export type Intimacao = {
   signatureResponsavel?: string; 
   signatureResponsavelTecnico?: string;
   folderId?: string;
+  /** Fixado pelo fiscal no menu Documentos, pra organizar a lista como preferir. */
+  favorito?: boolean;
   deleted?: boolean;
   deletedAt?: string;
-  pdfUrl?: string; 
+  pdfUrl?: string;
   dataDocumento?: string;
   horaDocumento?: string;
   secretariaOficial?: string;
@@ -91,6 +94,8 @@ export type Inspecao = {
   alertaEnviadoEm?: string;
   /** Pasta de organização no menu Documentos (mesma árvore de Intimações) — só usada em relatórios finalizados. */
   folderId?: string;
+  /** Fixado pelo fiscal no menu Documentos, pra organizar a lista como preferir. */
+  favorito?: boolean;
   /** Mesma lógica de lixeira de Intimações/Docfacil: mover pra lixeira só marca `deleted`, sem apagar de verdade. */
   deleted?: boolean;
   deletedAt?: string;

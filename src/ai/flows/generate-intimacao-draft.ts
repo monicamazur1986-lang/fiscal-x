@@ -55,10 +55,23 @@ const GenerateIntimacaoDraftInputSchema = z.object({
 });
 export type GenerateIntimacaoDraftInput = z.infer<typeof GenerateIntimacaoDraftInputSchema>;
 
+// Artigo que a busca (RAG local, restrita à base legal selecionada)
+// encontrou como correspondente ao relato — devolvido com o texto integral
+// pra tela poder mostrar num balão de conferência antes do fiscal usar a
+// fundamentação sugerida, em vez de só a citação compacta em texto.
+const MatchedArticleSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  lawTitle: z.string(),
+  texto: z.string(),
+});
+export type MatchedArticle = z.infer<typeof MatchedArticleSchema>;
+
 const GenerateIntimacaoDraftOutputSchema = z.object({
   draftIntimacao: z.string().describe('O texto técnico jurídico em bloco único.'),
   fundamentacaoSugerida: z.string().optional().describe('Artigos infringidos no formato: LEI (ART, INCISO).'),
   artigosUtilizados: z.array(z.string()).optional(),
+  matchedArticles: z.array(MatchedArticleSchema).optional().describe('Artigos encontrados pela busca na base legal selecionada, com texto integral, para conferência.'),
   engine: z.enum(['local', 'cloud']).optional(),
   error: z.string().optional(),
 });
@@ -122,6 +135,16 @@ function generateLocalHeuristicDraft(input: GenerateIntimacaoDraftInput, municip
     };
   }
 
+  // Texto integral de cada artigo encontrado, pro balão de conferência na
+  // tela — a mesma lista que embasa `fundamentacao` abaixo, só que sem
+  // resumir/agrupar.
+  const matchedArticlesOut = matchedArticles.map(a => ({
+    id: a.id,
+    label: a.label,
+    lawTitle: a.lawTitle,
+    texto: a.texto,
+  }));
+
   // 3. FORMATAÇÃO DA FUNDAMENTAÇÃO
   const groupedByLaw: Record<string, string[]> = {};
   matchedArticles.forEach(art => {
@@ -164,6 +187,7 @@ function generateLocalHeuristicDraft(input: GenerateIntimacaoDraftInput, municip
       draftIntimacao: `${resumo} Base normativa aplicada: ${fundamentacao}.`.replace(/\s+/g, ' ').trim(),
       fundamentacaoSugerida: fundamentacao,
       artigosUtilizados: matchedArticles.map(a => a.id),
+      matchedArticles: matchedArticlesOut,
       engine: 'local'
     };
   }
@@ -178,12 +202,19 @@ function generateLocalHeuristicDraft(input: GenerateIntimacaoDraftInput, municip
     draftIntimacao: `${opening}${risk}${legal}${closing}`.replace(/\s+/g, ' ').trim(),
     fundamentacaoSugerida: fundamentacao,
     artigosUtilizados: matchedArticles.map(a => a.id),
+    matchedArticles: matchedArticlesOut,
     engine: 'local'
   };
 }
 
 const CLAUDE_SYSTEM_PROMPT = `Você é um Auditor Jurídico Sênior da Vigilância Sanitária.
 Sua missão é transformar notas de campo em um documento técnico de alto rigor, na NORMA CULTA e em BLOCO ÚNICO.
+
+REGRAS DE REDAÇÃO (OBJETIVIDADE E NORMA CULTA):
+- O relato do fiscal costuma vir informal, abreviado ou com erros de português — sua tarefa é reescrevê-lo em redação técnica e gramaticalmente correta (concordância verbal/nominal rigorosa, sem gerundismo, sem gírias/coloquialismos), preservando fielmente os fatos relatados, sem adicionar nem inferir informação que não esteja no relato.
+- Frases diretas e objetivas: vá direto ao fato, sem rodeios, sem redundância e sem repetir a mesma ideia com palavras diferentes.
+- Tom impessoal e técnico, sempre em terceira pessoa — nunca use opiniões, adjetivos subjetivos ("gravíssimo", "lamentável") ou linguagem emocional; descreva apenas o que foi constatado, de forma verificável.
+- Prefira períodos curtos a médios. Um período muito longo, com várias orações encadeadas, prejudica a clareza — se necessário, divida a ideia em frases mais curtas dentro do próprio bloco único (sem quebra de linha).
 
 REGRAS CRÍTICAS DE FUNDAMENTAÇÃO:
 1. BLOCO ÚNICO: Proibido usar quebras de linha ou parágrafos no campo draftIntimacao.
@@ -292,7 +323,15 @@ export const generateIntimacaoDraftFlow = ai.defineFlow(
           error: "RELATO INSUFICIENTE PARA A IA EM NUVEM: detalhe melhor a irregularidade e tente novamente.",
         };
       }
-      return { ...output, draftIntimacao: cleanDraft, engine: 'cloud' as const };
+      // Balão de conferência: mostra o texto integral só dos artigos que a
+      // Claude efetivamente citou (artigosUtilizados) — se ela não preencher
+      // esse campo, cai pra todo o conjunto que foi oferecido como contexto,
+      // pra sempre sobrar algo pro fiscal conferir.
+      const citedIds = new Set(output.artigosUtilizados || []);
+      const matchedArticlesOut = (citedIds.size > 0 ? selectedArticles.filter(a => citedIds.has(a.id)) : selectedArticles)
+        .map(a => ({ id: a.id, label: a.label, lawTitle: a.lawTitle, texto: a.texto }));
+
+      return { ...output, draftIntimacao: cleanDraft, matchedArticles: matchedArticlesOut, engine: 'cloud' as const };
 
     } catch (e: any) {
       // Sem log nenhum aqui, qualquer instabilidade real da Claude (rede,

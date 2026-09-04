@@ -375,7 +375,7 @@ export default function GerarDocumentoPage({ params }: { params: Promise<{ model
         }
       />
 
-      <div className="max-w-4xl mx-auto w-full py-6 space-y-4 pb-40">
+      <div className="max-w-6xl mx-auto w-full py-6 space-y-4 pb-40">
         <div className="flex flex-wrap items-center gap-3 px-4 sm:px-0">
           <Input
             value={destinatario}

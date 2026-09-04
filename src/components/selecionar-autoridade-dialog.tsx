@@ -147,7 +147,7 @@ export function SelecionarAutoridadeParaFormulario({ onSelect }: { onSelect: (au
                             onClick={() => setIsManageOpen(true)} 
                             className="h-10 px-4 rounded-xl text-[9px] font-black uppercase text-zinc-500 hover:bg-zinc-50 border-zinc-200"
                         >
-                            Gerenciar Fiscais
+                            Cadastrar Fiscal
                         </Button>
                     </div>
                 </div>

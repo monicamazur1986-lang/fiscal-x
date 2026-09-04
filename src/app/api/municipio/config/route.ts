@@ -21,15 +21,15 @@ const db = getFirestore();
 
 /**
  * Salva a Identidade Municipal (municipios/{id}/config/brand) em nome de um
- * FISCAL sem gestor cadastrado no seu município.
+ * FISCAL (cabeçalho, logo, rodapé e prazo padrão).
  *
  * As regras do Firestore (firestore.rules: match /municipios/{id}/config/*)
  * só permitem escrita de isAdmin() — um fiscal comum não consegue gravar
- * direto do client mesmo depois de liberado pela UI. Esta rota existe só
- * pra esse caso: reconfirma (com o Admin SDK, ignorando as regras do
- * client) que não há gestor no município do chamador antes de gravar — se
- * um gestor for cadastrado depois da tela carregar, a gravação já passa a
- * ser recusada aqui. Admin/root continuam gravando direto do client
+ * direto do client mesmo depois de liberado pela UI. Esta rota existe pra
+ * isso: grava em nome do fiscal usando o Admin SDK (ignorando as regras do
+ * client), depois de confirmar que o chamador é mesmo um fiscal vinculado
+ * a um município. Qualquer fiscal do município pode editar, tenha ou não
+ * gestor cadastrado — admin/root continuam gravando direto do client
  * (src/hooks/use-app-config.ts), sem passar por esta rota.
  */
 export async function POST(req: NextRequest) {
@@ -71,19 +71,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Usuário sem município vinculado" }, { status: 403 });
     }
     if (caller.role !== 'fiscal') {
-      return NextResponse.json({ message: "Use a gravação padrão — esta rota é só para fiscais sem gestor" }, { status: 403 });
+      return NextResponse.json({ message: "Use a gravação padrão — esta rota é só para fiscais" }, { status: 403 });
     }
 
     const municipioId = normalizeId(caller.municipioId);
-    const adminSnap = await db.collection('users')
-      .where('municipioId', '==', municipioId)
-      .where('role', '==', 'admin')
-      .limit(1)
-      .get();
-    if (!adminSnap.empty) {
-      return NextResponse.json({ message: "Este município já tem um gestor cadastrado — peça a ele para ajustar" }, { status: 403 });
-    }
-
     await db.collection('municipios').doc(municipioId).collection('config').doc('brand').set(body.data, { merge: true });
     return NextResponse.json({ ok: true });
   } catch (err: any) {
