@@ -45,6 +45,7 @@ import {
 import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
+import { useMunicipiosAtivos } from "@/hooks/use-municipios-ativos"
 import { normalizeId } from "@/lib/utils"
 import municipiosPR from "@/lib/municipios-pr.json"
 import { roteirosCatalog } from "@/lib/roteiros/catalog"
@@ -253,11 +254,22 @@ export default function RoteirosPage() {
     ? selectedMunicipioForRoot
     : (profile?.municipioNome || profile?.municipioId || "");
 
+  // Prioriza, no seletor do root, os municípios que já têm cadastro ativo —
+  // sem isso, root tinha que procurar o cliente numa lista alfabética com
+  // quase 400 municípios do Paraná toda vez que trocava de contexto.
+  const municipiosAtivos = useMunicipiosAtivos();
+  const { ativos: municipiosAtivosLista, inativos: municipiosInativosLista } = useMemo(() => {
+    const ativos: string[] = [];
+    const inativos: string[] = [];
+    municipiosPR.forEach(m => (municipiosAtivos.has(normalizeId(m)) ? ativos : inativos).push(m));
+    return { ativos, inativos };
+  }, [municipiosAtivos]);
+
   const filteredMunicipiosPicker = useMemo(() => {
     const term = normalizeId(municipioSearchTerm);
-    if (!term) return municipiosPR;
-    return municipiosPR.filter(m => normalizeId(m).includes(term));
-  }, [municipioSearchTerm]);
+    const aplicarFiltro = (lista: string[]) => term ? lista.filter(m => normalizeId(m).includes(term)) : lista;
+    return { ativos: aplicarFiltro(municipiosAtivosLista), inativos: aplicarFiltro(municipiosInativosLista) };
+  }, [municipioSearchTerm, municipiosAtivosLista, municipiosInativosLista]);
 
   const filteredRoteiros = roteiros
     .filter(r => !('municipioId' in r) || r.municipioId === effectiveMunicipioId)
@@ -327,7 +339,7 @@ export default function RoteirosPage() {
                   className="h-10 border-none focus:ring-0 text-sm"
                 />
                 <CommandList className="max-h-[300px] overflow-y-auto">
-                  {filteredMunicipiosPicker.length === 0 && (
+                  {filteredMunicipiosPicker.ativos.length === 0 && filteredMunicipiosPicker.inativos.length === 0 && (
                     <CommandEmpty className="p-4 text-center text-xs text-[#A39D8C] font-medium">Não encontrado.</CommandEmpty>
                   )}
                   <CommandGroup>
@@ -337,15 +349,34 @@ export default function RoteirosPage() {
                     >
                       Nenhum (só roteiros globais)
                     </div>
-                    {filteredMunicipiosPicker.map((m) => (
-                      <div
-                        key={m}
-                        onClick={() => { setSelectedMunicipioForRoot(m); setMunicipioPickerOpen(false); setMunicipioSearchTerm(""); }}
-                        className="hover:bg-[#E4EEEC] cursor-pointer py-2.5 px-4 transition-colors font-medium text-sm border-b border-[#F1EEE4] last:border-0"
-                      >
-                        {m}
-                      </div>
-                    ))}
+                    {filteredMunicipiosPicker.ativos.length > 0 && (
+                      <>
+                        <p className="px-4 pt-2.5 pb-1 text-[10px] font-black uppercase tracking-widest text-primary/70">Com cadastro ativo</p>
+                        {filteredMunicipiosPicker.ativos.map((m) => (
+                          <div
+                            key={m}
+                            onClick={() => { setSelectedMunicipioForRoot(m); setMunicipioPickerOpen(false); setMunicipioSearchTerm(""); }}
+                            className="hover:bg-[#E4EEEC] cursor-pointer py-2.5 px-4 transition-colors font-medium text-sm border-b border-[#F1EEE4] last:border-0"
+                          >
+                            {m}
+                          </div>
+                        ))}
+                      </>
+                    )}
+                    {filteredMunicipiosPicker.inativos.length > 0 && (
+                      <>
+                        <p className="px-4 pt-2.5 pb-1 text-[10px] font-black uppercase tracking-widest text-[#A39D8C]">Demais municípios</p>
+                        {filteredMunicipiosPicker.inativos.map((m) => (
+                          <div
+                            key={m}
+                            onClick={() => { setSelectedMunicipioForRoot(m); setMunicipioPickerOpen(false); setMunicipioSearchTerm(""); }}
+                            className="hover:bg-[#E4EEEC] cursor-pointer py-2.5 px-4 transition-colors font-medium text-sm border-b border-[#F1EEE4] last:border-0"
+                          >
+                            {m}
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </CommandGroup>
                 </CommandList>
               </Command>

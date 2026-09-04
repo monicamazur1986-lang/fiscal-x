@@ -253,6 +253,10 @@ export function DocumentoOficialBody({
   // defesa são elementos do auto de infração, não de todo termo. Ver
   // src/lib/autuacao-estrutura.ts para a matriz e a base legal.
   const estrutura = estruturaDoTipo(watch('tipoTermo'));
+  const preenchimentoAgora = new Date();
+  const dataPreenchimento = format(preenchimentoAgora, 'dd/MM/yyyy');
+  const horaPreenchimento = `${format(preenchimentoAgora, 'HH:mm')}h`;
+  const tipoAutuacaoSelecionado = (watch('tipoTermo') || 'AUTO DE INFRAÇÃO').toUpperCase();
 
   // Os ~7 blocos de nível superior do documento, num array (em vez de filhos
   // soltos em sequência) — só assim dá pra intercalar um LivePageHeader entre
@@ -479,6 +483,20 @@ export function DocumentoOficialBody({
     </div>,
 
     <div key="fundamentacao" className="section-box" style={{ borderTop: 'none' }}>
+      <div className="flex w-full items-stretch border-b border-black/10 bg-zinc-50/40 px-2 py-2">
+        <div className="data-cell min-w-0 flex-1 border border-black/10 bg-white px-2 py-1.5">
+          <span className="data-label">TIPO DA AUTUAÇÃO:</span>
+          <div className="data-field-input !min-h-0 !p-0 !border-0 !bg-transparent !shadow-none !rounded-none text-center text-[9pt] font-black uppercase tracking-[0.08em]">{tipoAutuacaoSelecionado}</div>
+        </div>
+        <div className="data-cell min-w-0 flex-1 border border-black/10 border-l-0 bg-white px-2 py-1.5">
+          <span className="data-label">DATA:</span>
+          <div className="data-field-input !min-h-0 !p-0 !border-0 !bg-transparent !shadow-none !rounded-none text-center text-[9pt] font-black uppercase tracking-[0.08em]">{dataPreenchimento}</div>
+        </div>
+        <div className="data-cell min-w-0 flex-1 border border-black/10 border-l-0 bg-white px-2 py-1.5">
+          <span className="data-label">HORA:</span>
+          <div className="data-field-input !min-h-0 !p-0 !border-0 !bg-transparent !shadow-none !rounded-none text-center text-[9pt] font-black uppercase tracking-[0.08em]">{horaPreenchimento}</div>
+        </div>
+      </div>
       <div className="sub-header-row flex items-center justify-between">
         <span>3. FUNDAMENTAÇÃO E RELATO TÉCNICO</span>
         {!isFinalized && !isGeneratingPdf && <AssistenteIAFormDialog onApply={(t, f) => { const ct = getValues('teor') || ""; setValue('teor', (ct && ct !== '<br>' ? ct + '<br>' : "") + t); if (f) { const cb = getValues('legislacaoBase') || ""; setValue('legislacaoBase', (cb && cb !== '<br>' ? cb + '; ' : "") + f); } }} />}

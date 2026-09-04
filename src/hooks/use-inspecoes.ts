@@ -279,5 +279,77 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
     }
   }, [db, configError]);
 
-  return { inspecoes, saveInspecao, deleteInspecao, loading, isOnline, needsMunicipioSelection, pendingSyncCount: pendingSyncIds.length };
+  // Mesmo padrão de use-intimacoes.ts: mover pra pasta/lixeira do menu
+  // Documentos só marca campos, sem apagar — usado nos relatórios finalizados
+  // (status 'concluido') que passam a aparecer lá ao lado das autuações.
+  const bulkMoveToFolder = useCallback(async (ids: string[], folderId: string | null) => {
+    const folderValue = folderId || "";
+    const stringIds = ids.map(id => String(id));
+
+    setInspecoes(prev => {
+      const updated = prev.map(i =>
+        stringIds.includes(String(i.id)) ? { ...i, folderId: folderValue, deleted: false } : i
+      );
+      try { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated)); } catch (e) {}
+      return updated;
+    });
+
+    if (db && !configError) {
+      const results = await Promise.allSettled(
+        stringIds.map(id => setDoc(doc(db, "inspecoes", id), { folderId: folderValue, deleted: false }, { merge: true }))
+      );
+      const failed = results.filter(r => r.status === 'rejected').length;
+      if (failed > 0) throw new Error(`${failed} de ${stringIds.length} item(ns) não foram movidos no servidor.`);
+    }
+  }, [db, configError]);
+
+  const bulkDelete = useCallback(async (ids: string[], toTrash: boolean) => {
+    const now = new Date().toISOString();
+    const stringIds = ids.map(id => String(id));
+
+    setInspecoes(prev => {
+      const updated = prev.map(i =>
+        stringIds.includes(String(i.id)) ? { ...i, deleted: toTrash, deletedAt: now } : i
+      );
+      try { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated)); } catch (e) {}
+      return updated;
+    });
+
+    if (db && !configError) {
+      const results = await Promise.allSettled(
+        stringIds.map(id => setDoc(doc(db, "inspecoes", id), { deleted: toTrash, deletedAt: now }, { merge: true }))
+      );
+      const failed = results.filter(r => r.status === 'rejected').length;
+      if (failed > 0) throw new Error(`${failed} de ${stringIds.length} item(ns) não foram salvos no servidor.`);
+    }
+  }, [db, configError]);
+
+  const permanentDelete = useCallback(async (ids: string[]) => {
+    const stringIds = ids.map(id => String(id));
+
+    setInspecoes(prev => {
+      const updated = prev.filter(i => !stringIds.includes(String(i.id)));
+      try { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated)); } catch (e) {}
+      return updated;
+    });
+
+    if (db && !configError) {
+      const results = await Promise.allSettled(stringIds.map(id => deleteDoc(doc(db, "inspecoes", id))));
+      const failed = results.filter(r => r.status === 'rejected').length;
+      if (failed > 0) throw new Error(`${failed} de ${stringIds.length} item(ns) não foram excluídos no servidor.`);
+    }
+  }, [db, configError]);
+
+  return {
+    inspecoes,
+    saveInspecao,
+    deleteInspecao,
+    bulkMoveToFolder,
+    bulkDelete,
+    permanentDelete,
+    loading,
+    isOnline,
+    needsMunicipioSelection,
+    pendingSyncCount: pendingSyncIds.length,
+  };
 }

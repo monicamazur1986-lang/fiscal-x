@@ -1,5 +1,5 @@
 {
-  "version": "2.4.0",
+  "version": "2.6.0",
   "documents": [
     {
       "id": "codigo-sanitario-estadual-pr",
@@ -117,6 +117,69 @@
       "categoria": "RDC",
       "descricao": "Norma da ANVISA sobre dispositivos eletrônicos para fumar e produtos relacionados, com exigências sanitárias e restrições de uso e comercialização.",
       "keywords": "rdc 46, anvisa, cigarro eletronico, vape, dispositivos eletrônicos, tabaco, controle sanitário"
+    },
+    {
+      "id": "lei-estadual-20362-2020-ilpi",
+      "titulo": "Lei Estadual nº 20.362/2020 — Responsável Técnico em Instituições de Longa Permanência para Idosos",
+      "path": "/documentos-biblioteca/Lei%20Estadual%20n%2020.362-2020.pdf",
+      "esfera": "estadual",
+      "categoria": "Lei",
+      "descricao": "Lei estadual que exige formação de nível superior na área da saúde para o Responsável Técnico de Instituições de Longa Permanência para Idosos (ILPI) no Paraná.",
+      "keywords": "lei 20362, ilpi, idosos, responsavel tecnico, instituicao de longa permanencia, asilo, casa de repouso"
+    },
+    {
+      "id": "resolucao-sesa-004-2017-agroindustria-familiar",
+      "titulo": "Resolução SESA nº 004/2017 — Boas Práticas para Empreendimento Familiar Rural, MEI e Economia Solidária",
+      "path": "/documentos-biblioteca/Resolucao%20SESA%20004%202017.pdf",
+      "esfera": "estadual",
+      "categoria": "Resolução",
+      "descricao": "Norma estadual sobre regularização sanitária e boas práticas de fabricação de alimentos processados por empreendimento familiar rural, microempreendedor individual (MEI) e empreendimento econômico solidário no Paraná.",
+      "keywords": "resolucao sesa 004, agroindustria familiar, empreendimento familiar rural, mei, economia solidaria, boas praticas de fabricacao, licenca sanitaria"
+    },
+    {
+      "id": "resolucao-sesa-seab-003-2013-leite",
+      "titulo": "Resolução Conjunta SESA/SEAB nº 003/2013 — Comissões Regionais da Qualidade do Leite",
+      "path": "/documentos-biblioteca/Resolucao%20SESA-SEAB%20003%202013.pdf",
+      "esfera": "estadual",
+      "categoria": "Resolução",
+      "descricao": "Resolução conjunta SESA/SEAB que institui as Comissões Regionais da Qualidade do Leite (CRQL) no Paraná, com o regulamento técnico de composição, atribuições e funcionamento.",
+      "keywords": "resolucao 003 2013, sesa seab, qualidade do leite, crql, laticinios, producao leiteira"
+    },
+    {
+      "id": "resolucao-conjunta-sema-sesa-002-2005-pgrss",
+      "titulo": "Resolução Conjunta SEMA/SESA nº 002/2005 — Plano de Gerenciamento de Resíduos de Serviços de Saúde (PGRSS)",
+      "path": "/documentos-biblioteca/Resolu%C3%A7%C3%A3o%20Conjunta%20SEMA_SESA%20n%20002_2005.pdf",
+      "esfera": "estadual",
+      "categoria": "Resolução",
+      "descricao": "Resolução conjunta que estabelece diretrizes para elaboração do Plano de Gerenciamento de Resíduos de Serviços de Saúde (PGRSS) no Paraná, com modelos de Plano Simplificado e Termo de Referência completo.",
+      "keywords": "resolucao 002 2005, sema sesa, pgrss, residuos de servicos de saude, gerenciamento de residuos, grupos a b c d e"
+    },
+    {
+      "id": "resolucao-sesa-473-2016-vacinas-farmacia",
+      "titulo": "Resolução SESA nº 473/2016 — Vacinas em Farmácias Privadas",
+      "path": "/documentos-biblioteca/Resolu%C3%A7%C3%A3o%20SESA%20n%20473_2016.pdf",
+      "esfera": "estadual",
+      "categoria": "Resolução",
+      "descricao": "Norma técnica estadual sobre condições físicas, técnicas e sanitárias para guarda, comercialização e administração de vacinas em farmácias privadas no Paraná. Parcialmente alterada pela Resolução SESA nº 956/2018 quanto à vacinação extramuro.",
+      "keywords": "resolucao sesa 473, vacinas, farmacia, sala de vacina, rede de frio, camara refrigerada, drogaria"
+    },
+    {
+      "id": "resolucao-sesa-956-2018-vacinacao-extramuro",
+      "titulo": "Resolução SESA nº 956/2018 — Vacinação Extramuro",
+      "path": "/documentos-biblioteca/Resolu%C3%A7%C3%A3o%20SESA%20n%20956-2018.pdf",
+      "esfera": "estadual",
+      "categoria": "Resolução",
+      "descricao": "Norma técnica estadual que padroniza e controla o funcionamento dos serviços de vacinação extramuro (fora do estabelecimento) oferecidos por estabelecimentos públicos e privados no Paraná, alterando a Resolução SESA nº 473/2016.",
+      "keywords": "resolucao sesa 956, vacinacao extramuro, campanha de vacinacao, sala de vacina, rede de frio"
+    },
+    {
+      "id": "resolucao-sesa-700-2013-salao-beleza",
+      "titulo": "Resolução SESA nº 700/2013 — Salão de Beleza, Barbearia e Depilação",
+      "path": "/documentos-roteiros/resolucao7002013.pdf",
+      "esfera": "estadual",
+      "categoria": "Resolução",
+      "descricao": "Norma técnica estadual que estabelece os requisitos sanitários para funcionamento de salões de beleza, barbearias e serviços de depilação no Paraná. É a base do roteiro de inspeção de Salão de Beleza.",
+      "keywords": "resolucao sesa 700, salao de beleza, barbearia, depilacao, estetica, manicure, pedicure, licenca sanitaria"
     }
   ]
 }

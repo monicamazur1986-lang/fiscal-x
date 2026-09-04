@@ -34,7 +34,8 @@ import {
   Zap,
   FolderPlus,
   Cloud,
-  Save
+  Save,
+  ClipboardList
 } from "lucide-react"
 
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
@@ -42,7 +43,10 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { useIntimacoes } from "@/hooks/use-intimacoes"
+import { useInspecoes } from "@/hooks/use-inspecoes"
 import { useFolders } from "@/hooks/use-folders"
+import { roteirosCatalog } from "@/lib/roteiros/catalog"
+import type { Intimacao, Inspecao } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { useAppConfig } from "@/hooks/use-app-config"
@@ -118,7 +122,75 @@ export default function DocumentosPage() {
   const { intimacoes, bulkMoveToFolder, bulkDelete, permanentDelete, saveIntimacao, loading: loadingInt, isOnline, needsMunicipioSelection } = useIntimacoes(
     isRoot ? { municipioIdOverride: selectedMunicipioForRoot || undefined } : undefined
   );
+  // Relatórios de vistoria finalizados (roteiros) entram no mesmo arquivo
+  // municipal das autuações — só o que já foi concluído; rascunhos continuam
+  // só em Roteiros > Em Andamento.
+  const {
+    inspecoes,
+    bulkMoveToFolder: bulkMoveRelatorios,
+    bulkDelete: bulkDeleteRelatorios,
+    permanentDelete: permanentDeleteRelatorios,
+    loading: loadingInsp,
+  } = useInspecoes(isRoot ? { municipioIdOverride: selectedMunicipioForRoot || undefined } : undefined);
   const { folders, createFolder, loading: loadingFold } = useFolders('intimacoes');
+
+  const roteirosPorId = useMemo(() => new Map(roteirosCatalog.map(r => [r.id, r])), []);
+  const relatorios = useMemo(() => inspecoes.filter(i => i.status === 'concluido'), [inspecoes]);
+
+  // Formato comum pra intimações e relatórios conviverem na mesma lista,
+  // busca, filtro por fiscal e sistema de pastas — sem misturar os campos
+  // específicos de cada um (prazo legal só existe em autuação, por exemplo).
+  type DocumentoUnificado = {
+    itemId: string;
+    id: string;
+    kind: 'intimacao' | 'relatorio';
+    numero: string;
+    assunto: string;
+    createdBy: string;
+    createdByName: string;
+    data?: Date;
+    deleted: boolean;
+    folderId?: string;
+    href: string;
+    intimacao?: Intimacao;
+    inspecao?: Inspecao;
+  };
+
+  const documentos = useMemo<DocumentoUnificado[]>(() => {
+    const doIntimacoes: DocumentoUnificado[] = intimacoes.map(i => ({
+      itemId: `intimacao:${i.id}`,
+      id: String(i.id),
+      kind: 'intimacao',
+      numero: i.numeroProcesso || "---",
+      assunto: i.autor || "Estabelecimento não informado",
+      createdBy: i.createdBy || "",
+      createdByName: i.createdByName || "---",
+      data: i.dataIntimacao,
+      deleted: i.deleted === true,
+      folderId: i.folderId,
+      href: `/intimacoes/${i.id}`,
+      intimacao: i,
+    }));
+    const doRelatorios: DocumentoUnificado[] = relatorios.map(i => {
+      const roteiroId = i.checklistData?.roteiroId || "";
+      const roteiro = roteirosPorId.get(roteiroId);
+      return {
+        itemId: `relatorio:${i.id}`,
+        id: i.id,
+        kind: 'relatorio',
+        numero: roteiro?.titulo || "Relatório de Vistoria",
+        assunto: i.titulo || "Estabelecimento não informado",
+        createdBy: i.fiscalId || "",
+        createdByName: i.fiscalNome || "---",
+        data: i.data,
+        deleted: i.deleted === true,
+        folderId: i.folderId,
+        href: `/roteiros/${roteiroId}?inspecaoId=${i.id}`,
+        inspecao: i,
+      };
+    });
+    return [...doIntimacoes, ...doRelatorios];
+  }, [intimacoes, relatorios, roteirosPorId]);
 
   const filteredMunicipiosPicker = useMemo(() => {
     const term = normalizeId(municipioSearchTerm);
@@ -154,13 +226,13 @@ export default function DocumentosPage() {
 
   const equipeFiscais = useMemo(() => {
     const fiscais = new Map();
-    intimacoes.forEach(i => {
-      if (i.createdBy && i.createdByName && !i.deleted) {
-        fiscais.set(i.createdBy, i.createdByName);
+    documentos.forEach(d => {
+      if (d.createdBy && d.createdByName && !d.deleted) {
+        fiscais.set(d.createdBy, d.createdByName);
       }
     });
     return Array.from(fiscais.entries()).map(([id, nome]) => ({ id, nome }));
-  }, [intimacoes]);
+  }, [documentos]);
 
   const stats = useMemo(() => {
     const total = intimacoes.filter(i => !i.deleted).length;
@@ -177,27 +249,26 @@ export default function DocumentosPage() {
     return { total, alertas, vencidos };
   }, [intimacoes]);
 
-  const filteredIntimacoes = useMemo(() => {
-    return intimacoes.filter(i => {
-      const isDeleted = i.deleted === true;
+  const filteredDocumentos = useMemo(() => {
+    return documentos.filter(d => {
       if (activeFolderId === "trash") {
-        if (!isDeleted) return false;
+        if (!d.deleted) return false;
       } else {
-        if (isDeleted) return false;
+        if (d.deleted) return false;
       }
 
       const search = searchQuery.toLowerCase();
-      const matchesSearch = (i.autor || "").toLowerCase().includes(search) || 
-                          (i.numeroProcesso || "").toLowerCase().includes(search) ||
-                          (i.createdByName || "").toLowerCase().includes(search);
-      
+      const matchesSearch = d.assunto.toLowerCase().includes(search) ||
+                          d.numero.toLowerCase().includes(search) ||
+                          d.createdByName.toLowerCase().includes(search);
+
       if (!matchesSearch) return false;
-      if (filterByFiscal && i.createdBy !== filterByFiscal) return false;
-      if (activeFolderId !== "all" && activeFolderId !== "trash" && i.folderId !== activeFolderId) return false;
+      if (filterByFiscal && d.createdBy !== filterByFiscal) return false;
+      if (activeFolderId !== "all" && activeFolderId !== "trash" && d.folderId !== activeFolderId) return false;
 
       return true;
     });
-  }, [intimacoes, searchQuery, activeFolderId, filterByFiscal]);
+  }, [documentos, searchQuery, activeFolderId, filterByFiscal]);
 
   // Documentos salvos deste fiscal (não excluídos), para o aviso de limite de 100.
   const minhasIntimacoes = useMemo(() => {
@@ -211,12 +282,20 @@ export default function DocumentosPage() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredIntimacoes.length && filteredIntimacoes.length > 0) {
+    if (selectedIds.length === filteredDocumentos.length && filteredDocumentos.length > 0) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(filteredIntimacoes.map(i => i.id));
+      setSelectedIds(filteredDocumentos.map(d => d.itemId));
     }
   };
+
+  // Separa a seleção (que mistura autuações e relatórios, prefixados por
+  // "intimacao:"/"relatorio:") em dois lotes de ids crus, um por coleção —
+  // cada ação em massa fala com o hook certo pro tipo certo.
+  const splitSelection = (ids: string[]) => ({
+    intimacaoIds: ids.filter(id => id.startsWith('intimacao:')).map(id => id.slice('intimacao:'.length)),
+    relatorioIds: ids.filter(id => id.startsWith('relatorio:')).map(id => id.slice('relatorio:'.length)),
+  });
 
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) return;
@@ -231,8 +310,12 @@ export default function DocumentosPage() {
   };
 
   const handleMoveToFolder = async (folderId: string | null) => {
+    const { intimacaoIds, relatorioIds } = splitSelection(selectedIds);
     try {
-      await bulkMoveToFolder(selectedIds, folderId);
+      await Promise.all([
+        intimacaoIds.length ? bulkMoveToFolder(intimacaoIds, folderId) : Promise.resolve(),
+        relatorioIds.length ? bulkMoveRelatorios(relatorioIds, folderId) : Promise.resolve(),
+      ]);
       toast({ title: "Itens movidos" });
       setSelectedIds([]);
       setIsMoveDialogOpen(false);
@@ -247,7 +330,8 @@ export default function DocumentosPage() {
     }
 
     setIsTriggeringAutomation(true);
-    const selectedData = intimacoes.filter(i => selectedIds.includes(i.id));
+    const { intimacaoIds } = splitSelection(selectedIds);
+    const selectedData = intimacoes.filter(i => intimacaoIds.includes(String(i.id)));
 
     try {
       const response = await fetch(config.n8nWebhookUrl, {
@@ -304,10 +388,14 @@ export default function DocumentosPage() {
   };
 
   const handleBulkDelete = async () => {
+    const { intimacaoIds, relatorioIds } = splitSelection(selectedIds);
     if (activeFolderId === "trash") {
         if (!window.confirm(`Excluir permanentemente estes ${selectedIds.length} itens?`)) return;
         try {
-          await permanentDelete(selectedIds);
+          await Promise.all([
+            intimacaoIds.length ? permanentDelete(intimacaoIds) : Promise.resolve(),
+            relatorioIds.length ? permanentDeleteRelatorios(relatorioIds) : Promise.resolve(),
+          ]);
           toast({ title: "Itens removidos permanentemente" });
           setSelectedIds([]);
         } catch (e) {
@@ -317,7 +405,10 @@ export default function DocumentosPage() {
     }
     if (!window.confirm(`Mover ${selectedIds.length} itens para a lixeira?`)) return;
     try {
-      await bulkDelete(selectedIds, true);
+      await Promise.all([
+        intimacaoIds.length ? bulkDelete(intimacaoIds, true) : Promise.resolve(),
+        relatorioIds.length ? bulkDeleteRelatorios(relatorioIds, true) : Promise.resolve(),
+      ]);
       toast({ title: "Itens movidos para lixeira" });
       setSelectedIds([]);
     } catch (e) {
@@ -326,8 +417,12 @@ export default function DocumentosPage() {
   };
 
   const handleBulkRestore = async () => {
+    const { intimacaoIds, relatorioIds } = splitSelection(selectedIds);
     try {
-      await bulkDelete(selectedIds, false);
+      await Promise.all([
+        intimacaoIds.length ? bulkDelete(intimacaoIds, false) : Promise.resolve(),
+        relatorioIds.length ? bulkDeleteRelatorios(relatorioIds, false) : Promise.resolve(),
+      ]);
       toast({ title: "Itens restaurados" });
       setSelectedIds([]);
     } catch (e) {
@@ -336,10 +431,17 @@ export default function DocumentosPage() {
   }
 
   // Gera o PDF de cada intimação selecionada (sequencialmente, para não travar
-  // o navegador) e empacota tudo num único .zip.
+  // o navegador) e empacota tudo num único .zip. Relatórios de vistoria ficam
+  // de fora por enquanto: a geração de PDF deles depende da tela do relatório
+  // renderizada (não dá pra gerar em lote, só a partir dos dados).
   const handleBulkDownloadZip = async () => {
     if (selectedIds.length === 0) return;
-    const docs = intimacoes.filter(i => selectedIds.includes(i.id));
+    const { intimacaoIds, relatorioIds } = splitSelection(selectedIds);
+    const docs = intimacoes.filter(i => intimacaoIds.includes(String(i.id)));
+
+    if (docs.length === 0) {
+      return toast({ variant: "destructive", title: "Nenhuma autuação selecionada", description: "Relatórios de vistoria ainda não têm baixa em lote — abra cada um e baixe individualmente." });
+    }
 
     setIsZipping(true);
     setZipProgress({ current: 0, total: docs.length });
@@ -366,7 +468,12 @@ export default function DocumentosPage() {
       a.download = `documentos-${format(new Date(), 'yyyy-MM-dd')}.zip`;
       a.click();
       URL.revokeObjectURL(url);
-      toast({ title: "ZIP Gerado", description: `${docs.length} documento(s) baixado(s) em um único arquivo.` });
+      toast({
+        title: "ZIP Gerado",
+        description: relatorioIds.length > 0
+          ? `${docs.length} autuação(ões) baixada(s). ${relatorioIds.length} relatório(s) de vistoria ficaram de fora — baixe individualmente.`
+          : `${docs.length} documento(s) baixado(s) em um único arquivo.`,
+      });
     } catch (e) {
       toast({ variant: "destructive", title: "Erro ao gerar ZIP" });
     } finally {
@@ -416,7 +523,7 @@ export default function DocumentosPage() {
     URL.revokeObjectURL(url);
   };
 
-  if (loadingInt || loadingFold) {
+  if (loadingInt || loadingInsp || loadingFold) {
     return (
       <div className="flex h-[80vh] w-full flex-col items-center justify-center gap-4 bg-[#F5F2EA]">
         <Loader2 className="h-8 w-8 animate-spin text-[#0E4A44]" />
@@ -429,7 +536,7 @@ export default function DocumentosPage() {
     <div className="min-h-screen bg-[#F5F2EA]">
       <DocfacilTopbar
         title="Documentos"
-        subtitle={isRoot ? (selectedMunicipioForRoot || "Selecione um município") : (profile?.municipioNome || "Arquivo municipal de autuações")}
+        subtitle={isRoot ? (selectedMunicipioForRoot || "Selecione um município") : (profile?.municipioNome || "Arquivo municipal de autuações e relatórios")}
         actions={isRoot ? (
           <Popover open={municipioPickerOpen} onOpenChange={setMunicipioPickerOpen}>
             <PopoverTrigger asChild>
@@ -486,7 +593,7 @@ export default function DocumentosPage() {
                 Visão Geral
               </div>
               <span className="text-xs text-[#A39D8C] tabular-nums">
-                {intimacoes.filter(i => !i.deleted).length}
+                {documentos.filter(d => !d.deleted).length}
               </span>
             </button>
 
@@ -509,7 +616,7 @@ export default function DocumentosPage() {
                       <span className="truncate">{fiscal.nome}</span>
                     </div>
                     <span className="text-xs text-[#A39D8C] tabular-nums shrink-0">
-                      {intimacoes.filter(i => !i.deleted && i.createdBy === fiscal.id).length}
+                      {documentos.filter(d => !d.deleted && d.createdBy === fiscal.id).length}
                     </span>
                   </button>
                 ))}
@@ -565,7 +672,7 @@ export default function DocumentosPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="bg-white border border-[#E4DFD1] rounded-lg p-4 flex items-center gap-3">
               <BarChart3 className="h-4 w-4 text-[#9C7A3C] shrink-0" />
-              <div><p className="text-xs text-[#A39D8C]">Total na visão</p><p className="font-serif text-xl text-[#262420]">{filteredIntimacoes.length}</p></div>
+              <div><p className="text-xs text-[#A39D8C]">Total na visão</p><p className="font-serif text-xl text-[#262420]">{filteredDocumentos.length}</p></div>
             </div>
             <div className="bg-white border border-[#E4DFD1] rounded-lg p-4 flex items-center gap-3">
               <Timer className={cn("h-4 w-4 shrink-0", stats.alertas > 0 ? "text-amber-500" : "text-[#C9C2AC]")} />
@@ -588,7 +695,7 @@ export default function DocumentosPage() {
               <div className="flex items-center gap-2 shrink-0">
                 <Button
                   size="sm"
-                  onClick={() => setSelectedIds(minhasIntimacoes.map(i => i.id))}
+                  onClick={() => setSelectedIds(minhasIntimacoes.map(i => `intimacao:${i.id}`))}
                   className="h-8 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium gap-1.5"
                 >
                   <CheckSquare className="h-3.5 w-3.5" /> Selecionar meus documentos
@@ -615,7 +722,7 @@ export default function DocumentosPage() {
                     <BarChart3 className="h-4 w-4" /> Relatório Municipal
                 </Button>
                 <Button onClick={toggleSelectAll} variant="outline" size="sm" className="h-10 rounded-md gap-1.5 text-xs font-medium border-[#E4DFD1] bg-white text-[#6B6659] hover:bg-[#F5F2EA]">
-                    {selectedIds.length > 0 && selectedIds.length === filteredIntimacoes.length ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                    {selectedIds.length > 0 && selectedIds.length === filteredDocumentos.length ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
                     {selectedIds.length > 0 ? `${selectedIds.length} selecionados` : "Selecionar tudo"}
                 </Button>
             </div>
@@ -655,61 +762,64 @@ export default function DocumentosPage() {
           )}
 
           <div className="bg-white border border-[#E4DFD1] rounded-lg divide-y divide-[#F1EEE4] overflow-hidden shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
-            {filteredIntimacoes.length > 0 ? (
-              filteredIntimacoes.map(item => {
-                const deadline = calculateDeadline(item);
-                const isFinal = item.status === 'finalizado';
-                const itemId = String(item.id);
+            {filteredDocumentos.length > 0 ? (
+              filteredDocumentos.map(item => {
+                const isRelatorio = item.kind === 'relatorio';
+                const intimacao = item.intimacao;
+                const deadline = intimacao ? calculateDeadline(intimacao) : null;
+                const isFinal = isRelatorio ? true : intimacao?.status === 'finalizado';
 
                 return (
                   <div
-                    key={itemId}
-                    onClick={() => router.push(`/intimacoes/${itemId}`)}
+                    key={item.itemId}
+                    onClick={() => router.push(item.href)}
                     className={cn(
                     "relative flex flex-col sm:flex-row sm:items-center gap-3 pl-5 pr-4 py-3 transition-colors cursor-pointer",
-                    selectedIds.includes(itemId) ? "bg-[#F5F2EA]" : "hover:bg-[#FAF8F3]"
+                    selectedIds.includes(item.itemId) ? "bg-[#F5F2EA]" : "hover:bg-[#FAF8F3]"
                   )}>
                     <span className={cn("absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-sm", isFinal ? "bg-[#1F7A5C]" : "bg-amber-500")} />
                     <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-3 w-full sm:w-auto shrink-0">
                         <Checkbox
-                        checked={selectedIds.includes(itemId)}
-                        onCheckedChange={() => toggleSelect(itemId)}
+                        checked={selectedIds.includes(item.itemId)}
+                        onCheckedChange={() => toggleSelect(item.itemId)}
                         className="h-4 w-4 rounded border-[#C9C2AC] data-[state=checked]:bg-[#0E4A44] data-[state=checked]:border-[#0E4A44]"
                         />
                         <span className={cn(
                           "h-7 w-7 rounded-full border flex items-center justify-center font-serif text-[13px] shrink-0",
                           isFinal ? "border-[#1F7A5C] text-[#1F7A5C]" : "border-[#E4DFD1] text-[#A39D8C]"
                         )}>
-                          {isFinal ? "✓" : "✎"}
+                          {isRelatorio ? <ClipboardList className="h-3.5 w-3.5" /> : (isFinal ? "✓" : "✎")}
                         </span>
                     </div>
 
                     <div className="flex-1 min-w-0 grid grid-cols-1 lg:grid-cols-12 gap-2 lg:gap-4 items-center w-full">
                         <div className="lg:col-span-4 min-w-0">
                             <div className="flex items-center gap-2">
-                                <span className="font-serif text-[15px] text-[#262420] truncate">{item.numeroProcesso || "---"}</span>
+                                <span className="font-serif text-[15px] text-[#262420] truncate">{item.numero}</span>
                                 <Badge variant="outline" className={cn("text-[10px] font-medium h-4 px-1.5 border-none", isFinal ? "bg-[#E3F1EA] text-[#1F7A5C]" : "bg-amber-50 text-amber-700")}>
-                                    {isFinal ? 'Final' : 'Rascunho'}
+                                    {isRelatorio ? 'Relatório' : (isFinal ? 'Final' : 'Rascunho')}
                                 </Badge>
                             </div>
                             <p className="text-xs text-[#A39D8C] truncate">
-                                {item.autor || "Estabelecimento não informado"}
+                                {item.assunto}
                             </p>
                         </div>
 
                         <div className="lg:col-span-3 flex flex-col justify-center gap-0.5">
                             <div className="flex items-center gap-1.5 text-xs text-[#6B6659]">
                                 <User className="h-3 w-3 text-[#C9C2AC]" />
-                                <span className="truncate max-w-[140px]">{item.createdByName || "---"}</span>
+                                <span className="truncate max-w-[140px]">{item.createdByName}</span>
                             </div>
                             <div className="flex items-center gap-1.5 text-xs text-[#A39D8C]">
                                 <CalendarDays className="h-3 w-3 text-[#C9C2AC]" />
-                                <span>{item.dataIntimacao ? format(new Date(item.dataIntimacao), "dd MMM yyyy", { locale: ptBR }) : "---"}</span>
+                                <span>{item.data ? format(new Date(item.data), "dd MMM yyyy", { locale: ptBR }) : "---"}</span>
                             </div>
                         </div>
 
                         <div className="lg:col-span-3 flex flex-col justify-center">
-                            {isFinal && deadline ? (
+                            {isRelatorio ? (
+                                <span className="text-xs text-[#C9C2AC]">Vistoria concluída</span>
+                            ) : isFinal && deadline ? (
                                 <div className={cn(
                                     "flex items-center gap-1.5 text-xs font-medium w-fit px-2 py-1 rounded",
                                     deadline.status === 'vencido' ? "bg-rose-50 text-rose-700" :
@@ -729,7 +839,7 @@ export default function DocumentosPage() {
 
                         <div onClick={(e) => e.stopPropagation()} className="lg:col-span-2 flex justify-end items-center gap-1">
                             <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-md text-[#6B6659] hover:text-[#0E4A44] hover:bg-[#E4EEEC]">
-                                <Link href={`/intimacoes/${itemId}`}><ArrowUpRight className="h-4 w-4" /></Link>
+                                <Link href={item.href}><ArrowUpRight className="h-4 w-4" /></Link>
                             </Button>
 
                             <DropdownMenu>
@@ -737,8 +847,21 @@ export default function DocumentosPage() {
                                     <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-md text-[#A39D8C] hover:bg-[#F5F2EA]"><MoreVertical className="h-4 w-4" /></Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="rounded-md w-56 p-1 shadow-lg">
-                                    <DropdownMenuItem onClick={() => handleOpenAdjustment(itemId)} className="rounded text-xs font-medium h-9 px-3 cursor-pointer gap-2"><Scale className="h-3.5 w-3.5" /> Ajustar prazo</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={async () => { try { await bulkDelete([itemId], true); toast({ title: "Movido para lixeira" }); } catch (e) { toast({ variant: "destructive", title: "Erro ao excluir" }); } }} className="rounded text-rose-600 text-xs font-medium h-9 px-3 cursor-pointer"><Trash2 className="mr-2 h-3.5 w-3.5" /> Mover pra lixeira</DropdownMenuItem>
+                                    {!isRelatorio && (
+                                      <DropdownMenuItem onClick={() => handleOpenAdjustment(item.id)} className="rounded text-xs font-medium h-9 px-3 cursor-pointer gap-2"><Scale className="h-3.5 w-3.5" /> Ajustar prazo</DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem
+                                      onClick={async () => {
+                                        try {
+                                          if (isRelatorio) await bulkDeleteRelatorios([item.id], true);
+                                          else await bulkDelete([item.id], true);
+                                          toast({ title: "Movido para lixeira" });
+                                        } catch (e) {
+                                          toast({ variant: "destructive", title: "Erro ao excluir" });
+                                        }
+                                      }}
+                                      className="rounded text-rose-600 text-xs font-medium h-9 px-3 cursor-pointer"
+                                    ><Trash2 className="mr-2 h-3.5 w-3.5" /> Mover pra lixeira</DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Sparkles, Loader2, Check, AlertTriangle, Trash2, FileText, Ban, PackageSearch, AlertOctagon, Scale, BookOpen, Mic, MicOff, AlertCircle, X, Gavel, ChevronDown } from "lucide-react"
+import { Sparkles, Loader2, Check, Trash2, FileText, Ban, PackageSearch, AlertOctagon, Scale, BookOpen, Mic, MicOff, AlertCircle, X, Gavel, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -16,38 +16,26 @@ import { Textarea } from "@/components/ui/textarea"
 import { generateIntimacaoDraft } from "@/ai/flows/generate-intimacao-draft"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
-import legislacaoData from "@/lib/legislacao.json"
+import { useAuth } from "@/hooks/use-auth"
+import { getBaseLawOptions, getIndividualLawOptions, toggleLawPreference as toggleLawPreferenceValue, type LawPreference } from "@/lib/legal-search"
 
 interface Props {
   onApply: (text: string, fundamentacao?: string) => void;
 }
 
 type ReportType = 'intimação' | 'infração' | 'apreensão' | 'interdição';
-type LawPreference = 'todas' | 'municipal' | 'estadual' | string;
 
-const lawOptions = [
-  { id: 'estadual', label: 'Código Sanitário Estadual' },
-  { id: 'municipal', label: 'Código Municipal' },
-  { id: 'todas', label: 'Todo o banco de dados' },
-] as const;
-
-const individualLawOptions = Object.entries(
-  legislacaoData as Record<string, {
-    titulo: string;
-    municipioId?: string;
-    biblioteca?: { esfera: 'municipal' | 'estadual' | 'federal'; categoria: string };
-  }>
-)
-  .filter(([, law]) => !!law.biblioteca)
-  .map(([lawKey, law]) => ({
-    id: lawKey,
-    label: law.titulo,
-    group: law.municipioId ? 'Código Municipal' : 'Código Sanitário Estadual',
-  }))
-  .sort((a, b) => a.label.localeCompare(b.label));
+// Ícone de cada opção "Geral" — as opções em si vêm de getBaseLawOptions
+// (mesma fonte usada em gerar-rascunho.tsx), que já sabe que só
+// Prudentópolis tem código municipal cadastrado.
+const lawOptionIcons: Record<string, typeof BookOpen> = {
+  estadual: BookOpen,
+  municipal: Gavel,
+  todas: Scale,
+};
 
 export function AssistenteIAFormDialog({ onApply }: Props) {
   const [isOpen, setIsOpen] = useState(false)
@@ -63,6 +51,10 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
   const [isLegalMenuOpen, setIsLegalMenuOpen] = useState(false)
   
   const recognitionRef = useRef<any>(null)
+  const { profile } = useAuth()
+
+  const lawOptions = getBaseLawOptions(profile?.municipioId)
+  const individualLawOptions = getIndividualLawOptions()
 
   useEffect(() => {
     if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
@@ -100,29 +92,7 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
   }
 
   const toggleLawPreference = (value: LawPreference) => {
-    setLawPreferences(prev => {
-      if (value === 'todas') {
-        return prev.includes('todas') ? ['estadual'] : ['todas'];
-      }
-
-      if (value === 'estadual' || value === 'municipal') {
-        const next = prev.includes(value)
-          ? prev.filter(item => item !== value)
-          : [...prev, value];
-
-        if (next.length === 0) return ['estadual'];
-        if (next.includes('todas')) return next.filter(item => item !== 'todas');
-        return next;
-      }
-
-      const next = prev.includes(value)
-        ? prev.filter(item => item !== value)
-        : [...prev, value];
-
-      if (next.length === 0) return ['estadual'];
-      if (next.includes('todas')) return next.filter(item => item !== 'todas');
-      return next;
-    });
+    setLawPreferences(prev => toggleLawPreferenceValue(prev, value));
   };
 
   const handleGenerate = async () => {
@@ -132,7 +102,11 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
     setDraft("")
     setFundamentacao("")
     try {
-      const result = await generateIntimacaoDraft({ caseDescription, reportType, lawPreference: lawPreferences, useCloudAI: false, uid: '' })
+      // uid do fiscal logado: sem ele, resolverMunicipioId() (em
+      // generate-intimacao-draft.ts) não descobre o município de quem está
+      // gerando o texto, e "Código Municipal" nunca encontrava nenhum artigo
+      // — a busca sempre restringe legislação municipal ao município do uid.
+      const result = await generateIntimacaoDraft({ caseDescription, reportType, lawPreference: lawPreferences, useCloudAI: false, uid: profile?.uid || '' })
       if (result.error) {
         setError(result.error)
       } else {
@@ -181,154 +155,157 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm" className="no-print h-9 gap-1.5 px-4 rounded-xl font-black text-[9px] uppercase tracking-widest menu-metallic-violet text-white shadow-lg shadow-violet-500/20 active:scale-95 transition-all">
           <Sparkles className="h-4 w-4" />
-          ASSISTENTE IA
+          Fiscal AI
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl rounded-[2.5rem] p-0 overflow-visible border-none shadow-2xl bg-white">
-        <DialogHeader className="bg-violet-600 text-white p-6 sm:p-8 shrink-0">
-          <div className="flex items-center justify-between">
+      <DialogContent className="sm:max-w-2xl rounded-[2rem] p-0 overflow-visible border-none shadow-2xl bg-white">
+        <DialogHeader className="bg-zinc-900 text-white p-6 sm:p-8 shrink-0">
+          <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-2xl bg-white/20 text-white"><Sparkles className="h-6 w-6" /></div>
+              <div className="p-2.5 rounded-2xl bg-primary/20 text-primary"><Sparkles className="h-6 w-6" /></div>
               <div>
-                <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">FISCAL AI</DialogTitle>
-                <DialogDescription className="text-violet-100 text-[10px] font-bold uppercase tracking-widest mt-1">Geração de texto técnico e enquadramento</DialogDescription>
+                <DialogTitle className="font-serif text-xl">Fiscal AI</DialogTitle>
+                <DialogDescription className="text-zinc-400 text-[10px] font-bold uppercase tracking-widest mt-1">Texto técnico e enquadramento legal</DialogDescription>
               </div>
             </div>
-            <div className="flex items-center space-x-2 bg-violet-700/50 p-2 rounded-2xl border border-white/10">
-              <Label htmlFor="ia-case-mode" className="text-[8px] font-black uppercase text-white">Caixa Alta</Label>
-              <Switch id="ia-case-mode" checked={isUppercase} onCheckedChange={setIsUppercase} className="scale-75 data-[state=checked]:bg-white" />
+            <div className="flex items-center gap-2 shrink-0">
+              <Label htmlFor="ia-case-mode" className="text-[10px] font-medium text-zinc-400">Caixa alta</Label>
+              <Switch id="ia-case-mode" checked={isUppercase} onCheckedChange={setIsUppercase} className="data-[state=checked]:bg-primary" />
             </div>
           </div>
         </DialogHeader>
 
-        <div className="p-6 space-y-6 bg-zinc-50 max-h-[60vh] overflow-y-auto custom-scrollbar">
+        <div className="p-6 space-y-5 bg-zinc-50 max-h-[65vh] overflow-y-auto custom-scrollbar">
           {error && (
-            <Alert variant="destructive" className="bg-red-50 border-red-200 rounded-2xl animate-in fade-in slide-in-from-top-2">
+            <Alert variant="destructive" className="bg-rose-50 border-rose-100 rounded-2xl p-4 animate-in fade-in slide-in-from-top-2 relative">
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle className="text-[10px] font-black uppercase tracking-widest">Aviso do Sistema</AlertTitle>
-              <AlertDescription className="text-xs font-bold uppercase opacity-80 leading-relaxed">
+              <AlertTitle className="text-sm font-semibold text-rose-700">Não foi possível gerar o texto</AlertTitle>
+              <AlertDescription className="text-xs text-rose-600/90 leading-relaxed">
                 {error}
               </AlertDescription>
-              <button onClick={() => setError(null)} className="absolute top-2 right-2 p-1 hover:bg-red-100 rounded-full transition-colors">
-                <X className="h-3 w-3" />
+              <button onClick={() => setError(null)} className="absolute top-3 right-3 p-1 hover:bg-rose-100 rounded-full transition-colors">
+                <X className="h-3.5 w-3.5" />
               </button>
             </Alert>
           )}
 
-          <div className="space-y-4">
-            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 ml-1">Natureza do Documento</label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="space-y-2">
+            <Label className="text-xs font-medium text-slate-700">Natureza do documento</Label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {types.map((t) => (
-                <button key={t.id} type="button" onClick={() => setReportType(t.id as ReportType)} className={cn("flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border-2 transition-all", reportType === t.id ? `${t.bgColor} ${t.borderColor} shadow-md` : "bg-white border-zinc-200 text-zinc-400 hover:border-zinc-300")}>
-                  <t.icon className={cn("h-6 w-6", reportType === t.id ? t.color : "text-zinc-300")} />
-                  <span className={cn("text-[9px] font-black uppercase", reportType === t.id ? "text-zinc-900" : "text-zinc-400")}>{t.label}</span>
+                <button key={t.id} type="button" onClick={() => setReportType(t.id as ReportType)} className={cn("flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl border transition-all", reportType === t.id ? `${t.bgColor} ${t.borderColor}` : "bg-white border-zinc-200 text-zinc-400 hover:border-zinc-300")}>
+                  <t.icon className={cn("h-5 w-5", reportType === t.id ? t.color : "text-zinc-300")} />
+                  <span className={cn("text-[10px] font-medium", reportType === t.id ? "text-zinc-900" : "text-zinc-400")}>{t.label}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="space-y-3 p-5 bg-white rounded-2xl border border-zinc-200 shadow-inner">
-            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 ml-1 flex items-center gap-2 mb-2"><Gavel className="h-3.5 w-3.5" /> Base Legal</label>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setIsLegalMenuOpen((prev) => !prev)}
-                className="flex h-11 w-full items-center justify-between rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-left text-[10px] font-black uppercase tracking-[0.12em] text-zinc-700 transition-colors hover:border-zinc-300"
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-slate-700 flex items-center gap-1.5"><Gavel className="h-3.5 w-3.5 text-zinc-400" /> Base legal</Label>
+            {/* Popover em vez de uma div "absolute" solta: o corpo do diálogo
+                logo abaixo tem overflow-y-auto (pra rolar o formulário
+                inteiro), o que cortava/rolava o menu antes de mostrar as
+                últimas opções — o Popover do Radix renderiza o conteúdo num
+                portal, fora dessa área rolável, então nada mais corta o menu. */}
+            <Popover open={isLegalMenuOpen} onOpenChange={setIsLegalMenuOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="flex h-11 w-full items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-3 text-left text-sm font-medium text-zinc-700 transition-colors hover:border-primary/50"
+                >
+                  <span className="truncate">{legalSelectionSummary}</span>
+                  <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', isLegalMenuOpen && 'rotate-180')} />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="w-[var(--radix-popover-trigger-width)] p-2 rounded-xl border-zinc-200 shadow-[0_20px_50px_rgba(0,0,0,0.18)] max-h-[45vh] overflow-y-auto custom-scrollbar overscroll-contain"
               >
-                <span className="truncate">{legalSelectionSummary}</span>
-                <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', isLegalMenuOpen && 'rotate-180')} />
-              </button>
+                <div className="space-y-2">
+                  <div className="px-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Base padrão</div>
+                  {lawOptions.map((opt) => {
+                    const selected = lawPreferences.includes(opt.id as LawPreference);
+                    const OptIcon = lawOptionIcons[opt.id] || Scale;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => toggleLawPreference(opt.id as LawPreference)}
+                        className={cn(
+                          'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors',
+                          selected ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
+                        )}
+                      >
+                        <span className="flex items-center gap-2"><OptIcon className="h-3.5 w-3.5" />{opt.label}</span>
+                        {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                      </button>
+                    );
+                  })}
 
-              {isLegalMenuOpen && (
-                <div className="absolute z-50 mt-2 w-full rounded-xl border border-zinc-200 bg-white p-2 shadow-[0_20px_50px_rgba(0,0,0,0.18)] max-h-[55vh] overflow-y-auto custom-scrollbar overscroll-contain">
-                  <div className="space-y-2">
-                    <div className="px-2 text-[9px] font-black uppercase tracking-[0.12em] text-zinc-500">Geral</div>
-                    {lawOptions.map((opt) => {
-                      const selected = lawPreferences.includes(opt.id as LawPreference);
+                  <div className="my-1 h-px bg-zinc-200" />
+
+                  <div className="px-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Legislação opcional (biblioteca)</div>
+                  <div className="space-y-1 pr-1">
+                    {individualLawOptions.map((opt) => {
+                      const selected = lawPreferences.includes(opt.id);
                       return (
                         <button
                           key={opt.id}
                           type="button"
-                          onClick={() => {
-                            toggleLawPreference(opt.id as LawPreference);
-                          }}
+                          onClick={() => toggleLawPreference(opt.id)}
                           className={cn(
-                            'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-[9px] font-black uppercase tracking-[0.12em] transition-colors',
-                            selected ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
+                            'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors',
+                            selected ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
                           )}
                         >
-                          <span>{opt.label}</span>
+                          <div className="flex flex-col">
+                            <span>{opt.label}</span>
+                            <span className="text-[10px] text-zinc-400">{opt.group}</span>
+                          </div>
                           {selected ? <Check className="h-3.5 w-3.5" /> : null}
                         </button>
                       );
                     })}
-
-                    <div className="my-1 h-px bg-zinc-200" />
-
-                    <div className="px-2 text-[9px] font-black uppercase tracking-[0.12em] text-zinc-500">Leis individuais</div>
-                    <div className="space-y-2 pr-1">
-                      {individualLawOptions.map((opt) => {
-                        const selected = lawPreferences.includes(opt.id);
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => {
-                              toggleLawPreference(opt.id);
-                            }}
-                            className={cn(
-                              'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-[9px] font-bold tracking-[0.08em] transition-colors',
-                              selected ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
-                            )}
-                          >
-                            <div className="flex flex-col">
-                              <span>{opt.label}</span>
-                              <span className="text-[7px] uppercase text-zinc-500">{opt.group}</span>
-                            </div>
-                            {selected ? <Check className="h-3.5 w-3.5" /> : null}
-                          </button>
-                        );
-                      })}
-                    </div>
                   </div>
                 </div>
-              )}
-            </div>
+              </PopoverContent>
+            </Popover>
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between px-1">
-              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">Relato de Campo</label>
-              <Button type="button" onClick={toggleRecording} variant="ghost" size="sm" className={cn("h-7 gap-1.5 px-3 rounded-lg font-black text-[9px] uppercase transition-all", isRecording ? "bg-red-100 text-red-600 animate-pulse" : "bg-zinc-100 text-zinc-600")}>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium text-slate-700">Relato de campo</Label>
+              <Button type="button" onClick={toggleRecording} variant="ghost" size="sm" className={cn("h-7 gap-1.5 px-3 rounded-lg text-xs font-medium transition-all", isRecording ? "bg-red-500 text-white animate-pulse" : "bg-zinc-100 text-zinc-500")}>
                 {isRecording ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
-                {isRecording ? "Parar" : "Ditar"}
+                {isRecording ? "Parar" : "Ditar por voz"}
               </Button>
             </div>
-            <Textarea 
-                placeholder="Descreva os fatos encontrados ou use o ditado por voz..." 
-                value={caseDescription} 
+            <Textarea
+                placeholder="Descreva os fatos encontrados ou use o ditado por voz..."
+                value={caseDescription}
                 onChange={(e) => {
                     setCaseDescription(e.target.value);
                     if (error) setError(null);
-                }} 
-                className="bg-white border-zinc-200 rounded-2xl min-h-[100px] text-sm" 
-                disabled={isLoading} 
+                }}
+                className="bg-white border-zinc-200 focus:border-primary/40 rounded-xl min-h-[110px] text-sm resize-none focus-visible:ring-0"
+                disabled={isLoading}
             />
           </div>
 
-          {isLoading && <div className="space-y-3 animate-pulse"><div className="h-12 bg-zinc-200 rounded-xl" /><div className="h-24 bg-zinc-200 rounded-xl" /></div>}
+          {isLoading && <div className="space-y-3 animate-pulse"><div className="h-11 bg-zinc-200 rounded-xl" /><div className="h-24 bg-zinc-200 rounded-xl" /></div>}
 
           {draft && !isLoading && (
-            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+            <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
               {fundamentacao && (
-                <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl">
-                   <div className="flex items-center gap-2 mb-2"><Scale className="h-3 w-3 text-blue-600" /><span className="text-[9px] font-black uppercase text-blue-600 tracking-widest">Enquadramento Detectado</span></div>
-                   <p className="text-[11px] font-bold text-blue-800 uppercase leading-tight">{fundamentacao}</p>
+                <div className="bg-slate-900 p-4 rounded-xl text-white border-l-4 border-l-primary">
+                   <p className="text-[10px] font-semibold uppercase tracking-wide text-primary mb-1">Enquadramento detectado</p>
+                   <p className="text-sm font-medium leading-snug">{fundamentacao}</p>
                 </div>
               )}
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-violet-600 ml-1">Redação Técnica Sugerida</label>
-                <div className="bg-white p-5 rounded-2xl text-zinc-800 text-sm leading-relaxed border border-violet-100 shadow-inner">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-700">Redação técnica sugerida</Label>
+                <div className="bg-white p-4 rounded-xl text-zinc-800 text-sm leading-relaxed border border-zinc-200">
                   <p className="whitespace-pre-wrap">{isUppercase ? draft.toUpperCase() : draft}</p>
                 </div>
               </div>
@@ -336,14 +313,16 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
           )}
         </div>
 
-        <DialogFooter className="p-6 bg-white border-t border-zinc-100 gap-3">
-          <Button variant="outline" onClick={() => { setDraft(""); setFundamentacao(""); setCaseDescription(""); setError(null); }} className="flex-1 h-12 rounded-xl font-black uppercase tracking-widest text-[10px] text-zinc-400">Limpar</Button>
+        <DialogFooter className="p-5 bg-white border-t border-zinc-100 gap-3">
+          <Button variant="ghost" onClick={() => { setDraft(""); setFundamentacao(""); setCaseDescription(""); setError(null); }} className="flex-1 h-11 rounded-xl font-medium text-zinc-500 hover:text-rose-500 hover:bg-rose-50">
+            <Trash2 className="h-4 w-4 mr-2" /> Limpar
+          </Button>
           {!draft || isLoading ? (
-            <Button onClick={handleGenerate} disabled={isLoading || !caseDescription.trim()} className="flex-[2] h-12 rounded-xl menu-metallic-violet hover:opacity-90 text-white font-black uppercase tracking-widest text-[10px] shadow-lg">
-              {isLoading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Processando...</> : <><Sparkles className="mr-2 h-4 w-4" />Gerar Texto</>}
+            <Button onClick={handleGenerate} disabled={isLoading || !caseDescription.trim()} className="flex-[2] h-11 rounded-xl bg-primary hover:bg-primary/90 text-white font-semibold gap-2">
+              {isLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Processando...</> : <><Sparkles className="h-4 w-4" /> Gerar texto</>}
             </Button>
           ) : (
-            <Button onClick={handleApply} className="flex-[2] h-12 rounded-xl menu-metallic-emerald hover:opacity-90 text-white font-black uppercase tracking-widest text-[10px] shadow-lg"><Check className="mr-2 h-4 w-4" /> Aplicar no Documento</Button>
+            <Button onClick={handleApply} className="flex-[2] h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-2"><Check className="h-4 w-4" /> Aplicar no documento</Button>
           )}
         </DialogFooter>
       </DialogContent>

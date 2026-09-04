@@ -39,6 +39,20 @@ interface UserProfile {
    * resolverIntroHtml em src/lib/roteiro-textos-padrao.ts.
    */
   roteiroTextos?: Record<string, { introducaoHtml?: string; conclusaoHtml?: string }>;
+  /**
+   * Organização pessoal do menu inicial (dashboard) — quais atalhos (por
+   * href) o usuário fixou como favoritos e a ordem de todos os itens.
+   * Sincronizado na nuvem pra valer em qualquer aparelho que o fiscal loga.
+   * Itens novos que ainda não estão em `order` (ex.: um menu recém-lançado)
+   * são anexados ao final automaticamente — ver dashboard-menu-grid.tsx.
+   */
+  menuPreferences?: { order: string[]; favoritos: string[] };
+  /**
+   * Data/hora (ISO) em que o usuário confirmou o aviso de fase de testes
+   * (ver src/components/beta-notice-gate.tsx). Enquanto ausente, o AuthGuard
+   * bloqueia o acesso ao resto do app até o clique em "Concordo".
+   */
+  betaTermsAcceptedAt?: string;
 }
 
 interface RegisterInput {

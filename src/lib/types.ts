@@ -89,6 +89,11 @@ export type Inspecao = {
   updatedAt?: string;
   alertaMinutosAntes?: number;
   alertaEnviadoEm?: string;
+  /** Pasta de organização no menu Documentos (mesma árvore de Intimações) — só usada em relatórios finalizados. */
+  folderId?: string;
+  /** Mesma lógica de lixeira de Intimações/Docfacil: mover pra lixeira só marca `deleted`, sem apagar de verdade. */
+  deleted?: boolean;
+  deletedAt?: string;
   checklistData?: {
     /** SIM/NÃO/ND nos roteiros comuns; '0'..'5' nos roteiros ROI da ANVISA, que são avaliados por nota (ver src/lib/roteiro-roi-radiologia.ts). */
     answers: Record<string, 'SIM' | 'NAO' | 'ND' | '0' | '1' | '2' | '3' | '4' | '5'>;

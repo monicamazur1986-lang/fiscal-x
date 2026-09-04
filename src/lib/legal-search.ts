@@ -26,6 +26,13 @@ export interface LegalArticle {
 
 interface IndexedArticle extends LegalArticle {
   searchText: string;
+  /** true quando a lei tem `biblioteca` preenchido em legislacao.json — RDC ou
+   * resolução setorial (farmácia, alimentos, salão de beleza etc.). Os dois
+   * códigos sanitários de base (Lei Estadual nº 13.331/2001 e, só em
+   * Prudentópolis, a Lei Municipal nº 2.276/2017) não têm esse campo — é o
+   * que os distingue da legislação "de biblioteca", que só deve entrar na
+   * fundamentação quando selecionada individualmente (ver matchesPreference). */
+  isBiblioteca: boolean;
 }
 
 // Os catálogos gerais de infração (Código Estadual Art. 63 e Código
@@ -50,6 +57,7 @@ Object.entries(legislacaoData).forEach(([lawKey, law]: [string, any]) => {
       lawKey,
       lawTitle: law.titulo,
       municipioId: law.municipioId,
+      isBiblioteca: !!law.biblioteca,
       // Pena não entra no texto pesquisável: seu vocabulário (advertência,
       // interdição, multa...) se repete em quase todos os artigos e dilui a relevância.
       searchText: `${art.texto} ${art.keywords || ''}`,
@@ -81,28 +89,32 @@ index.addAll(allArticles);
 // Municipal" — só entrava em "Base Integral". A distinção que realmente
 // importa já existe por artigo: tem `municipioId` = é lei municipal; não tem
 // = é estadual/federal (SESA, ANVISA), vale pra qualquer fiscal do estado.
-function matchesPreference(artMunicipioId: string | undefined, artLawKey: string, pref: LawPreferenceSelection): boolean {
+//
+// CORREÇÃO: "estadual" (a opção padrão, sempre presente) precisa significar
+// só o Código Sanitário Estadual (Lei 13.331/2001) — não "qualquer lei sem
+// município", que também inclui toda RDC/resolução setorial marcada como
+// `biblioteca` em legislacao.json (farmácia, salão de beleza, alimentos...).
+// Sem essa distinção, deixar a base legal no padrão ("Código Sanitário
+// Estadual") já bastava pra misturar fundamentação de qualquer ramo no
+// enquadramento — o padrão precisa ser sempre o código de base (estadual ou,
+// só em Prudentópolis, o municipal); as leis de biblioteca só entram se
+// selecionadas individualmente (`specificLawKeys`), como itens opcionais.
+function matchesPreference(art: IndexedArticle, pref: LawPreferenceSelection): boolean {
   const prefs = normalizeLawPreferenceSelection(pref);
   const specificLawKeys = prefs.filter(value => value !== 'todas' && value !== 'municipal' && value !== 'estadual');
 
   if (prefs.includes('todas')) return true;
+  if (specificLawKeys.includes(art.lawKey)) return true;
+  if (art.isBiblioteca) return false;
 
-  const isMunicipal = !!artMunicipioId;
+  const isMunicipal = !!art.municipioId;
   const selectedMunicipal = prefs.includes('municipal');
   const selectedEstadual = prefs.includes('estadual');
 
-  const matchesGroup = (() => {
-    if (selectedMunicipal && selectedEstadual) return true;
-    if (selectedMunicipal) return isMunicipal;
-    if (selectedEstadual) return !isMunicipal;
-    return false;
-  })();
-
-  if (specificLawKeys.length > 0) {
-    return matchesGroup || specificLawKeys.includes(artLawKey);
-  }
-
-  return matchesGroup;
+  if (selectedMunicipal && selectedEstadual) return true;
+  if (selectedMunicipal) return isMunicipal;
+  if (selectedEstadual) return !isMunicipal;
+  return false;
 }
 
 // Lei sem `municipioId` = nível estadual/federal, vale pra qualquer fiscal.
@@ -134,7 +146,7 @@ export function searchLegislacao(
   for (const r of results) {
     const art = allArticles.find(a => a.id === r.id);
     if (!art) continue;
-    if (!matchesPreference(art.municipioId, art.lawKey, pref)) continue;
+    if (!matchesPreference(art, pref)) continue;
     if (!matchesMunicipio(art.municipioId, municipioId)) continue;
     (GENERAL_LAW_KEYS.has(art.lawKey) ? general : specific).push({ art, score: r.score });
   }
@@ -164,4 +176,66 @@ export function searchLegislacao(
     lawTitle: art.lawTitle,
     municipioId: art.municipioId,
   }));
+}
+
+// ── Opções de base legal para a UI (Fiscal AI) ──────────────────────────
+// Centralizado aqui pra que a tela cheia (gerar-rascunho.tsx) e o diálogo
+// embutido no formulário de autuação (assistente-ia-form-dialog.tsx) sempre
+// ofereçam exatamente as mesmas opções — antes cada um replicava sua própria
+// cópia dessas listas e da regra de alternância, com risco real de um ficar
+// desatualizado (foi o caso do bug corrigido acima).
+
+export interface LawOption { id: LawPreference; label: string }
+export interface IndividualLawOption { id: string; label: string; group: string }
+
+/**
+ * Opções do grupo "Geral": o Código Sanitário Estadual é sempre a base
+ * (é o valor padrão, `['estadual']`, em normalizeLawPreferenceSelection) e
+ * "Todo o banco de dados" sempre aparece. "Código Municipal" só aparece pra
+ * quem realmente tem um — hoje só existe legislação municipal cadastrada
+ * para Prudentópolis (LEI_MUNICIPAL_2276_2017); mostrar essa opção pra
+ * qualquer outro fiscal levava a um resultado sempre vazio (matchesMunicipio
+ * já filtra por município), sem nenhuma pista de por quê.
+ */
+export function getBaseLawOptions(municipioId?: string | null): LawOption[] {
+  const options: LawOption[] = [{ id: 'estadual', label: 'Código Sanitário Estadual' }];
+  if (municipioId === 'prudentopolis') {
+    options.push({ id: 'municipal', label: 'Código Municipal (Prudentópolis)' });
+  }
+  options.push({ id: 'todas', label: 'Todo o banco de dados' });
+  return options;
+}
+
+/** Leis "de biblioteca" (RDC/resolução setorial) — sempre opcionais, nunca
+ * entram sozinhas com a seleção padrão. Ver `isBiblioteca` acima. */
+export function getIndividualLawOptions(): IndividualLawOption[] {
+  return Object.entries(
+    legislacaoData as Record<string, { titulo: string; municipioId?: string; biblioteca?: unknown }>
+  )
+    .filter(([, law]) => !!law.biblioteca)
+    .map(([lawKey, law]) => ({
+      id: lawKey,
+      label: law.titulo,
+      group: law.municipioId ? 'Código Municipal' : 'Código Sanitário Estadual',
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Alterna um valor na seleção de base legal, sem nunca deixar a seleção
+ * vazia (cai de volta pro padrão "estadual") nem misturar "todas" com outras
+ * opções (é um "substituir tudo", não um item de lista igual aos demais).
+ */
+export function toggleLawPreference(prev: LawPreference[], value: LawPreference): LawPreference[] {
+  if (value === 'todas') {
+    return prev.includes('todas') ? ['estadual'] : ['todas'];
+  }
+
+  const next = prev.includes(value)
+    ? prev.filter((item) => item !== value)
+    : [...prev, value];
+
+  if (next.length === 0) return ['estadual'];
+  if (next.includes('todas')) return next.filter((item) => item !== 'todas');
+  return next;
 }

@@ -49,11 +49,13 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useAuth } from "@/hooks/use-auth"
 import { useInspecoes } from "@/hooks/use-inspecoes"
+import { useMunicipiosAtivos } from "@/hooks/use-municipios-ativos"
 import { setChecklistExitGuard } from "@/hooks/use-checklist-exit-guard"
 import { SelecionarAutoridadeParaFormulario } from "@/components/selecionar-autoridade-dialog"
 import { SignaturePad } from "@/components/signature-pad"
 import type { Autoridade, Inspecao } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion"
 import { useRouter } from "next/navigation"
 import { Textarea } from "@/components/ui/textarea"
 import { polishObservationsBatch } from "@/ai/flows/polish-observations-batch"
@@ -61,6 +63,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from "@/components/ui/alert-dialog"
 import { compressImage, blobToDataUrl } from "@/lib/compress-image"
+import { captureCurrentLocation, mapsLinkFor } from "@/lib/geolocation"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { getDefaultIntroHtml, getDefaultConclusaoHtml, fillRoteiroTextoTokens, resolverIntroHtml, resolverConclusaoHtml } from "@/lib/roteiro-textos-padrao"
 import { sanitizeHtml } from "@/lib/sanitize-html"
@@ -93,7 +96,16 @@ type PhotoSize = 'P' | 'M' | 'G';
 interface PhotoEvidence {
   url: string;
   timestamp: string;
+  /** Endereço legível (geocodificação reversa da posição do aparelho no
+   * momento da foto) — quando a geolocalização falha ou é negada, cai no
+   * nome do estabelecimento (comportamento anterior). Ver
+   * src/lib/geolocation.ts. */
   location: string;
+  /** Coordenadas brutas capturadas junto com `location`, quando disponíveis
+   * — habilitam o link "Ver no mapa" no relatório. Ausentes em fotos
+   * anexadas antes desta funcionalidade ou sem permissão de localização. */
+  latitude?: number;
+  longitude?: number;
   /** Tamanho de exibição escolhido pelo fiscal — ausente equivale a 'M'. */
   size?: PhotoSize;
 }
@@ -1069,6 +1081,847 @@ const clinicaEsteticaPrudentopolisChecklist: ChecklistData = {
   ]
 }
 
+// Transcrito do Anexo II (Roteiro de Inspeção) da Resolução SESA nº 700/2013,
+// que trata de salão de beleza, barbearia e/ou depilação — disponível para
+// todos os municípios do Paraná (sem `municipioId`). Itens reescritos na
+// redação imperativa já adotada nos demais roteiros (ex.: farmaciaChecklist),
+// com a base legal (item do Anexo II) ao final de cada um.
+const salaoBelezaChecklist: ChecklistData = {
+  titulo: 'Roteiro de Inspeção de Salão de Beleza, Barbearia e Depilação',
+  subtitulo: 'Resolução SESA nº 700/2013',
+  categoria: 'SAÚDE',
+  lei: 'Resolução SESA nº 700/2013',
+  especialidade: 'SALÃO DE BELEZA, BARBEARIA E DEPILAÇÃO',
+  secoes: [
+    {
+      id: 'sb-infraestrutura',
+      titulo: '1. INFRAESTRUTURA',
+      itens: [
+        { id: '1.1', crit: 'I', text: 'Disponibilizar iluminação natural e/ou artificial, com luminárias providas de proteção. Base legal: Anexo II, item 1.1 – Res. SESA 700/2013.' },
+        { id: '1.2', crit: 'I', text: 'Disponibilizar ventilação natural e/ou artificial que garanta troca efetiva de ar e conforto ambiental. Base legal: Anexo II, item 1.2 – Res. SESA 700/2013.' },
+        { id: '1.3', crit: 'I', text: 'Manter acesso independente de residência ou de outro estabelecimento. Base legal: Anexo II, item 1.3 – Res. SESA 700/2013.' },
+        { id: '1.4', crit: 'I', text: 'Disponibilizar lavatório de mãos com sabonete líquido, papel-toalha e lixeira sem tampa ou com tampa de acionamento por pedal ou automático na área de atendimento, com a rotina de lavagem das mãos afixada. Base legal: Anexo II, item 1.4 – Res. SESA 700/2013.' },
+        { id: '1.5', crit: 'I', text: 'Disponibilizar área exclusiva para limpeza, embalagem e esterilização de materiais, com pia, ponto de água e bancada. Base legal: Anexo II, item 1.5 – Res. SESA 700/2013.' },
+        { id: '1.6', crit: 'I', text: 'Disponibilizar tanque com profundidade superior a 35 cm, exclusivo para a lavagem de materiais usados na limpeza e higienização dos ambientes, e local/armário exclusivo e fechado para os produtos de limpeza. Base legal: Anexo II, item 1.6 – Res. SESA 700/2013.' },
+        { id: '1.7', crit: 'N', text: 'Disponibilizar área privativa para refeições dos profissionais e/ou funcionários. Base legal: Anexo II, item 1.7 – Res. SESA 700/2013.' },
+        { id: '1.8', crit: 'I', text: 'Manter instalação elétrica sem fiação exposta, com tomadas em número suficiente para evitar sobrecarga. Base legal: Anexo II, item 1.8 – Res. SESA 700/2013.' },
+        { id: '1.9', crit: 'N', text: 'Depositar os resíduos sólidos, já embalados, em local apropriado, protegido do acesso de roedores e outros animais, fora da área de atendimento, enquanto aguardam o recolhimento. Base legal: Anexo II, item 1.9 – Res. SESA 700/2013.' },
+        { id: '1.10', crit: 'I', text: 'Acondicionar os resíduos perfurocortantes em recipientes rígidos e vedados, identificados como material perfurocortante, com destinação final conforme determinação do município. Base legal: Anexo II, item 1.10 – Res. SESA 700/2013.' },
+        { id: '1.11', crit: 'I', text: 'Acondicionar as embalagens dos produtos químicos e seus resíduos em recipientes vedados e compatíveis, identificados como material químico, com destinação final conforme determinação do município. Base legal: Anexo II, item 1.11 – Res. SESA 700/2013.' },
+        { id: '1.12', crit: 'I', text: 'Realizar a limpeza semestral da caixa d\'água, com registro do procedimento e da data. Base legal: Anexo II, item 1.12 – Res. SESA 700/2013.' },
+        { id: '1.13', crit: 'R', text: 'Manter cadastro dos clientes com nome, endereço, telefone e o procedimento realizado. Base legal: Anexo II, item 1.13 – Res. SESA 700/2013.' },
+        { id: '1.14', crit: 'I', text: 'Apresentar o registro de limpeza/troca dos filtros do ar-condicionado e da manutenção preventiva, conforme especificação do fabricante. Base legal: Anexo II, item 1.14 – Res. SESA 700/2013.' },
+        { id: '1.15', crit: 'I', text: 'Disponibilizar água potável e copos descartáveis. Base legal: Anexo II, item 1.15 – Res. SESA 700/2013.' },
+      ]
+    },
+    {
+      id: 'sb-procedimentos',
+      titulo: '2. PROCEDIMENTOS',
+      itens: [
+        { id: '2.1', crit: 'I', text: 'Lavar as mãos com água e sabonete líquido, ou realizar antissepsia com álcool 70%, a cada cliente atendido, com lavagem obrigatória sempre que houver sujidade visível. Base legal: Anexo II, item 2.1 – Res. SESA 700/2013.' },
+        { id: '2.2', crit: 'R', text: 'Usar luvas na atividade de manicure/pedicure. Base legal: Anexo II, item 2.2 – Res. SESA 700/2013.' },
+        { id: '2.3', crit: 'I', text: 'Trocar as luvas usadas por manicures/pedicures a cada cliente, com prévia higienização das mãos. Base legal: Anexo II, item 2.3 – Res. SESA 700/2013.' },
+        { id: '2.4', crit: 'I', text: 'Manter todos os produtos cosméticos e saneantes regularizados junto à ANVISA/Ministério da Saúde e dentro do prazo de validade. Base legal: Anexo II, item 2.4 – Res. SESA 700/2013.' },
+        { id: '2.5', crit: 'I', text: 'Manter os utensílios de maquiagem (pincéis, esponjas etc.) em bom estado de conservação e higienizados após cada uso. Base legal: Anexo II, item 2.5 – Res. SESA 700/2013.' },
+        { id: '2.6', crit: 'I', text: 'Acondicionar as soluções reenvasadas em recipientes previamente higienizados, identificados com o nome do produto, o lote e o prazo de validade. Base legal: Anexo II, item 2.6 – Res. SESA 700/2013.' },
+        { id: '2.7', crit: 'R', text: 'Manter registro das orientações e/ou treinamentos periódicos dados aos profissionais sobre as rotinas de trabalho, com data, assunto, nome e assinatura do profissional. Base legal: Anexo II, item 2.7 – Res. SESA 700/2013.' },
+        { id: '2.8', crit: 'R', text: 'Apresentar o certificado de formação dos profissionais na atividade desenvolvida. Base legal: Anexo II, item 2.8 – Res. SESA 700/2013.' },
+        { id: '2.9', crit: 'I', text: 'Usar toalhas e lençóis limpos e secos, exclusivos para cada procedimento realizado. Base legal: Anexo II, item 2.9 – Res. SESA 700/2013.' },
+        { id: '2.10', crit: 'I', text: 'Descartar imediatamente após o uso as toalhas e lençóis descartáveis, quando utilizados. Base legal: Anexo II, item 2.10 – Res. SESA 700/2013.' },
+        { id: '2.11', crit: 'N', text: 'Acondicionar as roupas, toalhas e lençóis usados em recipiente liso, lavável e impermeável, identificado como "roupa suja". Base legal: Anexo II, item 2.11 – Res. SESA 700/2013.' },
+        { id: '2.12', crit: 'N', text: 'Armazenar as toalhas limpas e secas em sacos plásticos, recipientes ou armário próprio. Base legal: Anexo II, item 2.12 – Res. SESA 700/2013.' },
+        { id: '2.13', crit: 'I', text: 'Disponibilizar toalhas limpas em quantidade suficiente para cada procedimento. Base legal: Anexo II, item 2.13 – Res. SESA 700/2013.' },
+        { id: '2.14', crit: 'N', text: 'Disponibilizar local e equipamento exclusivos para a higienização das toalhas, ou apresentar contrato e licença sanitária da empresa terceirizada. Base legal: Anexo II, item 2.14 – Res. SESA 700/2013.' },
+      ]
+    },
+    {
+      id: 'sb-esterilizacao',
+      titulo: '3. ESTERILIZAÇÃO',
+      itens: [
+        { id: '3.1', crit: 'N', text: 'Apresentar os POPs (Procedimentos Operacionais Padrão), por escrito, dos processos de limpeza, embalagem e esterilização dos materiais. Base legal: Anexo II, item 3.1 – Res. SESA 700/2013.' },
+        { id: '3.2', crit: 'I', text: 'Possuir autoclave para a esterilização dos materiais — proibidos fornos elétricos, estufas, equipamentos à base de radiação ultravioleta e a esterilização química por imersão:', isHeader: true },
+        { id: '3.2.1', crit: 'I', text: 'Manter os equipamentos com registro/notificação na ANVISA. Base legal: Anexo II, item 3.2 – Res. SESA 700/2013.' },
+        { id: '3.2.2', crit: 'I', text: 'Respeitar a relação tempo de exposição/temperatura conforme especificação do fabricante. Base legal: Anexo II, item 3.2 – Res. SESA 700/2013.' },
+        { id: '3.2.3', crit: 'I', text: 'Realizar monitoramento biológico com frequência mínima mensal, anexado ao registro da esterilização. Base legal: Anexo II, item 3.2 – Res. SESA 700/2013.' },
+        { id: '3.2.4', crit: 'I', text: 'Realizar monitoramento químico (multiparamétrico, no mínimo classe IV) a cada processo, anexado ao registro da esterilização. Base legal: Anexo II, item 3.2 – Res. SESA 700/2013.' },
+        { id: '3.3', crit: 'I', text: 'Registrar a manutenção da autoclave, conforme orientação do fabricante. Base legal: Anexo II, item 3.3 – Res. SESA 700/2013.' },
+        { id: '3.4', crit: 'N', text: 'Apresentar, quando utilizar outro processo de esterilização e/ou terceirização, a regularização do processo perante os órgãos sanitários, o contrato de prestação de serviço e a licença sanitária atualizada e válida da empresa contratada. Base legal: Anexo II, item 3.4 – Res. SESA 700/2013.' },
+        { id: '3.5', crit: 'I', text: 'Realizar a limpeza prévia dos instrumentos (alicates, espátulas etc.) com água, detergente e escovinha exclusiva, com enxágue, secagem e acondicionamento para a esterilização, conforme rotina escrita. Base legal: Anexo II, item 3.5 – Res. SESA 700/2013.' },
+        { id: '3.6', crit: 'I', text: 'Usar embalagem regulamentada pela ANVISA, íntegra, de uso único, com data de esterilização e indicador químico (termofísico) externo — proibidos papel kraft, papel manilha, papel jornal, papel-toalha, lâmina de papel-alumínio e embalagens de plástico transparente. Base legal: Anexo II, item 3.6 – Res. SESA 700/2013.' },
+        { id: '3.7', crit: 'N', text: 'Registrar todas as cargas de esterilização, com data, quantidade de kits de instrumentos, horário de início e término, temperatura e assinatura do responsável. Base legal: Anexo II, item 3.7 – Res. SESA 700/2013.' },
+      ]
+    },
+    {
+      id: 'sb-manicure-pedicure',
+      titulo: '4. MANICURE/PEDICURE',
+      itens: [
+        { id: '4.1', crit: 'I', text: 'Abrir as embalagens dos materiais esterilizados e do kit descartável (luva, protetor de bacia e cuba, lixa, palito) na frente do cliente. Base legal: Anexo II, item 4.1 – Res. SESA 700/2013.' },
+        { id: '4.2', crit: 'I', text: 'Inutilizar e descartar os materiais de uso único (algodão, lixa de unha, lixa de pé, palito de madeira, protetor de bacia e cuba) ou fornecê-los ao cliente. Base legal: Anexo II, item 4.2 – Res. SESA 700/2013.' },
+        { id: '4.3', crit: 'N', text: 'Responsabilizar-se pela esterilização e pelo acondicionamento, conforme a rotina do estabelecimento, quando o material do próprio cliente permanecer no local. Base legal: Anexo II, item 4.3 – Res. SESA 700/2013.' },
+        { id: '4.4', crit: 'R', text: 'Manter o material de trabalho (algodão, esmaltes, removedor de esmalte etc.) organizado em recipientes, maletas ou gavetas. Base legal: Anexo II, item 4.4 – Res. SESA 700/2013.' },
+        { id: '4.5', crit: 'I', text: 'Acondicionar os instrumentos já utilizados em recipiente lavável, exclusivo e sinalizado como "Instrumentos utilizados". Base legal: Anexo II, item 4.5 – Res. SESA 700/2013.' },
+        { id: '4.6', crit: 'I', text: 'Acondicionar os instrumentos esterilizados em recipiente lavável, exclusivo e sinalizado como "Instrumentos limpos". Base legal: Anexo II, item 4.6 – Res. SESA 700/2013.' },
+        { id: '4.7', crit: 'N', text: 'Lavar as bacias e cubas com água e sabão líquido ou detergente após o atendimento de cada cliente. Base legal: Anexo II, item 4.7 – Res. SESA 700/2013.' },
+        { id: '4.8', crit: 'I', text: 'Usar hemostático somente em apresentação spray, quando utilizado. Base legal: Anexo II, item 4.8 – Res. SESA 700/2013.' },
+      ]
+    },
+    {
+      id: 'sb-cabeleireiro-barbeiro',
+      titulo: '5. CABELEIREIRO/BARBEIRO',
+      itens: [
+        { id: '5.1', crit: 'I', text: 'Descartar as lâminas/navalhas após cada uso. Base legal: Anexo II, item 5.1 – Res. SESA 700/2013.' },
+        { id: '5.2', crit: 'N', text: 'Manter escovas, pentes, bobs e utensílios semelhantes limpos. Base legal: Anexo II, item 5.2 – Res. SESA 700/2013.' },
+        { id: '5.3', crit: 'I', text: 'Limpar e desinfetar as lâminas da máquina de aparar cabelo após o uso, com solução alcoólica a 70%. Base legal: Anexo II, item 5.3 – Res. SESA 700/2013.' },
+      ]
+    },
+    {
+      id: 'sb-saude-ocupacional',
+      titulo: '6. SAÚDE OCUPACIONAL',
+      itens: [
+        { id: '6.1', crit: 'R', text: 'Apresentar a carteira de vacinação dos profissionais, com o calendário de vacinas em dia (Hepatite B, tétano e outras). Base legal: Anexo II, item 6.1 – Res. SESA 700/2013.' },
+        { id: '6.2', crit: 'I', text: 'Usar os EPIs adequados a cada procedimento (máscara descartável, luva descartável, avental e calçado fechado). Base legal: Anexo II, item 6.2 – Res. SESA 700/2013.' },
+        { id: '6.3', crit: 'I', text: 'Usar luvas de borracha na limpeza dos instrumentos cortantes. Base legal: Anexo II, item 6.3 – Res. SESA 700/2013.' },
+        { id: '6.4', crit: 'N', text: 'Afixar em local visível ao público os cartazes educativos sobre prevenção de Hepatite B e C, proibição do uso de formol, esterilização de materiais e demais orientações fornecidas pela Secretaria Estadual de Saúde. Base legal: Anexo II, item 6.4 – Res. SESA 700/2013.' },
+      ]
+    },
+    {
+      id: 'sb-depilacao',
+      titulo: '7. DEPILAÇÃO',
+      itens: [
+        { id: '7.1', crit: 'I', text: 'Disponibilizar local privativo para a depilação. Base legal: Anexo II, item 7.1 – Res. SESA 700/2013.' },
+        { id: '7.2', crit: 'I', text: 'Usar maca de material íntegro, lavável e impermeável. Base legal: Anexo II, item 7.2 – Res. SESA 700/2013.' },
+        { id: '7.3', crit: 'I', text: 'Disponibilizar lixeira com saco plástico para o descarte da cera usada. Base legal: Anexo II, item 7.3 – Res. SESA 700/2013.' },
+        { id: '7.4', crit: 'N', text: 'Usar mesa auxiliar de superfície íntegra, lisa, lavável e resistente ao calor, para acomodar produtos e instrumentos/equipamentos. Base legal: Anexo II, item 7.4 – Res. SESA 700/2013.' },
+        { id: '7.5', crit: 'I', text: 'Usar uma espátula exclusiva para preparar a cera e outra para aplicá-la, trocadas a cada cliente. Base legal: Anexo II, item 7.5 – Res. SESA 700/2013.' },
+        { id: '7.6', crit: 'I', text: 'Usar espátulas descartáveis, ou passíveis de limpeza e desinfecção. Base legal: Anexo II, item 7.6 – Res. SESA 700/2013.' },
+        { id: '7.7', crit: 'I', text: 'Usar cera de depilação identificada no rótulo, dentro do prazo de validade e regularizada conforme a legislação vigente. Base legal: Anexo II, item 7.7 – Res. SESA 700/2013.' },
+        { id: '7.8', crit: 'I', text: 'Descartar a cera depilatória após cada uso, sendo proibida a sua reutilização. Base legal: Anexo II, item 7.8 – Res. SESA 700/2013.' },
+        { id: '7.9', crit: 'I', text: 'Usar pinça acessória esterilizada ou descartável. Base legal: Anexo II, item 7.9 – Res. SESA 700/2013.' },
+        { id: '7.10', crit: 'I', text: 'Usar a cera roll-on de forma única, ou de modo que o aplicador não entre em contato direto com a pele do cliente. Base legal: Anexo II, item 7.10 – Res. SESA 700/2013.' },
+        { id: '7.11', crit: 'N', text: 'Manter higienizado o recipiente/equipamento usado para derreter a cera. Base legal: Anexo II, item 7.11 – Res. SESA 700/2013.' },
+      ]
+    },
+    {
+      id: 'sb-condicoes-gerais',
+      titulo: '8. CONDIÇÕES GERAIS',
+      itens: [
+        { id: '8.1', crit: 'I', text: 'Manter o estabelecimento e as áreas externas em condições satisfatórias de limpeza e higiene. Base legal: Anexo II, item 8.1 – Res. SESA 700/2013.' },
+        { id: '8.2', crit: 'I', text: 'Manter a estrutura física, os móveis e os equipamentos íntegros e em bom estado de conservação e limpeza. Base legal: Anexo II, item 8.2 – Res. SESA 700/2013.' },
+        { id: '8.3', crit: 'I', text: 'Manter piso, teto e paredes com revestimento liso e lavável, limpos e conservados. Base legal: Anexo II, item 8.3 – Res. SESA 700/2013.' },
+        { id: '8.4', crit: 'R', text: 'Organizar e empilhar caixas, fardos e materiais semelhantes de modo a permitir fácil limpeza e o controle de vetores. Base legal: Anexo II, item 8.4 – Res. SESA 700/2013.' },
+      ]
+    },
+    {
+      id: 'sb-servicos-domiciliares',
+      titulo: '9. SERVIÇOS DOMICILIARES DE EMBELEZAMENTO (empresas que prestam atendimento domiciliar de manicure/pedicure e demais procedimentos — sujeitas integralmente a esta Resolução)',
+      itens: [
+        { id: '9.1', crit: 'I', text: 'Apresentar a licença sanitária da empresa prestadora de serviço domiciliar de manicure/pedicure. Base legal: Anexo II, item 9.1 – Res. SESA 700/2013.' },
+        { id: '9.2', crit: 'I', text: 'Manter sede com ambiente exclusivo para esterilização dos materiais, com fluxo correto e controle/registro de entrada e saída de materiais, atendendo às exigências do item 3 (Esterilização). Base legal: Anexo II, item 9.2 – Res. SESA 700/2013.' },
+        { id: '9.3', crit: 'I', text: 'Usar recipientes exclusivos, com tampa, laváveis e identificados como "material limpo" e "material sujo" para o transporte dos materiais. Base legal: Anexo II, item 9.3 – Res. SESA 700/2013.' },
+        { id: '9.4', crit: 'N', text: 'Realizar capacitação prévia dos profissionais sobre higienização das mãos, transporte de materiais limpos e sujos, biossegurança, limpeza, preparo, esterilização e acondicionamento de materiais, e descarte de resíduos. Base legal: Anexo II, item 9.4 – Res. SESA 700/2013.' },
+        { id: '9.5', crit: 'I', text: 'Disponibilizar vestiário para funcionários e/ou profissionais autônomos. Base legal: Anexo II, item 9.5 – Res. SESA 700/2013.' },
+      ]
+    },
+  ]
+}
+
+// Transcrito do Anexo II (Roteiro de Inspeção) da Resolução SESA nº 126/2007,
+// que trata de tatuagem, colocação de piercing e congêneres. O Anexo II só
+// traz colunas SIM/NÃO, sem grau de criticidade (I/N/R) — a classificação
+// abaixo segue o critério das Proibições/Rotinas do Anexo I: itens ligados a
+// esterilização, biossegurança e proibições expressas viram 'I', itens
+// documentais/administrativos viram 'N', e o único item marcado
+// "(Recomendável)" no próprio formulário vira 'R'.
+const tatuagemPiercingChecklist: ChecklistData = {
+  titulo: 'Roteiro de Inspeção de Tatuagem, Piercing e Congêneres',
+  subtitulo: 'Resolução SESA nº 0126/2007',
+  categoria: 'SAÚDE',
+  lei: 'Resolução SESA nº 0126/2007',
+  especialidade: 'TATUAGEM, PIERCING E CONGÊNERES',
+  secoes: [
+    {
+      id: 'tp-administracao',
+      titulo: '1. ADMINISTRAÇÃO',
+      itens: [
+        { id: '1.1', crit: 'N', text: 'Manter cadastro dos clientes com nome, idade, sexo, endereço, telefone, procedimento (com data e topografia), eventos adversos e observações pertinentes. Base legal: Anexo II, item 1.1 – Res. SESA 126/2007.' },
+        { id: '1.2', crit: 'I', text: 'Apresentar autorização por escrito dos pais ou do responsável legal para o atendimento de menores de 18 anos. Base legal: Anexo II, item 1.2 – Res. SESA 126/2007.' },
+        { id: '1.3', crit: 'I', text: 'Apresentar o termo de consentimento livre e esclarecido, assinado pelo responsável legal quando o cliente for menor de idade. Base legal: Anexo II, item 1.3 – Res. SESA 126/2007.' },
+        { id: '1.4', crit: 'N', text: 'Afixar, em local de fácil visualização e leitura, informativos sobre os riscos do procedimento, dos materiais e/ou substâncias utilizadas e sobre a dificuldade ou impossibilidade de remoção da tatuagem. Base legal: Anexo II, item 1.4 – Res. SESA 126/2007.' },
+      ]
+    },
+    {
+      id: 'tp-tatuagem',
+      titulo: '2. TATUAGEM',
+      itens: [
+        { id: '2.1', crit: 'I', text: 'Proteger as bisnagas, frascos de tinta, equipamentos e pontas dos fios conectados à máquina de tatuar nas áreas de contato, trocando a proteção a cada cliente. Base legal: Anexo II, item 2.1 – Res. SESA 126/2007.' },
+        { id: '2.2', crit: 'I', text: 'Usar agulhas descartáveis de uso único, embaladas adequadamente e dentro do prazo de validade da esterilização. Base legal: Anexo II, item 2.2 – Res. SESA 126/2007.' },
+        { id: '2.3', crit: 'I', text: 'Esterilizar as agulhas soldadas à haste após a solda. Base legal: Anexo II, item 2.3 – Res. SESA 126/2007.' },
+        { id: '2.4', crit: 'I', text: 'Lavar, secar, embalar individualmente e esterilizar as ponteiras/biqueiras reprocessadas. Base legal: Anexo II, item 2.4 – Res. SESA 126/2007.' },
+        { id: '2.5', crit: 'I', text: 'Conectar as agulhas descartáveis à máquina na presença do cliente. Base legal: Anexo II, item 2.5 – Res. SESA 126/2007.' },
+        { id: '2.6', crit: 'I', text: 'Fracionar as tintas para uso exclusivo de cada cliente e desprezá-las após o uso. Base legal: Anexo II, item 2.6 – Res. SESA 126/2007.' },
+        { id: '2.7', crit: 'N', text: 'Desprezar os recipientes utilizados no fracionamento das tintas após o uso. Base legal: Anexo II, item 2.7 – Res. SESA 126/2007.' },
+        { id: '2.8', crit: 'I', text: 'Usar dispositivos descartáveis de uso único para a retirada de pelos. Base legal: Anexo II, item 2.8 – Res. SESA 126/2007.' },
+        { id: '2.9', crit: 'I', text: 'Realizar a antissepsia da pele com produto registrado no Ministério da Saúde. Base legal: Anexo II, item 2.9 – Res. SESA 126/2007.' },
+        { id: '2.10', crit: 'N', text: 'Usar produto de uso individual para fixar o desenho na pele. Base legal: Anexo II, item 2.10 – Res. SESA 126/2007.' },
+        { id: '2.11', crit: 'N', text: 'Identificar todas as soluções com o nome do produto, o lote e o prazo de validade. Base legal: Anexo II, item 2.11 – Res. SESA 126/2007.' },
+        { id: '2.12', crit: 'I', text: 'Limpar e desinfetar a máquina de tatuar a cada uso. Base legal: Anexo II, item 2.12 – Res. SESA 126/2007.' },
+        { id: '2.13', crit: 'I', text: 'Higienizar as mãos antes e depois de cada procedimento. Base legal: Anexo II, item 2.13 – Res. SESA 126/2007.' },
+      ]
+    },
+    {
+      id: 'tp-adornos',
+      titulo: '3. ADORNOS (PIERCING, ALARGADOR E CONGÊNERES)',
+      itens: [
+        { id: '3.1', crit: 'I', text: 'Higienizar as mãos antes e depois de cada procedimento de colocação de adornos. Base legal: Anexo II, item 3.1 – Res. SESA 126/2007.' },
+        { id: '3.2', crit: 'I', text: 'Realizar a antissepsia da pele e da mucosa com produto registrado no Ministério da Saúde. Base legal: Anexo II, item 3.2 – Res. SESA 126/2007.' },
+        { id: '3.3', crit: 'I', text: 'Usar cateter estéril de uso único para a perfuração, com registro no Ministério da Saúde e dentro do prazo de validade — proibido usar produto para lubrificação do cateter que possa contaminá-lo. Base legal: Anexo II, item 3.3 – Res. SESA 126/2007.' },
+        { id: '3.4', crit: 'I', text: 'Manter os adornos estéreis no momento da perfuração. Base legal: Anexo II, item 3.4 – Res. SESA 126/2007.' },
+        { id: '3.5', crit: 'I', text: 'Não realizar procedimentos caracterizados como cirúrgicos (tunelização, bifurcação de língua, implantes, entre outros). Base legal: Anexo II, item 3.5 – Res. SESA 126/2007.' },
+      ]
+    },
+    {
+      id: 'tp-residuos',
+      titulo: '4. RESÍDUOS',
+      itens: [
+        { id: '4.1', crit: 'I', text: 'Acondicionar os resíduos infectantes e perfurocortantes em recipientes rígidos, estanques e vedados. Base legal: Anexo II, item 4.1 – Res. SESA 126/2007.' },
+        { id: '4.2', crit: 'N', text: 'Apresentar o contrato com empresa autorizada para a coleta de resíduos. Base legal: Anexo II, item 4.2 – Res. SESA 126/2007.' },
+        { id: '4.3', crit: 'N', text: 'Disponibilizar lixeira com tampa e pedal para o descarte de luvas, algodão, gaze e materiais semelhantes. Base legal: Anexo II, item 4.3 – Res. SESA 126/2007.' },
+      ]
+    },
+    {
+      id: 'tp-estrutura-fisica',
+      titulo: '5. ESTRUTURA FÍSICA',
+      itens: [
+        { id: '5.1', crit: 'N', text: 'Manter o ambiente claro, limpo e ventilado. Base legal: Anexo II, item 5.1 – Res. SESA 126/2007.' },
+        { id: '5.2', crit: 'N', text: 'Revestir piso, parede e mobiliários com material liso, íntegro, lavável e impermeável. Base legal: Anexo II, item 5.2 – Res. SESA 126/2007.' },
+        { id: '5.3', crit: 'I', text: 'Manter o estabelecimento sem vínculo com residência. Base legal: Anexo II, item 5.3 – Res. SESA 126/2007.' },
+        { id: '5.4', crit: 'N', text: 'Manter barreira física entre as áreas de recepção/espera e a sala/área de procedimentos. Base legal: Anexo II, item 5.4 – Res. SESA 126/2007.' },
+        { id: '5.5', crit: 'I', text: 'Disponibilizar, na área/sala de procedimento, lavatório com água corrente potável exclusivo para higienização das mãos. Base legal: Anexo II, item 5.5 – Res. SESA 126/2007.' },
+        { id: '5.6', crit: 'I', text: 'Disponibilizar sabão líquido, antisséptico, papel-toalha e lixeira sem tampa ou com tampa de acionamento por pedal. Base legal: Anexo II, item 5.6 – Res. SESA 126/2007.' },
+        { id: '5.7', crit: 'I', text: 'Disponibilizar, na CME, pia para a limpeza dos materiais em local exclusivo ou na área de procedimentos, desde que estabelecida barreira técnica. Base legal: Anexo II, item 5.7 – Res. SESA 126/2007.' },
+        { id: '5.8', crit: 'N', text: 'Disponibilizar, no DML/sanitário, tanque ou ponto de água para a higienização dos panos de limpeza. Base legal: Anexo II, item 5.8 – Res. SESA 126/2007.' },
+        { id: '5.9', crit: 'N', text: 'Disponibilizar na instalação sanitária: lavatório, lixeira com tampa e pedal, papel-toalha descartável e sabonete líquido. Base legal: Anexo II, item 5.9 – Res. SESA 126/2007.' },
+      ]
+    },
+    {
+      id: 'tp-saude-seguranca',
+      titulo: '6. SAÚDE E SEGURANÇA DO TRABALHADOR',
+      itens: [
+        { id: '6.1', crit: 'R', text: 'Apresentar comprovante de vacinação contra Hepatite B do tatuador ou colocador de adornos. Base legal: Anexo II, item 6.1 – Res. SESA 126/2007.' },
+        { id: '6.2', crit: 'N', text: 'Usar luvas de borracha na limpeza do material. Base legal: Anexo II, item 6.2 – Res. SESA 126/2007.' },
+        { id: '6.3', crit: 'I', text: 'Usar os EPIs necessários — luvas descartáveis, máscara descartável, avental e sapato fechado — durante o procedimento. Base legal: Anexo II, item 6.3 – Res. SESA 126/2007.' },
+      ]
+    },
+    {
+      id: 'tp-esterilizacao',
+      titulo: '7. ESTERILIZAÇÃO',
+      itens: [
+        { id: '7.1', crit: 'I', text: 'Disponibilizar autoclave e/ou estufa. Base legal: Anexo II, item 7.1 – Res. SESA 126/2007.' },
+        { id: '7.2', crit: 'N', text: 'Apresentar o registro que comprove a manutenção preventiva e corretiva da autoclave e/ou estufa. Base legal: Anexo II, item 7.2 – Res. SESA 126/2007.' },
+        { id: '7.3', crit: 'I', text: 'Usar invólucros indicados pelo Ministério da Saúde, íntegros e identificados com o tipo de produto, a data de esterilização, o prazo de validade e o indicador químico. Base legal: Anexo II, item 7.3 – Res. SESA 126/2007.' },
+        { id: '7.4', crit: 'I', text: 'Realizar o controle biológico do processo de esterilização. Base legal: Anexo II, item 7.4 – Res. SESA 126/2007.' },
+        { id: '7.5', crit: 'I', text: 'Acondicionar e armazenar os materiais esterilizados de forma a assegurar a manutenção da esterilização. Base legal: Anexo II, item 7.5 – Res. SESA 126/2007.' },
+      ]
+    },
+    {
+      id: 'tp-itens-gerais',
+      titulo: '8. ITENS GERAIS',
+      itens: [
+        { id: '8.1', crit: 'I', text: 'Manter os produtos utilizados com registro no Ministério da Saúde, dentro do prazo de validade e acondicionados/armazenados conforme orientação do fabricante. Base legal: Anexo II, item 8.1 – Res. SESA 126/2007.' },
+        { id: '8.2', crit: 'N', text: 'Limpar e desinfetar os mobiliários diariamente e entre os procedimentos. Base legal: Anexo II, item 8.2 – Res. SESA 126/2007.' },
+        { id: '8.3', crit: 'N', text: 'Fornecer por escrito aos clientes os cuidados especiais e/ou as precauções necessárias após a realização de tatuagens, colocação de adornos e congêneres. Base legal: Anexo II, item 8.3 – Res. SESA 126/2007.' },
+        { id: '8.4', crit: 'I', text: 'Não indicar uso de medicamentos — a prescrição é restrita a médico registrado no Conselho Regional de Medicina. Base legal: Anexo II, item 8.4 – Res. SESA 126/2007.' },
+      ]
+    },
+  ]
+}
+
+// Transcrito do "Roteiro de Inspeção em Sistema de Abastecimento de Água -
+// SAA e Soluções Alternativa Coletiva - SAC, Captação Subterrânea". O
+// documento original só traz colunas SIM/NÃO/N.A., sem grau de criticidade —
+// a classificação I/N/R abaixo segue o risco de cada exigência (segurança do
+// trabalhador, potabilidade e proteção sanitária da captação viram 'I';
+// documentação e organização administrativa viram 'N'). A numeração original
+// do PDF tem itens duplicados (26 e 27 aparecem duas vezes) e números
+// pulados (30, 34, 47, 48) — os itens abaixo foram renumerados de forma
+// sequencial e sem lacunas, mantendo o texto e a base normativa de cada um.
+const saaSubterraneoChecklist: ChecklistData = {
+  titulo: 'Roteiro de Inspeção de SAA Subterrâneo',
+  subtitulo: 'Sistema de Abastecimento de Água (SAA) e Solução Alternativa Coletiva (SAC) — captação subterrânea',
+  categoria: 'SAÚDE',
+  lei: 'Portaria de Consolidação GM/MS nº 5/2017 (alterada pela Portaria GM/MS nº 888/2021), Decreto Estadual nº 5.711/2002 e normas ABNT/NR aplicáveis',
+  especialidade: 'SISTEMA DE ABASTECIMENTO DE ÁGUA — CAPTAÇÃO SUBTERRÂNEA',
+  secoes: [
+    {
+      id: 'saa-documentos',
+      titulo: '1. DOCUMENTOS',
+      itens: [
+        { id: '1', crit: 'I', text: 'Apresentar a Licença Ambiental ou a comprovação de dispensa de licença.' },
+        { id: '2', crit: 'I', text: 'Apresentar a outorga dos pontos de captação.' },
+        { id: '3', crit: 'N', text: 'Apresentar o plano de contingência para a captação.' },
+        { id: '4', crit: 'I', text: 'Realizar as análises de controle mensal da água. Base legal: Anexo XX da Portaria de Consolidação GM/MS nº 5/2017, alterada pela Portaria GM/MS nº 888/2021, art. 14, inciso XI.' },
+        { id: '5', crit: 'I', text: 'Realizar as análises de controle semestral da água. Base legal: Anexo XX da Portaria de Consolidação GM/MS nº 5/2017, alterada pela Portaria GM/MS nº 888/2021, art. 14, inciso XI.' },
+        { id: '6', crit: 'N', text: 'Apresentar comprovante de treinamentos e capacitações dos profissionais que atuam na produção, distribuição, armazenamento e controle da qualidade da água para consumo humano. Base legal: Portaria GM/MS nº 888/2021, art. 14, inciso VI.' },
+        { id: '7', crit: 'N', text: 'Apresentar o Plano de Amostragem atualizado e avaliado pela vigilância sanitária/ambiental do município. Base legal: Portaria GM/MS nº 888/2021, art. 14, inciso IV, e art. 44.' },
+        { id: '8', crit: 'I', text: 'Apresentar a Anotação de Responsabilidade Técnica (ART). Base legal: Portaria GM/MS nº 888/2021, art. 23.' },
+        { id: '9', crit: 'I', text: 'Comprovar que os materiais utilizados na produção, no armazenamento e na distribuição não alteram a qualidade da água nem oferecem risco à saúde. Base legal: Portaria GM/MS nº 888/2021, art. 14, incisos VII e IX.' },
+        { id: '10', crit: 'I', text: 'Apresentar o Laudo de Atendimento dos Requisitos de Saúde (LARS) e a Comprovação de Baixo Risco à Saúde (CBRS). Base legal: Portaria GM/MS nº 888/2021, art. 14, incisos VIII e IX.' },
+        { id: '11', crit: 'I', text: 'Apresentar o Programa de Controle Médico de Saúde Ocupacional (PCMSO). Base legal: NR-7.' },
+        { id: '12', crit: 'N', text: 'Apresentar o Programa de Prevenção de Riscos Ocupacionais (PPRO).' },
+        { id: '13', crit: 'I', text: 'Apresentar o Programa de Prevenção de Riscos Ambientais (PPRA). Base legal: NR-9.' },
+      ]
+    },
+    {
+      id: 'saa-captacao',
+      titulo: '2. CAPTAÇÃO',
+      itens: [
+        { id: '14', crit: 'I', text: 'Manter a área dos sistemas de poços com proteção sanitária e condições de segurança. Base legal: NBR 12212/1992, item 5.2.' },
+        { id: '15', crit: 'I', text: 'Manter o poço com selo sanitário. Base legal: Portaria GM/MS nº 888/2021, art. 14-II; NBR 12212/1992, item 6.10; NBR 12244/1992, item 6.2.3.' },
+        { id: '16', crit: 'I', text: 'Manter a laje de proteção do poço envolvendo o tubo de revestimento, com declividade do centro para a borda, espessura mínima de 15 cm e área não inferior a 1,0 m². Base legal: NBR 12244/1992, item 6.2.4.' },
+        { id: '17', crit: 'I', text: 'Manter, na área de captação, placas de identificação e mecanismos de segurança que impeçam o acesso de pessoas não autorizadas e de animais. Base legal: Portaria GM/MS nº 888/2021, art. 14-II; NR-10; NBR 12212/1992, item 5.2.' },
+        { id: '18', crit: 'N', text: 'Eliminar fontes de poluição que pressionem a microbacia do manancial. Base legal: NBR 12212/1992, item 5.2.' },
+        { id: '19', crit: 'I', text: 'Manter os equipamentos de bombeamento em local livre de enchentes. Base legal: NBR 12214/1992, item 5.3.' },
+        { id: '20', crit: 'I', text: 'Manter os equipamentos de bombeamento protegidos. Base legal: NR-12.' },
+        { id: '21', crit: 'N', text: 'Dispor de equipamento de bombeamento reserva. Base legal: NBR 12214/1992, item 5.3.2.' },
+        { id: '22', crit: 'N', text: 'Manter o local de captação de fácil acesso e uso permanente. Base legal: NBR 12214/1992, item 5.3.' },
+        { id: '23', crit: 'I', text: 'Manter dispositivos de proteção que previnam ou neutralizem o risco de acidente de trabalho junto à captação. Base legal: NBR 12214/1992, item 5.13; NR-10; NR-12.' },
+        { id: '24', crit: 'N', text: 'Manter as estruturas e os equipamentos da captação em condições de conservação satisfatórias. Base legal: NBR 12214/1992, itens 5.12 e 5.13.' },
+      ]
+    },
+    {
+      id: 'saa-tratamento',
+      titulo: '3. TRATAMENTO',
+      itens: [
+        { id: '25', crit: 'N', text: 'Identificar a casa de química e as bombas dosadoras de acordo com o produto utilizado. Base legal: NBR 12216, item 5.15.10; NR-1; NR-26.' },
+        { id: '26', crit: 'I', text: 'Identificar e proteger os painéis elétricos. Base legal: NR-10; NR-26.' },
+        { id: '27', crit: 'I', text: 'Manter, na casa de química, dispositivos de segurança que garantam o acesso somente a pessoas autorizadas.' },
+        { id: '28', crit: 'I', text: 'Identificar e armazenar em local adequado os produtos químicos utilizados no processo de tratamento. Base legal: NBR 12216, item 5.19.' },
+        { id: '29', crit: 'I', text: 'Dispor, na sala de dosagem, de dispositivo de detecção de vazamento, quando o tratamento for feito com cloro gás. Base legal: NBR 12216, item 5.19.' },
+        { id: '30', crit: 'I', text: 'Dispor, na sala de dosagem, de sistema de exaustão forçada, quando o tratamento for feito com cloro gás. Base legal: NBR 12216, item 5.19.6.' },
+        { id: '31', crit: 'I', text: 'Dispor de kit de emergência para conter vazamentos, quando o tratamento for feito com cloro gás. Base legal: NBR 13295 (ABNT).' },
+        { id: '32', crit: 'I', text: 'Dispor de EPI destinado a conter vazamentos, quando o tratamento for feito com cloro gás. Base legal: NR-6.' },
+        { id: '33', crit: 'N', text: 'Manter as estruturas e os equipamentos da ETA/UTA, de forma geral, em condições satisfatórias.' },
+      ]
+    },
+    {
+      id: 'saa-laboratorio',
+      titulo: '4. LABORATÓRIO',
+      itens: [
+        { id: '34', crit: 'N', text: 'Manter as instalações do laboratório adequadas às atividades realizadas. Base legal: RDC nº 512/2021, art. 29.' },
+        { id: '35', crit: 'N', text: 'Manter a área do laboratório conforme a NBR 12216/1992, item 5.20 — mínimo de 8 m² para estações com capacidade inferior a 10.000 m³/dia dispensadas de ensaios bacteriológicos, 12 m² quando obrigadas a análises bacteriológicas, e 16 m² para estações com capacidade igual ou superior a 10.000 m³/dia.' },
+        { id: '36', crit: 'N', text: 'Manter a iluminação e a ventilação do laboratório conforme a NBR 12216/1992, item 5.20.4 — aberturas naturais com área mínima de 25% do piso e proteção contra sol e chuva, ou iluminação artificial com no mínimo 250 lux para trabalhos correntes e 500 lux para análises, com espectro semelhante ao da luz solar.' },
+        { id: '37', crit: 'N', text: 'Manter as bancadas e os demais móveis do laboratório conforme a NBR 12216/1992, item 5.20.5 — altura de 0,90 m, profundidade mínima de 0,60 m, comprimento mínimo de 5,0 m ou 10,0 m conforme a capacidade da estação, espaço livre entre bancadas de ao menos 1,40 m e armários modulados sob as bancadas.' },
+        { id: '38', crit: 'I', text: 'Manter separação física efetiva entre as áreas que realizam atividades incompatíveis. Base legal: RDC nº 512/2021, art. 29.' },
+        { id: '39', crit: 'N', text: 'Identificar as áreas de acordo com sua função. Base legal: RDC nº 512/2021, art. 29.' },
+        { id: '40', crit: 'I', text: 'Manter controle de acesso nas áreas restritas. Base legal: RDC nº 512/2021, art. 29.' },
+        { id: '41', crit: 'I', text: 'Realizar o descarte, a descontaminação e a lavagem adequados de material. Base legal: RDC nº 512/2021, art. 29.' },
+        { id: '42', crit: 'N', text: 'Manter condições para a realização de limpeza e, quando pertinente, de desinfecção das áreas. Base legal: RDC nº 512/2021, art. 29.' },
+        { id: '43', crit: 'N', text: 'Manter as instalações em bom estado de organização, conservação, higiene e limpeza. Base legal: RDC nº 512/2021, art. 31.' },
+        { id: '44', crit: 'I', text: 'Manter os equipamentos usados nas análises de controle identificados, calibrados e etiquetados, de forma a permitir identificar prontamente a situação de calibração. Base legal: ISO/IEC 17025:2017, item 6.4.8; RDC nº 512/2021, art. 42.' },
+        { id: '45', crit: 'N', text: 'Apresentar POP para todas as análises realizadas. Base legal: ISO/IEC 17025:2017, item 7.2.1.2.' },
+        { id: '46', crit: 'I', text: 'Aplicar metodologia analítica para determinação dos parâmetros de acordo com a legislação vigente. Base legal: Portaria GM/MS nº 888/2021, art. 22.' },
+        { id: '47', crit: 'N', text: 'Manter procedimentos adequados de especificação, aquisição, recebimento, armazenamento, guarda, controle de estoque, controle de validade, distribuição e descarte de reagentes, insumos e materiais de consumo, atendendo às normas de segurança à saúde humana, animal e ao meio ambiente. Base legal: RDC nº 512/2021, art. 36.' },
+        { id: '48', crit: 'N', text: 'Rotular inequivocamente os frascos de reagentes e soluções, permitindo a correta identificação, utilização, armazenamento, controle do prazo de validade e descarte. Base legal: RDC nº 512/2021, art. 37.' },
+      ]
+    },
+    {
+      id: 'saa-reservacao',
+      titulo: '5. RESERVAÇÃO',
+      itens: [
+        { id: '49', crit: 'I', text: 'Realizar a limpeza e a manutenção dos reservatórios no mínimo a cada seis meses. Base legal: Lei Estadual nº 13.331/2001; Decreto Estadual nº 5.711/2002, art. 188, VII.' },
+        { id: '50', crit: 'N', text: 'Apresentar Instrução Normativa para Trabalho em Altura, com procedimentos de segurança e equipamentos disponíveis. Base legal: NR-35 (Ministério do Trabalho).' },
+        { id: '51', crit: 'I', text: 'Manter os reservatórios protegidos e vedados. Base legal: Lei Estadual nº 13.331/2001; Decreto Estadual nº 5.711/2002, art. 183, IV, e art. 188, I.' },
+        { id: '52', crit: 'I', text: 'Manter, nos reservatórios, dispositivo de segurança que restrinja o acesso de pessoas não autorizadas e de animais. Base legal: Lei Estadual nº 13.331/2001; Decreto Estadual nº 5.711/2002, art. 188, II.' },
+      ]
+    },
+    {
+      id: 'saa-condicoes-gerais',
+      titulo: '6. CONDIÇÕES GERAIS DO ABASTECIMENTO',
+      itens: [
+        { id: '53', crit: 'N', text: 'Registrar e justificar a ocorrência de intermitência no abastecimento (desabastecimento superior a 6 horas) ou falta de água em horário de pico (11h–13h e/ou 17h–19h). Base legal: Portaria GM/MS nº 888/2021, art. 25.' },
+      ]
+    },
+  ]
+}
+
+// Transcrito do "Guia de Inspeção Clínica Médica com ou sem Procedimento
+// Cirúrgico Ambulatorial" (Fundação Municipal de Saúde de Ponta Grossa/PR).
+// O documento só traz colunas Sim/Não/N.A. — a redação já imperativa
+// (Providenciar/Apresentar/Disponibilizar) e o grau de criticidade (I/N/R)
+// seguem o mesmo padrão adotado em clinicaEsteticaPrudentopolisChecklist,
+// que compartilha praticamente a mesma base legal (RDC nº 63/2011 e Decreto
+// Estadual nº 5.711/2002), por ser do mesmo gênero de guia.
+const clinicasDeSaudeChecklist: ChecklistData = {
+  titulo: 'Guia de Inspeção para Clínicas de Saúde',
+  subtitulo: 'Clínica médica com ou sem procedimento cirúrgico ambulatorial',
+  categoria: 'SAÚDE',
+  lei: 'RDC nº 63/2011 (ANVISA) e Decreto Estadual nº 5.711/2002',
+  especialidade: 'CLÍNICA MÉDICA / CIRÚRGICA AMBULATORIAL',
+  secoes: [
+    {
+      id: 'gs-doc',
+      titulo: '1. DOCUMENTOS',
+      itens: [
+        { id: '1', crit: 'I', text: 'Providenciar o Projeto Arquitetônico adequado à legislação sanitária, devidamente aprovado pela Vigilância Sanitária (VISA). Base legal: Art. 23, I e Art. 34 – RDC nº 63/2011 (Anvisa); Art. 456 – Decreto Estadual nº 5.711/2002.' },
+        { id: '2', crit: 'I', text: 'Apresentar o PGR, o PCMSO, os ASOs dos funcionários e o comprovante de vacinação (hepatite B e tétano). Base legal: Art. 116 e 147 – Decreto Estadual nº 5.711/2002; Item 32.2.4.17 – NR 32; Art. 23, II e Art. 44 – RDC nº 63/2011.' },
+        { id: '3', crit: 'N', text: 'Manter programa de manutenção preventiva e corretiva dos equipamentos médico-hospitalares, com registro atualizado. Base legal: Art. 426, Parágrafo único – Decreto Estadual nº 5.711/2002; Art. 23, IX – RDC nº 63/2011.' },
+        { id: '4', crit: 'I', text: 'Apresentar a Certidão de Inclusão de Responsabilidade Técnica e o Certificado de inscrição no conselho de classe do(s) responsável(is) técnico(s). Base legal: Art. 2º, I – Decreto Federal nº 77.052/1976; Art. 14 e Art. 29, Parágrafo único – RDC nº 63/2011; Art. 414 e 422 – Decreto Estadual nº 5.711/2002.' },
+        { id: '5', crit: 'N', text: 'Providenciar o certificado de controle integrado de pragas atualizado, emitido por empresa legalmente habilitada. Base legal: Art. 320 – Decreto Estadual nº 5.711/2002; Art. 23, VIII e Art. 63, Parágrafo único – RDC nº 63/2011.' },
+        { id: '6', crit: 'I', text: 'Providenciar a limpeza e desinfecção do reservatório de água, com certificado ou registro emitido por empresa legalmente habilitada. Base legal: Art. 188, VII – Decreto Estadual nº 5.711/2002; Art. 39, §1º – RDC nº 63/2011.' },
+        { id: '7', crit: 'N', text: 'Apresentar o PMOC (Plano de Manutenção, Operação e Controle) do sistema de climatização, se acima de 60.000 BTU/H, ou o registro de manutenção e limpeza do equipamento, se abaixo desse valor. Base legal: Lei Federal nº 13.589/2018; Art. 5º e Art. 6º, alínea "a" – Portaria nº 3.523/1998.' },
+        { id: '8', crit: 'I', text: 'Apresentar o certificado e/ou contrato de coleta, transporte e destinação dos resíduos de serviços de saúde. Base legal: Art. 6º, XI – RDC nº 222/2018; Art. 23, V – RDC nº 63/2011.' },
+        { id: '9', crit: 'N', text: 'Elaborar e manter atualizadas as normas, procedimentos e rotinas técnicas escritas (POPs) de todos os processos de trabalho. Base legal: Art. 23, XVIII e Art. 51 – RDC nº 63/2011.' },
+        { id: '10', crit: 'N', text: 'Estabelecer procedimento para registro e notificação de eventos adversos, queixas técnicas associadas a produtos e serviços e doenças de notificação compulsória. Base legal: Art. 23, XIV e XVI – RDC nº 63/2011.' },
+        { id: '11', crit: 'R', text: 'Apresentar o contrato de prestação de serviços das atividades terceirizadas. Base legal: Art. 11 e Art. 23, V – RDC nº 63/2011.' },
+        { id: '12', crit: 'N', text: 'Comprovar a capacitação dos profissionais antes do início das atividades e de forma permanente, com registro de data, horário, carga horária, conteúdo ministrado, e nome e formação do instrutor e dos trabalhadores envolvidos. Base legal: Art. 32, Parágrafo único – RDC nº 63/2011.' },
+      ]
+    },
+    {
+      id: 'gs-trab',
+      titulo: '2. CONDIÇÕES DE TRABALHO',
+      itens: [
+        { id: '13', crit: 'R', text: 'Disponibilizar aos trabalhadores água potável e fresca, por meio de bebedouro de jato inclinado ou dispositivo equivalente. Base legal: Art. 136 – Decreto Estadual nº 5.711/2002.' },
+        { id: '14', crit: 'R', text: 'Caso sejam realizadas refeições nas dependências, destinar local específico, com iluminação e ventilação suficientes. Base legal: Art. 137 – Decreto Estadual nº 5.711/2002.' },
+        { id: '15', crit: 'R', text: 'Disponibilizar vestiário com armários individuais, separados por sexo. Base legal: Art. 139 – Decreto Estadual nº 5.711/2002.' },
+        { id: '16', crit: 'I', text: 'Comprovar a entrega de EPI adequado ao risco, em perfeito estado de conservação e funcionamento, e compatível com as atividades desenvolvidas pelos trabalhadores. Base legal: Art. 122 – Decreto Estadual nº 5.711/2002; Art. 47 – RDC nº 63/2011; Item 6.3 e 6.6.1 – NR-06.' },
+        { id: '17', crit: 'N', text: 'Instalar guarda-corpo em escadas e rampas. Base legal: Art. 115, II e Art. 133, II – Decreto Estadual nº 5.711/2002; NR 8; Art. 173 – CLT.' },
+      ]
+    },
+    {
+      id: 'gs-infra',
+      titulo: '3. INFRAESTRUTURA',
+      itens: [
+        { id: '18', crit: 'N', text: 'Manter a estrutura física conforme o projeto aprovado pela VISA. Base legal: Art. 294 – Decreto Estadual nº 5.711/2002.' },
+        { id: '19', crit: 'N', text: 'Adequar a infraestrutura — recursos humanos, equipamentos e materiais — à demanda e à modalidade de assistência prestada. Base legal: Art. 17 – RDC nº 63/2011.' },
+        { id: '20', crit: 'N', text: 'Garantir que piso, paredes, teto e mobiliários tenham superfícies íntegras, lisas, laváveis e impermeáveis. Base legal: Art. 36 e 42 – RDC nº 63/2011; RDC nº 50/2002.' },
+        { id: '21', crit: 'N', text: 'Garantir iluminação e ventilação compatíveis com as atividades desenvolvidas nos ambientes. Base legal: Art. 38 – RDC nº 63/2011.' },
+        { id: '22', crit: 'N', text: 'Utilizar colchonetes, colchões e demais estofados revestidos de material lavável e impermeável, sem furos, rasgos, sulcos ou reentrâncias. Base legal: Art. 56 – RDC nº 63/2011.' },
+        { id: '23', crit: 'R', text: 'Manter portas com abertura fácil e corredores/passagens internas livres. Base legal: Art. 132 – Decreto Estadual nº 5.711/2002.' },
+        { id: '24', crit: 'N', text: 'Disponibilizar instalações sanitárias independentes para ambos os sexos, com acesso independente e paredes/pisos impermeáveis e laváveis. Base legal: Art. 286 – Decreto Estadual nº 5.711/2002.' },
+        { id: '25', crit: 'I', text: 'Disponibilizar lavatório e/ou pia exclusiva para a higienização das mãos dos profissionais nas áreas onde o paciente é examinado, manipulado ou medicado. Base legal: Decreto Federal nº 77.052/1976, Art. 2º, II e IV; Item B.4 – RDC nº 50/2002; NR 32, Item 32.2.4.3.' },
+        { id: '26', crit: 'N', text: 'Abastecer os lavatórios/pias com dispensadores de sabonete líquido, papel-toalha e lixeira com tampa acionada sem uso das mãos. Base legal: Decreto Federal nº 77.052/1976, Art. 2º, II e IV; Art. 326 e 327 – Decreto Estadual nº 5.711/2002; Item B.4 – RDC nº 50/2002; NR 32, Item 32.2.4.3.' },
+        { id: '27', crit: 'I', text: 'Disponibilizar dispensadores abastecidos com solução alcoólica a 70% para profissionais, pacientes e acompanhantes. Base legal: Art. 59 – RDC nº 63/2011; RDC nº 42/2010.' },
+        { id: '28', crit: 'N', text: 'Garantir iluminação e ventilação adequadas nas construções, por aberturas naturais ou sistemas artificiais — banheiros e cozinhas precisam de ventilação com tomada de ar externa. Base legal: Art. 282 – Decreto Estadual nº 5.711/2002.' },
+        { id: '29', crit: 'N', text: 'Disponibilizar sanitário anexo à sala de atendimento nos serviços de Gineco-Obstetrícia, Proctologia e Urologia. Base legal: RDC nº 50/2002 (Tabela Unidade Funcional 1 — Atendimento Ambulatorial).' },
+        { id: '30', crit: 'I', text: 'Guardar e preencher o prontuário conforme as normas vigentes de confidencialidade, integridade, local seguro, boas condições de conservação e legibilidade, com carimbo e assinatura. Base legal: Art. 24 a 28 – RDC nº 63/2011.' },
+      ]
+    },
+    {
+      id: 'gs-apoio',
+      titulo: '4. AMBIENTES DE APOIO',
+      itens: [
+        { id: '31', crit: 'R', text: 'Manter sala de espera com registro de pacientes/agendamento. Base legal: RDC nº 50/2002.' },
+        { id: '32', crit: 'N', text: 'Disponibilizar sanitário para pacientes. Base legal: RDC nº 50/2002.' },
+        { id: '33', crit: 'N', text: 'Disponibilizar DML (Depósito de Material de Limpeza) com tanque. Base legal: RDC nº 50/2002.' },
+        { id: '34', crit: 'N', text: 'Disponibilizar sala de utilidades/expurgo com pia para lavagem. Base legal: RDC nº 50/2002.' },
+        { id: '35', crit: 'R', text: 'Disponibilizar depósito de materiais e equipamentos/almoxarifado. Base legal: RDC nº 50/2002.' },
+      ]
+    },
+    {
+      id: 'gs-esteril',
+      titulo: '5. ESTERILIZAÇÃO',
+      itens: [
+        { id: '36', crit: 'I', text: 'Organizar o fluxo de processamento de materiais — recepção, limpeza, inspeção, preparo, esterilização, armazenamento e distribuição — com estrutura física adequada. Base legal: RDC nº 50/2002; RDC nº 15/2012.' },
+        { id: '37', crit: 'N', text: 'Utilizar materiais de limpeza e saneantes registrados na Anvisa e adequados à finalidade; na limpeza manual, usar acessórios não abrasivos que não liberem partículas. Base legal: Art. 66 e 89 – RDC nº 15/2012.' },
+        { id: '38', crit: 'I', text: 'Identificar as embalagens com rótulos ou etiquetas contendo nome do produto, número do lote, data de esterilização, data limite de uso, método de esterilização e nome do responsável pelo processo. Base legal: Art. 83, 84 e 85 – RDC nº 15/2012.' },
+        { id: '39', crit: 'N', text: 'Garantir que as embalagens utilizadas estejam regularizadas junto à Anvisa. Base legal: Art. 78 – RDC nº 15/2012.' },
+        { id: '40', crit: 'N', text: 'Armazenar os produtos esterilizados em local livre de poeira e sujidade, sem incidência solar, com manipulação mínima. Base legal: Art. 101 – RDC nº 15/2012.' },
+        { id: '41', crit: 'I', text: 'Realizar e manter registro de monitoramento do processo de esterilização, com testes químicos, físicos e biológicos. Base legal: Art. 96, 97, 98 e § único, Art. 99 e 100 – RDC nº 15/2012.' },
+      ]
+    },
+    {
+      id: 'gs-residuos',
+      titulo: '6. RESÍDUOS',
+      itens: [
+        { id: '42', crit: 'I', text: 'Implantar o PGRSS (Plano de Gerenciamento de Resíduos de Serviços de Saúde). Base legal: Capítulo II, Art. 5º e § 3º – RDC nº 222/2018; Art. 226, II – Decreto Estadual nº 5.711/2002.' },
+        { id: '43', crit: 'N', text: 'Utilizar recipientes/lixeiras resistentes à punctura, ruptura e vazamento, com tampa e sistema de abertura sem contato com as mãos, resistentes a tombamento. Base legal: Capítulo I, Seção III, Art. 3º, III – RDC nº 222/2018.' },
+        { id: '44', crit: 'N', text: 'Identificar os recipientes/lixeiras de acordo com o grupo de resíduo a que pertencem. Base legal: Capítulo III, Seção I, Art. 22, §1º, §2º e §3º – RDC nº 222/2018.' },
+      ]
+    },
+    {
+      id: 'gs-residuo-infectante',
+      titulo: '7. RESÍDUO INFECTANTE',
+      itens: [
+        { id: '45', crit: 'N', text: 'Acondicionar em saco branco leitoso os resíduos do Grupo A que não precisam ser obrigatoriamente tratados e os que já passaram por tratamento. Base legal: Capítulo III, Seção I, Art. 15 – RDC nº 222/2018.' },
+        { id: '46', crit: 'I', text: 'Acondicionar em saco vermelho os resíduos que precisam de tratamento antes do destino final. Base legal: Capítulo IV, Seção V, Art. 55 e Parágrafo único – RDC nº 222/2018.' },
+        { id: '47', crit: 'I', text: 'Descartar perfurocortantes em recipientes específicos, com suporte para fixação, em altura que permita visualização, em local protegido de umidade e respingos. Base legal: Capítulo IV, Seção IX, Art. 86, 87, 88 e 89 – RDC nº 222/2018; RDC nº 306/2004.' },
+      ]
+    },
+    {
+      id: 'gs-residuo-quimico',
+      titulo: '8. RESÍDUO QUÍMICO',
+      itens: [
+        { id: '48', crit: 'N', text: 'Acondicionar resíduos líquidos em recipientes compatíveis com o material armazenado, com tampa rosqueada e vedante. Base legal: Capítulo III, Seção I, Art. 18 – RDC nº 222/2018.' },
+        { id: '49', crit: 'N', text: 'Acondicionar resíduos sólidos em recipientes de material rígido e resistente, compatíveis com as características do produto químico. Base legal: Capítulo III, Seção I, Art. 19 – RDC nº 222/2018.' },
+      ]
+    },
+    {
+      id: 'gs-armazenamento-residuos',
+      titulo: '9. ARMAZENAMENTO DE RESÍDUOS',
+      itens: [
+        { id: '50', crit: 'N', text: 'Realizar o armazenamento temporário dos resíduos na sala de utilidades/expurgo. Base legal: Capítulo III, Seção II e III – RDC nº 222/2018.' },
+        { id: '51', crit: 'N', text: 'Disponibilizar abrigo externo de resíduos com acesso facilitado à coleta, lavável e com dimensão compatível com o volume gerado. Base legal: Capítulo III, Seção II e III – RDC nº 222/2018.' },
+        { id: '52', crit: 'R', text: 'Manter área específica para limpeza e desinfecção dos recipientes coletores (carrinhos) utilizados no manejo de resíduos. Base legal: Capítulo III, Seção II e III – RDC nº 222/2018.' },
+      ]
+    },
+    {
+      id: 'gs-controle-especial',
+      titulo: '10. AMOSTRAS GRÁTIS E MEDICAMENTOS PSICOTRÓPICOS, ENTORPECENTES OU OUTROS SUJEITOS A CONTROLE ESPECIAL',
+      itens: [
+        { id: '53', crit: 'N', text: 'Verificar se comercializa ou utiliza medicamentos previstos no Anexo I da Portaria SVS/MS nº 344/1998; em caso positivo, atender às exigências específicas para esses medicamentos. Base legal: Portaria SVS/MS nº 344/1998.' },
+        { id: '54', crit: 'N', text: 'Manter os livros de escrituração protocolados junto à Vigilância Sanitária (CVS/FMS). Base legal: Art. 63 – Portaria SVS/MS nº 344/1998.' },
+        { id: '55', crit: 'I', text: 'Manter o local de armazenamento dos medicamentos do Anexo I com chave e permanentemente fechado. Base legal: Art. 67 – Portaria SVS/MS nº 344/1998.' },
+        { id: '56', crit: 'N', text: 'Realizar o BSPO (Balanço de Substâncias Psicoativas e Outras de Controle Especial) trimestralmente. Base legal: Art. 68 – Portaria SVS/MS nº 344/1998; Art. 1º – Resolução Estadual SESA/PR nº 225/1999.' },
+        { id: '57', crit: 'N', text: 'Apresentar o Certificado de Regularidade para Substâncias e Medicamentos Psicotrópicos, carimbado. Base legal: Art. 3º, Parágrafo 2º – Resolução Estadual SESA/PR nº 225/1999.' },
+        { id: '58', crit: 'R', text: 'Designar os profissionais prescritores como responsáveis pela adequada conservação das amostras grátis, com verificação das condições de conservação, integridade, armazenamento, validade e distribuição. Base legal: Art. 8º, § 2º – RDC/Anvisa nº 60/2009.' },
+      ]
+    },
+  ]
+}
+
+// Transcrito do "Guia de Inspeção em Supermercados" (Fundação Municipal de
+// Saúde de Ponta Grossa/PR), baseado na RDC ANVISA nº 216/2004. É um roteiro
+// próprio para supermercados (área externa, câmaras frigoríficas, área de
+// exposição para venda etc.) — não o mesmo documento do roteiro genérico de
+// Serviços de Alimentação (alimentacaoChecklist, RDC 275/2002 e 216/2004).
+// O original só traz colunas Sim/Não/N.A.; a redação imperativa e o grau de
+// criticidade (I/N/R) seguem o mesmo padrão dos demais roteiros.
+const supermercadoChecklist: ChecklistData = {
+  titulo: 'Guia de Inspeção para Supermercado',
+  subtitulo: 'RDC ANVISA nº 216/2004',
+  categoria: 'SAÚDE',
+  lei: 'RDC ANVISA nº 216/2004',
+  especialidade: 'SUPERMERCADO',
+  secoes: [
+    {
+      id: 'sup-area-externa',
+      titulo: '1. ÁREA EXTERNA',
+      itens: [
+        { id: '1', crit: 'N', text: 'Manter a área externa livre de focos de insalubridade, lixo, objetos em desuso, pragas e animais. Base legal: Item 4.1.7 – RDC nº 216/2004 (Anvisa).' },
+      ]
+    },
+    {
+      id: 'sup-agua',
+      titulo: '2. ÁGUA',
+      itens: [
+        { id: '2', crit: 'I', text: 'Usar água de abastecimento público. Base legal: Art. 45 – Lei Federal nº 11.445/2007; Item 4.4.1 – RDC nº 216/2004.' },
+        { id: '3', crit: 'I', text: 'Apresentar, quando utilizada solução alternativa de abastecimento, o registro da potabilidade da água, atestada semestralmente por laudo laboratorial. Base legal: Item 4.4.1 – RDC nº 216/2004.' },
+        { id: '4', crit: 'I', text: 'Fabricar o gelo destinado a alimentos a partir de água potável. Base legal: Item 4.4.2 – RDC nº 216/2004.' },
+        { id: '5', crit: 'N', text: 'Manter o reservatório de água com superfície lisa, sem rachaduras e com tampa íntegra. Base legal: Item 4.4.4 – RDC nº 216/2004.' },
+      ]
+    },
+    {
+      id: 'sup-residuos',
+      titulo: '3. RESÍDUOS',
+      itens: [
+        { id: '6', crit: 'N', text: 'Usar recipientes de coleta de resíduos de fácil higienização e transporte, identificados, tampados e limpos. Base legal: Item 4.5.1 – RDC nº 216/2004.' },
+        { id: '7', crit: 'N', text: 'Manter os recipientes de coleta de resíduos em número e capacidade adequados ao volume gerado. Base legal: Item 4.5.2 – RDC nº 216/2004.' },
+        { id: '8', crit: 'N', text: 'Usar, nas áreas de preparação e armazenamento, lixeiras com tampa acionada sem contato manual. Base legal: Item 4.5.2 – RDC nº 216/2004.' },
+      ]
+    },
+    {
+      id: 'sup-pragas',
+      titulo: '4. CONTROLE INTEGRADO DE PRAGAS E VETORES',
+      itens: [
+        { id: '9', crit: 'I', text: 'Instalar telas milimétricas nas aberturas das áreas de armazenamento e manipulação, inclusive no sistema de exaustão. Base legal: Item 4.1.4 – RDC nº 216/2004.' },
+        { id: '10', crit: 'N', text: 'Instalar ralos e grelhas sifonados, dotados de dispositivo que permita seu fechamento. Base legal: Item 4.1.5 – RDC nº 216/2004.' },
+        { id: '11', crit: 'N', text: 'Manter as portas ajustadas aos batentes e com fechamento automático. Base legal: Item 4.1.4 – RDC nº 216/2004.' },
+        { id: '12', crit: 'I', text: 'Manter o estabelecimento livre de vetores e pragas urbanas e de indícios de sua presença. Base legal: Item 4.3.1 – RDC nº 216/2004.' },
+        { id: '13', crit: 'N', text: 'Contratar empresa especializada e licenciada para o controle químico de pragas. Base legal: Item 4.3.2 – RDC nº 216/2004.' },
+      ]
+    },
+    {
+      id: 'sup-sanit-func',
+      titulo: '5. SANITÁRIOS E VESTIÁRIOS DOS FUNCIONÁRIOS',
+      itens: [
+        { id: '14', crit: 'I', text: 'Manter as instalações sanitárias sem comunicação direta com as áreas de produção, manipulação ou armazenamento de alimentos. Base legal: Item 4.1.12 – RDC nº 216/2004.' },
+        { id: '15', crit: 'N', text: 'Manter piso, paredes e teto de material liso, resistente e impermeável, em bom estado de conservação e higiene. Base legal: Item 4.1.3 – RDC nº 216/2004.' },
+        { id: '16', crit: 'I', text: 'Disponibilizar pia com sabonete líquido antisséptico (ou sabonete líquido inodoro e produto antisséptico) e toalha de papel não reciclado, ou outro método de secagem que não recontamine as mãos. Base legal: Item 4.1.13 – RDC nº 216/2004.' },
+        { id: '17', crit: 'N', text: 'Disponibilizar armários individuais para a guarda de pertences dos funcionários. Base legal: Art. 139 – Decreto Estadual nº 5.711/2002.' },
+        { id: '18', crit: 'N', text: 'Disponibilizar lixeiras com tampa acionada sem contato manual. Base legal: Item 4.1.13 – RDC nº 216/2004.' },
+      ]
+    },
+    {
+      id: 'sup-sanit-publico',
+      titulo: '6. SANITÁRIOS DESTINADOS AO PÚBLICO',
+      itens: [
+        { id: '19', crit: 'N', text: 'Manter piso, paredes e teto de material liso, resistente e impermeável, em bom estado de conservação e higiene. Base legal: Item 4.1.3 – RDC nº 216/2004.' },
+        { id: '20', crit: 'N', text: 'Disponibilizar pia, sabão líquido e toalha de papel ou outro método de secagem das mãos. Base legal: Item 4.1.13 – RDC nº 216/2004.' },
+        { id: '21', crit: 'N', text: 'Disponibilizar lixeiras com tampa acionada sem contato manual. Base legal: Item 4.1.13 – RDC nº 216/2004.' },
+      ]
+    },
+    {
+      id: 'sup-instalacoes',
+      titulo: '7. INSTALAÇÕES E EDIFICAÇÃO (Depósito, Padaria, Área de Fracionamento de Vegetais, Área de Manipulação de Queijos, Lanchonete/Quiosques)',
+      itens: [
+        { id: '22', crit: 'N', text: 'Manter piso, paredes e teto de material liso, resistente e impermeável, em bom estado de conservação e higiene. Base legal: Item 4.1.3 – RDC nº 216/2004.' },
+        { id: '23', crit: 'N', text: 'Manter iluminação suficiente, com luminárias protegidas contra queda e explosão, em adequado estado de conservação e higiene. Base legal: Item 4.1.8 – RDC nº 216/2004.' },
+        { id: '24', crit: 'I', text: 'Manter as instalações elétricas embutidas ou protegidas em tubulações externas e íntegras. Base legal: Item 4.1.9 – RDC nº 216/2004.' },
+        { id: '25', crit: 'I', text: 'Manter o ambiente livre de fungos, gases, fumaça, pó, partículas em suspensão e condensação de vapores, sem incidência direta do fluxo de ar sobre os alimentos. Base legal: Item 4.1.10 – RDC nº 216/2004.' },
+        { id: '26', crit: 'N', text: 'Realizar manutenção programada e periódica dos equipamentos e utensílios, e calibração dos instrumentos de medição, com registro dessas operações. Base legal: Item 4.1.16 – RDC nº 216/2004.' },
+      ]
+    },
+    {
+      id: 'sup-recebimento',
+      titulo: '8. RECEBIMENTO DE PRODUTOS',
+      itens: [
+        { id: '27', crit: 'N', text: 'Receber as matérias-primas, ingredientes e embalagens em área protegida e limpa. Base legal: Item 4.7.2 – RDC nº 216/2004.' },
+        { id: '28', crit: 'I', text: 'Dispor de termômetro calibrado para o recebimento de produtos. Base legal: Item 4.7.3 – RDC nº 216/2004.' },
+      ]
+    },
+    {
+      id: 'sup-deposito',
+      titulo: '9. DEPÓSITO DE PRODUTOS',
+      itens: [
+        { id: '29', crit: 'N', text: 'Manter o depósito organizado, limpo e arejado, com espaço para ventilação e limpeza. Base legal: Art. 369 – Decreto Estadual nº 5.711/2002.' },
+        { id: '30', crit: 'I', text: 'Armazenar saneantes, cosméticos e outros produtos separadamente dos alimentos e das embalagens. Base legal: Art. 369, XVIII – Decreto Estadual nº 5.711/2002.' },
+        { id: '31', crit: 'N', text: 'Manter íntegras as embalagens primárias dos produtos. Base legal: Item 4.7.3 – RDC nº 216/2004.' },
+        { id: '32', crit: 'N', text: 'Armazenar separadamente, em local apropriado e identificado, os produtos destinados à devolução ou ao descarte. Base legal: Item 4.7.4 – RDC nº 216/2004.' },
+      ]
+    },
+    {
+      id: 'sup-refrigeracao',
+      titulo: '10. REFRIGERADOR/FREEZER/BALCÃO FRIGORÍFICO/CÂMARAS FRIGORÍFICAS (Hortifruti, Laticínios, Frios, Panificados, Aves, Carnes, Sorvetes)',
+      itens: [
+        { id: '33', crit: 'N', text: 'Manter iluminação suficiente, com luminárias protegidas contra queda acidental e explosão, em adequado estado de conservação e higiene. Base legal: Item 4.1.8 – RDC nº 216/2004.' },
+        { id: '34', crit: 'N', text: 'Usar paletes, estrados e prateleiras de material liso, resistente, impermeável e lavável. Base legal: Item 4.7.6 – RDC nº 216/2004.' },
+        { id: '35', crit: 'I', text: 'Disponibilizar pia exclusiva para a higienização das mãos na área de manipulação, em posição estratégica em relação ao fluxo. Base legal: Item 4.1.14 – RDC nº 216/2004.' },
+        { id: '36', crit: 'I', text: 'Abastecer os lavatórios com sabonete líquido inodoro antisséptico (ou sabonete líquido inodoro e produto antisséptico), toalha de papel não reciclado ou outro sistema seguro de secagem das mãos, e coletor de papel acionado sem contato manual. Base legal: Item 4.1.14 – RDC nº 216/2004.' },
+        { id: '37', crit: 'R', text: 'Afixar cartazes orientando a higienização das mãos. Base legal: Item 4.6.4 – RDC nº 216/2004.' },
+        { id: '38', crit: 'I', text: 'Manter os manipuladores com asseio pessoal e uniformes compatíveis com a atividade, conservados e limpos. Base legal: Item 4.6.3 – RDC nº 216/2004.' },
+        { id: '39', crit: 'N', text: 'Manter lisas, impermeáveis e laváveis as superfícies dos equipamentos, móveis e utensílios usados na distribuição e exposição dos alimentos. Base legal: Item 4.1.17 – RDC nº 216/2004.' },
+      ]
+    },
+    {
+      id: 'sup-exposicao',
+      titulo: '11. ÁREA DE EXPOSIÇÃO PARA A VENDA',
+      itens: [
+        { id: '40', crit: 'N', text: 'Manter lisas, impermeáveis e laváveis as superfícies dos equipamentos, móveis e utensílios. Base legal: Item 4.1.17 – RDC nº 216/2004.' },
+        { id: '41', crit: 'I', text: 'Apresentar, nos produtos embalados na ausência do consumidor, a lista de ingredientes, o conteúdo líquido, a identificação da origem, o nome/razão social e o endereço do importador (quando importado), a identificação do lote, o prazo de validade e as instruções de preparo e uso, quando necessário. Base legal: Item 5 – RDC nº 259/2002 (Anvisa).' },
+      ]
+    },
+    {
+      id: 'sup-funcionarios',
+      titulo: '12. FUNCIONÁRIOS/MANIPULADORES',
+      itens: [
+        { id: '42', crit: 'I', text: 'Manter os manipuladores com asseio pessoal e uniformes compatíveis com a atividade, conservados e limpos. Base legal: Item 4.6.3 – RDC nº 216/2004.' },
+        { id: '43', crit: 'I', text: 'Usar os EPIs adequados à função (uniforme, avental, botas, luvas, capas etc.). Base legal: NR-6 (Portaria MTb nº 3.214/1978).' },
+        { id: '44', crit: 'I', text: 'Usar vestimentas adequadas para o trabalho em câmaras frias. Base legal: NR-6 (Portaria MTb nº 3.214/1978).' },
+      ]
+    },
+    {
+      id: 'sup-documentacao',
+      titulo: '13. DOCUMENTAÇÃO E REGISTRO',
+      itens: [
+        { id: '45', crit: 'N', text: 'Manter o Manual de Boas Práticas e os Procedimentos Operacionais Padronizados acessíveis aos funcionários e disponíveis à autoridade sanitária, quando solicitados. Base legal: Item 4.11.1 – RDC nº 216/2004.' },
+        { id: '46', crit: 'N', text: 'Apresentar e cumprir os Procedimentos Operacionais Padronizados (POP) de higienização de instalações, equipamentos e móveis; controle integrado de vetores e pragas urbanas; higienização do reservatório; e higiene e saúde dos manipuladores. Base legal: Item 4.11.4 – RDC nº 216/2004.' },
+        { id: '47', crit: 'N', text: 'Comprovar que o responsável pelas atividades de manipulação de alimentos concluiu curso de capacitação sobre contaminantes alimentares, doenças transmitidas por alimentos, manipulação higiênica dos alimentos e Boas Práticas. Base legal: Item 4.12.2 – RDC nº 216/2004.' },
+        { id: '48', crit: 'N', text: 'Capacitar periodicamente os manipuladores de alimentos em higiene pessoal, manipulação higiênica dos alimentos e doenças transmitidas por alimentos, com a capacitação comprovada por documentação. Base legal: Item 4.6.7 – RDC nº 216/2004.' },
+        { id: '49', crit: 'R', text: 'Apresentar a especificação dos critérios de avaliação e seleção dos fornecedores de matérias-primas, ingredientes e embalagens. Base legal: Item 4.7.1 – RDC nº 216/2004.' },
+        { id: '50', crit: 'I', text: 'Apresentar o PPRA, o PCMSO e os ASOs atualizados. Base legal: Art. 116 e 147 – Decreto Estadual nº 5.711/2002.' },
+        { id: '51', crit: 'I', text: 'Apresentar o comprovante de higienização do reservatório de água, realizada semestralmente (por POP próprio ou empresa especializada). Base legal: Item 4.4.4 – RDC nº 216/2004.' },
+        { id: '52', crit: 'N', text: 'Apresentar o comprovante de execução do serviço de controle de pragas. Base legal: Item 4.3.2 – RDC nº 216/2004.' },
+      ]
+    },
+  ]
+}
+
+// Transcrito da Resolução SESA nº 590/2014 (Norma Técnica de Estabelecimentos
+// Farmacêuticos do Paraná — Anexo I). Diferente das demais resoluções
+// transcritas neste arquivo, este instrumento não traz um Anexo com roteiro
+// de inspeção pronto em tabela — é só o texto normativo, organizado em 15
+// capítulos. Os itens abaixo foram extraídos das obrigações concretas e
+// verificáveis em campo (documentos, estrutura física, dispensação,
+// armazenamento, serviços farmacêuticos etc.), na mesma redação imperativa e
+// com a base legal (artigo) ao final de cada um; capítulos só definicionais,
+// de trâmite de responsabilidade técnica (Cap. VI) ou de encerramento de
+// estabelecimento (Cap. VII) não geram item de inspeção de rotina. É um
+// instrumento próprio e complementar ao roteiro "farmacia" (Lei 5.991/1973 e
+// RDC 44/2009) já existente — não o substitui.
+const farmaciaResolucaoSesa5902014Checklist: ChecklistData = {
+  titulo: 'Norma Técnica de Farmácias e Drogarias — Resolução SESA nº 590/2014',
+  subtitulo: 'Resolução SESA nº 590/2014',
+  categoria: 'SAÚDE',
+  lei: 'Resolução SESA nº 590/2014',
+  especialidade: 'FARMÁCIA E DROGARIA',
+  secoes: [
+    {
+      id: 'fs590-estrutura',
+      titulo: '1. ESTRUTURA FÍSICA',
+      itens: [
+        { id: '1', crit: 'I', text: 'Manter edifício de alvenaria, com ventilação e iluminação que atendam às normas técnicas da ABNT e às Normas Regulamentadoras do Ministério do Trabalho em todas as salas. Base legal: Art. 4º, I – Res. SESA 590/2014.' },
+        { id: '2', crit: 'N', text: 'Manter piso, paredes, teto e mobiliários de material liso, resistente, impermeável e de fácil limpeza e desinfecção. Base legal: Art. 4º, II – Res. SESA 590/2014.' },
+        { id: '3', crit: 'I', text: 'Manter acesso independente às instalações, sem comunicação com residências ou outro local distinto do estabelecimento farmacêutico, com acessibilidade para pessoas com deficiência. Base legal: Art. 4º, III – Res. SESA 590/2014.' },
+        { id: '4', crit: 'N', text: 'Disponibilizar, para o mostruário e a dispensação de produtos e medicamentos industrializados, área física mínima de 30 m². Base legal: Art. 4º, IV – Res. SESA 590/2014.' },
+        { id: '5', crit: 'N', text: 'Disponibilizar sanitários, Depósito de Material de Limpeza (DML) com tanque e água corrente, sala/área para guarda de pertences pessoais e sala/área administrativa. Base legal: Art. 4º, V – Res. SESA 590/2014.' },
+        { id: '6', crit: 'I', text: 'Disponibilizar, na farmácia com manipulação, laboratório de manipulação de medicamentos com área mínima de 10 m² por atividade (mínimo de 3 m² para salas de hormônios, antibióticos e citostáticos, e 1,5 m² para a antecâmara, quando houver). Base legal: Art. 5º – Res. SESA 590/2014.' },
+        { id: '7', crit: 'I', text: 'Não utilizar qualquer dependência da farmácia ou drogaria para consultório médico, odontológico ou outro fim diverso do licenciamento. Base legal: Art. 8º – Res. SESA 590/2014.' },
+      ]
+    },
+    {
+      id: 'fs590-assistencia-documentos',
+      titulo: '2. ASSISTÊNCIA FARMACÊUTICA E DOCUMENTOS',
+      itens: [
+        { id: '8', crit: 'I', text: 'Garantir a presença de farmacêutico durante todo o horário de funcionamento do estabelecimento, inclusive plantões. Base legal: Art. 9º e 10 – Res. SESA 590/2014.' },
+        { id: '9', crit: 'N', text: 'Descrever as atribuições e responsabilidades individuais no Manual de Boas Práticas Farmacêuticas, de forma compreensível e disponível a todos os funcionários. Base legal: Art. 11 – Res. SESA 590/2014.' },
+        { id: '10', crit: 'N', text: 'Manter organograma que demonstre a estrutura organizacional e o pessoal suficiente do estabelecimento. Base legal: Art. 17 – Res. SESA 590/2014.' },
+        { id: '11', crit: 'I', text: 'Apresentar a Licença Sanitária atualizada, expedida pela Autoridade Sanitária competente. Base legal: Art. 24, I – Res. SESA 590/2014.' },
+        { id: '12', crit: 'I', text: 'Apresentar a Certidão de Regularidade atualizada, expedida pelo Conselho Regional de Farmácia. Base legal: Art. 24, II – Res. SESA 590/2014.' },
+        { id: '13', crit: 'I', text: 'Apresentar a Autorização de Funcionamento de Empresa (AFE) atualizada, expedida pela ANVISA. Base legal: Art. 24, III – Res. SESA 590/2014.' },
+        { id: '14', crit: 'I', text: 'Apresentar a Autorização Especial de Funcionamento (AE), expedida pela ANVISA, quando o estabelecimento manipular substâncias sujeitas a controle especial. Base legal: Art. 24, IV – Res. SESA 590/2014.' },
+        { id: '15', crit: 'N', text: 'Apresentar o Manual de Boas Práticas em Farmácia ou Drogaria e/ou de Manipulação de Medicamentos, de fácil acesso aos técnicos. Base legal: Art. 24, V – Res. SESA 590/2014.' },
+        { id: '16', crit: 'N', text: 'Manter procedimentos escritos para todas as atividades desenvolvidas, inclusive limpeza e sanitização de ambientes, mobiliários e equipamentos. Base legal: Art. 24, VI – Res. SESA 590/2014.' },
+        { id: '17', crit: 'R', text: 'Afixar em local visível ao público lista com números atualizados de telefone do CRF, dos órgãos de Vigilância Sanitária Estadual e Municipal e de defesa do consumidor. Base legal: Art. 24, VII – Res. SESA 590/2014.' },
+        { id: '18', crit: 'I', text: 'Afixar em local visível ao público a Licença Sanitária e a Certidão de Regularidade do CRF-PR. Base legal: Art. 24, VIII – Res. SESA 590/2014.' },
+        { id: '19', crit: 'N', text: 'Afixar, dentro da sala de prestação de serviços farmacêuticos, em local visível ao público, o nome e a identidade dos responsáveis pela aplicação de injetáveis. Base legal: Art. 24, IX – Res. SESA 590/2014.' },
+        { id: '20', crit: 'N', text: 'Afixar em local visível ao público placa com nome, foto, número e inscrição no CRF-PR do responsável técnico farmacêutico, dos farmacêuticos substitutos e assistentes, e o respectivo horário de trabalho. Base legal: Art. 24, X – Res. SESA 590/2014.' },
+      ]
+    },
+    {
+      id: 'fs590-saude-higiene',
+      titulo: '3. SAÚDE, HIGIENE E VESTUÁRIO',
+      itens: [
+        { id: '21', crit: 'I', text: 'Realizar exames médicos admissionais e avaliações médicas periódicas de todos os funcionários, atendendo ao PCMSO. Base legal: Art. 19, §1º – Res. SESA 590/2014.' },
+        { id: '22', crit: 'N', text: 'Não permitir comer, beber, manter plantas, alimentos, bebidas, produtos fumígenos, medicamentos e objetos pessoais fora das salas específicas ou previamente definidas para esse fim. Base legal: Art. 19, §3º – Res. SESA 590/2014.' },
+        { id: '23', crit: 'I', text: 'Fornecer gratuitamente os EPIs aos trabalhadores, em quantidade suficiente e com reposição periódica, com orientação de uso, manutenção, conservação e descarte. Base legal: Art. 19, §5º – Res. SESA 590/2014.' },
+        { id: '24', crit: 'I', text: 'Manter os funcionários envolvidos na prestação de serviços farmacêuticos adequadamente paramentados, com troca do EPI sempre que necessário. Base legal: Art. 19, §6º – Res. SESA 590/2014.' },
+        { id: '25', crit: 'N', text: 'Definir por escrito o que é uniforme e o que é EPI no estabelecimento. Base legal: Art. 19, §7º – Res. SESA 590/2014.' },
+        { id: '26', crit: 'I', text: 'Realizar a paramentação e a higiene das mãos e antebraços antes do início da prestação de serviços. Base legal: Art. 19, §8º – Res. SESA 590/2014.' },
+        { id: '27', crit: 'N', text: 'Disponibilizar, na farmácia com manipulação, sala de vestiário para a guarda dos pertences dos funcionários e a colocação de uniformes. Base legal: Art. 19, §9º – Res. SESA 590/2014.' },
+      ]
+    },
+    {
+      id: 'fs590-condicoes-gerais',
+      titulo: '4. CONDIÇÕES GERAIS DE FUNCIONAMENTO',
+      itens: [
+        { id: '28', crit: 'N', text: 'Manter as áreas internas e externas em boas condições físicas e estruturais, sem risco ao usuário e aos funcionários. Base legal: Art. 25, I – Res. SESA 590/2014.' },
+        { id: '29', crit: 'N', text: 'Manter as superfícies internas (piso, paredes, teto) lisas, impermeáveis, resistentes a agentes sanitizantes e facilmente laváveis. Base legal: Art. 25, II – Res. SESA 590/2014.' },
+        { id: '30', crit: 'N', text: 'Manter os ambientes em boas condições de higiene e limpeza, protegidos contra a entrada de insetos, roedores ou outros animais. Base legal: Art. 25, III – Res. SESA 590/2014.' },
+        { id: '31', crit: 'N', text: 'Garantir ventilação e iluminação compatíveis com as atividades desenvolvidas em cada ambiente, conforme normas da ABNT e do Ministério do Trabalho. Base legal: Art. 25, IV – Res. SESA 590/2014.' },
+        { id: '32', crit: 'I', text: 'Disponibilizar sanitários com vaso sanitário e/ou mictório, pia com água corrente, toalhas de uso individual descartável, sabonete líquido e lixeira sem tampa ou com acionamento por pedal, sem comunicação direta com salas de serviços farmacêuticos, de manipulação ou de circulação restrita. Base legal: Art. 25, V – Res. SESA 590/2014.' },
+        { id: '33', crit: 'N', text: 'Manter os mobiliários revestidos interna e externamente de material liso e impermeável, resistente a agentes sanitizantes e facilmente lavável. Base legal: Art. 25, VI – Res. SESA 590/2014.' },
+        { id: '34', crit: 'N', text: 'Identificar todos os funcionários que realizam atendimento ao público, com nome e função. Base legal: Art. 25, VII – Res. SESA 590/2014.' },
+        { id: '35', crit: 'I', text: 'Fornecer, para os serviços farmacêuticos, EPI de acordo com a atividade desenvolvida, em quantidade suficiente e com reposição periódica. Base legal: Art. 25, VIII – Res. SESA 590/2014.' },
+        { id: '36', crit: 'I', text: 'Manter água potável tratada, com limpeza dos reservatórios e cisternas no mínimo a cada seis meses, comprovada por meio de registros. Base legal: Art. 25, IX – Res. SESA 590/2014.' },
+        { id: '37', crit: 'N', text: 'Usar, no processamento de limpeza e desinfecção de artigos e superfícies, produtos devidamente regularizados pela ANVISA para a finalidade a que se destinam. Base legal: Art. 25, X – Res. SESA 590/2014.' },
+        { id: '38', crit: 'I', text: 'Não realizar coleta de material biológico nas dependências do estabelecimento, salvo em farmácia que manipule medicamentos homeopáticos autorizados, com sala exclusiva para esse fim. Base legal: Art. 25, XI – Res. SESA 590/2014.' },
+        { id: '39', crit: 'N', text: 'Instituir e manter Controle e/ou Manejo Integrado de Vetores e Pragas Urbanas, com os registros da execução mantidos no estabelecimento. Base legal: Art. 25, XII – Res. SESA 590/2014.' },
+      ]
+    },
+    {
+      id: 'fs590-condicoes-tecnicas',
+      titulo: '5. CONDIÇÕES TÉCNICAS E HIGIÊNICAS ESPECÍFICAS',
+      itens: [
+        { id: '40', crit: 'N', text: 'Armazenar os materiais de limpeza e germicidas em área ou local identificado e especificamente designado para esse fim. Base legal: Art. 26 – Res. SESA 590/2014.' },
+        { id: '41', crit: 'N', text: 'Definir local específico para a guarda dos pertences dos funcionários. Base legal: Art. 27 – Res. SESA 590/2014.' },
+        { id: '42', crit: 'N', text: 'Manter as salas de descanso e copa ou refeitório, quando existentes, separadas fisicamente dos demais ambientes, com o consumo de alimentos restrito a esses locais. Base legal: Art. 28 – Res. SESA 590/2014.' },
+        { id: '43', crit: 'I', text: 'Manter a caixa d\'água protegida contra a entrada de animais, sujidades ou outros contaminantes, com a limpeza realizada conforme procedimento escrito e registro que comprove sua execução. Base legal: Art. 29 – Res. SESA 590/2014.' },
+      ]
+    },
+    {
+      id: 'fs590-aquisicao-armazenamento-dispensacao',
+      titulo: '6. AQUISIÇÃO, ARMAZENAMENTO E DISPENSAÇÃO',
+      itens: [
+        { id: '44', crit: 'I', text: 'Verificar, na aquisição, se o fornecedor possui Licença Sanitária atualizada, expedida pela Autoridade Sanitária local. Base legal: Art. 30, I – Res. SESA 590/2014.' },
+        { id: '45', crit: 'N', text: 'Verificar as notas fiscais de aquisição de medicamentos, com o número de lote, quando aplicável. Base legal: Art. 30, II – Res. SESA 590/2014.' },
+        { id: '46', crit: 'I', text: 'Verificar, no recebimento, o registro/notificação, o número de lote, a data de validade e a rotulagem dos produtos, mantendo íntegros embalagens, rótulos e bulas. Base legal: Art. 30, III e IV – Res. SESA 590/2014.' },
+        { id: '47', crit: 'N', text: 'Manter espaços reservados, prateleiras e/ou estrados em número adequado ao volume de estoque, de material liso, lavável e impermeável. Base legal: Art. 31, I – Res. SESA 590/2014.' },
+        { id: '48', crit: 'N', text: 'Manter boas condições sanitárias de conservação, limpeza e higiene no armazenamento dos medicamentos e produtos. Base legal: Art. 31, II – Res. SESA 590/2014.' },
+        { id: '49', crit: 'I', text: 'Armazenar os medicamentos e produtos ao abrigo da luz solar direta, em temperatura e umidade conforme especificação do fabricante, sobre prateleiras ou estrados, sem contato direto com as paredes. Base legal: Art. 31, IV – Res. SESA 590/2014.' },
+        { id: '50', crit: 'I', text: 'Não colocar etiquetas sobre os prazos de validade e o número de lote, nem dispensar ao público produtos e medicamentos com prazo de validade expirado. Base legal: Art. 31, V – Res. SESA 590/2014.' },
+        { id: '51', crit: 'I', text: 'Retirar da área de venda e segregar, em local próprio e identificado, os produtos violados, vencidos, ou com suspeita de falsificação, corrupção ou adulteração. Base legal: Art. 31, VI e VII – Res. SESA 590/2014.' },
+        { id: '52', crit: 'N', text: 'Determinar procedimento para os produtos com prazo de validade próximo ao vencimento, inclusive insumos utilizados na manipulação. Base legal: Art. 31, XI – Res. SESA 590/2014.' },
+        { id: '53', crit: 'I', text: 'Justificar em Procedimento Operacional Padrão (POP) o armazenamento de produtos corrosivos, inflamáveis ou explosivos, guardados longe de fontes de calor e de materiais que provoquem faíscas. Base legal: Art. 31, XII – Res. SESA 590/2014.' },
+        { id: '54', crit: 'I', text: 'Manter os medicamentos em área de circulação restrita aos funcionários, sem exposição direta ao alcance dos usuários do estabelecimento. Base legal: Art. 31, XIV – Res. SESA 590/2014.' },
+        { id: '55', crit: 'I', text: 'Não dispensar medicamentos ao público pelo sistema de autoatendimento. Base legal: Art. 32 – Res. SESA 590/2014.' },
+        { id: '56', crit: 'I', text: 'Não dispensar ao público medicamentos tarjados e/ou sujeitos a controle especial sem a devida prescrição de profissional habilitado. Base legal: Art. 33, I – Res. SESA 590/2014.' },
+        { id: '57', crit: 'I', text: 'Não distribuir sem valor pecuniário nem vender medicamentos amostra grátis, de distribuição gratuita, com a inscrição "PROIBIDA A VENDA NO COMÉRCIO", em embalagem hospitalar (ou fracionados desta) e de uso exclusivo hospitalar. Base legal: Art. 33, II – Res. SESA 590/2014.' },
+        { id: '58', crit: 'N', text: 'Manter, nos medicamentos comercializados fora da embalagem secundária (embalagens múltiplas ou fracionáveis), as informações obrigatórias de rotulagem na embalagem primária. Base legal: Art. 33, III – Res. SESA 590/2014.' },
+        { id: '59', crit: 'N', text: 'Manter à disposição dos usuários, em local de fácil visualização, lista atualizada dos medicamentos genéricos comercializados no país. Base legal: Art. 34, VI – Res. SESA 590/2014.' },
+        { id: '60', crit: 'I', text: 'Não aviar receitas ilegíveis, em código, siglas e/ou números, ou que possam induzir a erro ou troca na dispensação. Base legal: Art. 34, I e II – Res. SESA 590/2014.' },
+        { id: '61', crit: 'N', text: 'Verificar se a receita contém o nome do paciente, a denominação do medicamento, o modo de usar, e a identificação, o registro e a assinatura do prescritor, com local e data de emissão. Base legal: Art. 34, III – Res. SESA 590/2014.' },
+        { id: '62', crit: 'N', text: 'Identificar com carimbo do farmacêutico, número do CRF-PR, data e assinatura a substituição do medicamento prescrito pelo genérico correspondente. Base legal: Art. 34, IV, "b" – Res. SESA 590/2014.' },
+        { id: '63', crit: 'I', text: 'Seguir as normas da Portaria nº 344/1998 na dispensação e guarda de medicamentos sujeitos a controle especial, realizando inspeção visual da identificação, do prazo de validade e da integridade da embalagem no momento da dispensação. Base legal: Art. 36 – Res. SESA 590/2014.' },
+        { id: '64', crit: 'N', text: 'Realizar o fracionamento de medicamentos conforme a Resolução RDC nº 80/2006. Base legal: Art. 38 – Res. SESA 590/2014.' },
+      ]
+    },
+    {
+      id: 'fs590-termolabeis-mcea',
+      titulo: '7. MEDICAMENTOS TERMOLÁBEIS E MCEA',
+      itens: [
+        { id: '65', crit: 'I', text: 'Usar geladeira apropriada para a guarda dos MCEA, com temperatura entre 2º e 8ºC, sendo vedado o uso de geladeira tipo "duplex", "frost-free" ou frigobar. Base legal: Art. 40, I – Res. SESA 590/2014.' },
+        { id: '66', crit: 'I', text: 'Manter os medicamentos termolábeis fora da exposição ao sol ou a temperaturas elevadas, mesmo que liofilizados. Base legal: Art. 40, III – Res. SESA 590/2014.' },
+        { id: '67', crit: 'N', text: 'Observar o sistema PVPS (primeiro a vencer, primeiro a sair) no armazenamento do estoque de medicamentos termolábeis e MCEA. Base legal: Art. 40, IV – Res. SESA 590/2014.' },
+        { id: '68', crit: 'I', text: 'Não guardar alimentos, bebidas e outros materiais na geladeira destinada a medicamentos. Base legal: Art. 42, I – Res. SESA 590/2014.' },
+        { id: '69', crit: 'I', text: 'Realizar e registrar a leitura da temperatura da geladeira no mínimo duas vezes ao dia, por meio de termômetro digital de máxima e mínima. Base legal: Art. 42, II – Res. SESA 590/2014.' },
+        { id: '70', crit: 'N', text: 'Manter afixado na porta da geladeira aviso de que esta não deve ser aberta fora do horário de retirada e/ou guarda dos medicamentos. Base legal: Art. 42, III – Res. SESA 590/2014.' },
+        { id: '71', crit: 'N', text: 'Usar tomada exclusiva para cada geladeira, instalada a 1,20 m de altura do piso. Base legal: Art. 42, IV – Res. SESA 590/2014.' },
+        { id: '72', crit: 'N', text: 'Instalar a geladeira em local arejado, distante de fonte de calor, sem incidência de luz solar direta, nivelada e afastada 20 cm da parede. Base legal: Art. 42, V – Res. SESA 590/2014.' },
+        { id: '73', crit: 'I', text: 'Armazenar os diferentes tipos de insulina de modo a evitar troca entre si, assegurando a conservação em temperatura de 2º a 8ºC, sem congelamento. Base legal: Art. 43 – Res. SESA 590/2014.' },
+        { id: '74', crit: 'I', text: 'Transferir os MCEA para outra geladeira ou caixa térmica com controle de temperatura antes de realizar a limpeza rotineira da geladeira de guarda. Base legal: Art. 44 – Res. SESA 590/2014.' },
+        { id: '75', crit: 'I', text: 'Verificar, no recebimento de medicamentos termolábeis e MCEA, se a temperatura chegou adequada e se há registro de temperatura de saída e chegada do transporte. Base legal: Art. 45 – Res. SESA 590/2014.' },
+        { id: '76', crit: 'N', text: 'Orientar o paciente, preferencialmente por escrito, quanto à forma de conservação dos medicamentos termolábeis e/ou MCEA dispensados. Base legal: Art. 46, I – Res. SESA 590/2014.' },
+        { id: '77', crit: 'I', text: 'Dispor de sistema de geração de energia de emergência para a comercialização de vacinas. Base legal: Art. 47 – Res. SESA 590/2014.' },
+      ]
+    },
+    {
+      id: 'fs590-ervas-chas',
+      titulo: '8. ERVAS/PLANTAS MEDICINAIS — CHÁS MEDICINAIS',
+      itens: [
+        { id: '78', crit: 'N', text: 'Comercializar somente ervas/plantas medicinais (chás medicinais) notificadas junto à ANVISA, conforme a RDC nº 26/2014. Base legal: Art. 48 – Res. SESA 590/2014.' },
+        { id: '79', crit: 'N', text: 'Realizar análise de controle de qualidade, própria ou terceirizada, das ervas/plantas medicinais a granel comercializadas. Base legal: Art. 49 – Res. SESA 590/2014.' },
+        { id: '80', crit: 'N', text: 'Comercializar ervas/plantas medicinais a granel somente em sala específica, com equipamentos que permitam a pesagem e o armazenamento corretos. Base legal: Art. 49, §2º – Res. SESA 590/2014.' },
+        { id: '81', crit: 'I', text: 'Não veicular, na embalagem das ervas/plantas medicinais, indicação terapêutica nem expressões como "inócuo", "não tóxico", "inofensivo" ou "produto natural". Base legal: Art. 49, §5º e §6º – Res. SESA 590/2014.' },
+        { id: '82', crit: 'N', text: 'Identificar no rótulo das ervas/plantas medicinais a granel embaladas a razão social, o CNPJ, o endereço, o nome da planta, a classificação farmacopêica e o responsável técnico com o número do CRF. Base legal: Art. 49, §7º – Res. SESA 590/2014.' },
+      ]
+    },
+    {
+      id: 'fs590-servicos-farmaceuticos',
+      titulo: '9. SERVIÇOS FARMACÊUTICOS',
+      itens: [
+        { id: '83', crit: 'I', text: 'Realizar a prestação de serviços farmacêuticos (atenção farmacêutica, perfuração de lóbulo auricular) em sala exclusiva, com área mínima de 3 m², cadeira ou poltrona, lavatório para as mãos, toalhas descartáveis e sabão líquido. Base legal: Art. 60, I – Res. SESA 590/2014.' },
+        { id: '84', crit: 'N', text: 'Executar em salas separadas, ou com barreira técnica quando em sala única, as atividades de administração de medicamentos, inalação e perfuração do lóbulo auricular. Base legal: Art. 60, II e IV – Res. SESA 590/2014.' },
+        { id: '85', crit: 'I', text: 'Disponibilizar maca na sala de prestação de serviços farmacêuticos quando houver aplicação de medicamentos injetáveis por via endovenosa. Base legal: Art. 60, III – Res. SESA 590/2014.' },
+        { id: '86', crit: 'I', text: 'Disponibilizar, na sala de serviços farmacêuticos, lixeira sem tampa ou com acionamento por pedal, coletor rígido para perfurocortantes e uso exclusivo de materiais perfurocortantes conforme a NR-32. Base legal: Art. 61, III a V – Res. SESA 590/2014.' },
+        { id: '87', crit: 'R', text: 'Afixar, em local de fácil visualização, lista com telefones e endereços de serviços de atendimento médico de emergência. Base legal: Art. 61, VI – Res. SESA 590/2014.' },
+        { id: '88', crit: 'N', text: 'Manter procedimentos e registros do monitoramento realizado para garantir a qualidade dos antissépticos/produtos fracionados. Base legal: Art. 61, XII – Res. SESA 590/2014.' },
+        { id: '89', crit: 'N', text: 'Elaborar protocolos para as atividades de atenção farmacêutica, com registro sistemático e consentimento expresso do usuário. Base legal: Art. 67 – Res. SESA 590/2014.' },
+        { id: '90', crit: 'I', text: 'Verificar a data de validade do medicamento antes de sua administração. Base legal: Art. 78, §4º – Res. SESA 590/2014.' },
+        { id: '91', crit: 'I', text: 'Não armazenar ou guardar na farmácia medicamentos de terceiros ou já dispensados. Base legal: Art. 79 – Res. SESA 590/2014.' },
+        { id: '92', crit: 'I', text: 'Usar, para cada inalação, conjunto de máscara e cachimbo vaporizador desinfetado, com desinfecção rigorosa após cada uso e troca da solução desinfetante a cada 12 horas. Base legal: Art. 81, I e III-IV – Res. SESA 590/2014.' },
+        { id: '93', crit: 'N', text: 'Individualizar as soluções utilizadas para inalação a cada procedimento, sendo vedada a guarda de sobras para inalações consecutivas. Base legal: Art. 81, V – Res. SESA 590/2014.' },
+        { id: '94', crit: 'I', text: 'Realizar a aplicação de medicamento por via endovenosa em maca, com o paciente deitado, observando técnica adequada. Base legal: Art. 83, I e II – Res. SESA 590/2014.' },
+        { id: '95', crit: 'I', text: 'Realizar a perfuração do lóbulo auricular com aparelho específico que utilize o brinco como material perfurante, sendo vedado o uso de agulhas de injeção, de sutura ou outros objetos. Base legal: Art. 84 – Res. SESA 590/2014.' },
+        { id: '96', crit: 'I', text: 'Manter os brincos e a pistola de perfuração regularizados junto à ANVISA, com a embalagem do brinco aberta somente no ambiente de perfuração, sob observação do usuário. Base legal: Art. 85 – Res. SESA 590/2014.' },
+        { id: '97', crit: 'I', text: 'Realizar a antissepsia das mãos do profissional antes da execução de qualquer serviço farmacêutico, independentemente do uso de EPI. Base legal: Art. 91 – Res. SESA 590/2014.' },
+        { id: '98', crit: 'N', text: 'Entregar ao usuário a Declaração de Serviço Farmacêutico após a prestação do serviço, com nome, endereço, telefone, CNPJ e os dados do serviço prestado. Base legal: Art. 87 e 88 – Res. SESA 590/2014.' },
+      ]
+    },
+    {
+      id: 'fs590-equipamentos',
+      titulo: '10. EQUIPAMENTOS, INSTRUMENTOS E CALIBRAÇÃO',
+      itens: [
+        { id: '99', crit: 'I', text: 'Calibrar os instrumentos de medição no mínimo uma vez ao ano, por laboratório acreditado pela CGCRE/INMETRO, com registro das calibrações realizadas. Base legal: Art. 92 – Res. SESA 590/2014.' },
+        { id: '100', crit: 'N', text: 'Realizar a verificação metrológica dos equipamentos não passíveis de calibração (ex.: esfigmomanômetros) pelo INMETRO ou órgão delegado. Base legal: Art. 93 – Res. SESA 590/2014.' },
+        { id: '101', crit: 'N', text: 'Realizar a verificação/checagem diária dos equipamentos por pessoal do estabelecimento treinado e autorizado, com registro. Base legal: Art. 94 – Res. SESA 590/2014.' },
+        { id: '102', crit: 'N', text: 'Manter Programa de Manutenção Periódica e Corretiva dos equipamentos, instrumentos e aparelhos, com os respectivos registros. Base legal: Art. 95 – Res. SESA 590/2014.' },
+      ]
+    },
+    {
+      id: 'fs590-procedimentos-documentacao',
+      titulo: '11. PROCEDIMENTOS E DOCUMENTAÇÃO',
+      itens: [
+        { id: '103', crit: 'R', text: 'Regular o horário de funcionamento conforme a legislação municipal, participando do sistema de rodízio de plantão do município. Base legal: Art. 96 – Res. SESA 590/2014.' },
+        { id: '104', crit: 'N', text: 'Manter Manual de Boas Práticas Farmacêuticas e/ou de Manipulação em Farmácias, de acordo com as atividades realizadas. Base legal: Art. 97 – Res. SESA 590/2014.' },
+        { id: '105', crit: 'N', text: 'Manter Procedimentos Operacionais Padrão (POP) sobre higienização, aquisição/armazenamento/dispensação de produtos, destino de produtos vencidos, serviços farmacêuticos prestados e uso de materiais descartáveis. Base legal: Art. 98 – Res. SESA 590/2014.' },
+        { id: '106', crit: 'N', text: 'Manter os POPs aprovados, assinados individualmente e datados pelo profissional farmacêutico, com revisão periódica prevista. Base legal: Art. 99 – Res. SESA 590/2014.' },
+        { id: '107', crit: 'N', text: 'Manter registros de treinamento de pessoal, serviço farmacêutico prestado, divulgação dos POPs, execução do controle de pragas e manutenção/calibração de equipamentos. Base legal: Art. 100 – Res. SESA 590/2014.' },
+        { id: '108', crit: 'N', text: 'Manter toda a documentação exigida por esta Resolução no estabelecimento por no mínimo 5 anos, à disposição do órgão de Vigilância Sanitária competente. Base legal: Art. 101 – Res. SESA 590/2014.' },
+      ]
+    },
+  ]
+}
+
 /**
  * Converte os indicadores do ROI da ANVISA no mesmo ChecklistData dos demais
  * roteiros — assim relatório, PDF, fotos, observações e polimento por IA
@@ -1124,10 +1977,12 @@ const CHECKLISTS: Record<string, ChecklistData> = {
   farmacia: farmaciaChecklist,
   'clinica-estetica-prudentopolis': clinicaEsteticaPrudentopolisChecklist,
   'guia-clinica-estetica': clinicaEsteticaPrudentopolisChecklist,
-  'guia-clinicas-de-saude': alimentacaoChecklist,
-  'guia-supermercado': alimentacaoChecklist,
-  'resolucao-sesa-126-07': alimentacaoChecklist,
-  'roteiro-saa-subterraneo': alimentacaoChecklist,
+  'guia-clinicas-de-saude': clinicasDeSaudeChecklist,
+  'guia-supermercado': supermercadoChecklist,
+  'resolucao-sesa-126-07': tatuagemPiercingChecklist,
+  'roteiro-saa-subterraneo': saaSubterraneoChecklist,
+  'salao-beleza-barbearia-depilacao': salaoBelezaChecklist,
+  'farmacia-resolucao-sesa-590-2014': farmaciaResolucaoSesa5902014Checklist,
   'roi-radiografia-medica': checklistDoRoi(
     'Roteiro Objetivo de Inspeção — Radiografia Médica',
     'ANVISA — documento 9.1, versão 1.2',
@@ -1199,11 +2054,22 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     setMunicipioSearchTerm("");
   };
 
+  // Prioriza, no seletor do root, os municípios que já têm cadastro ativo —
+  // mesmo tratamento do seletor em roteiros/page.tsx (ver
+  // src/hooks/use-municipios-ativos.ts).
+  const municipiosAtivos = useMunicipiosAtivos();
+  const { ativos: municipiosAtivosLista, inativos: municipiosInativosLista } = useMemo(() => {
+    const ativos: string[] = [];
+    const inativos: string[] = [];
+    municipiosPR.forEach((m) => (municipiosAtivos.has(normalizeId(m)) ? ativos : inativos).push(m));
+    return { ativos, inativos };
+  }, [municipiosAtivos]);
+
   const filteredMunicipiosPicker = useMemo(() => {
     const termo = normalizeId(municipioSearchTerm);
-    if (!termo) return municipiosPR;
-    return municipiosPR.filter((m) => normalizeId(m).includes(termo));
-  }, [municipioSearchTerm]);
+    const aplicarFiltro = (lista: string[]) => termo ? lista.filter((m) => normalizeId(m).includes(termo)) : lista;
+    return { ativos: aplicarFiltro(municipiosAtivosLista), inativos: aplicarFiltro(municipiosInativosLista) };
+  }, [municipioSearchTerm, municipiosAtivosLista, municipiosInativosLista]);
 
   const { config } = useAppConfig({
     municipioIdOverride: isRoot
@@ -1326,17 +2192,87 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // desatualizada caso só uma foto/observação tivesse mudado nesse meio-tempo.
   const handleSaveDraftRef = useRef<(showToast?: boolean) => Promise<void>>();
 
-  // Auto-save em tempo real (Heartbeat a cada 15 segundos)
+  // Menu retrátil por categoria (seção do roteiro) — a inspeção em campo
+  // raramente segue a ordem do formulário, então deixar tudo sempre
+  // expandido dificultava achar o item certo em roteiros longos (o de
+  // odontologia, por exemplo, tem 183 itens). Começa tudo fechado; o fiscal
+  // abre a seção que quiser a qualquer momento, e o sistema também guia
+  // sozinho: abre a primeira seção pendente ao entrar (ou ao trocar de
+  // inspeção) e, quando a seção aberta é concluída, fecha ela e abre a
+  // próxima pendente — sem travar a navegação manual (só não avança sozinho
+  // se houver mais de uma seção aberta ao mesmo tempo, sinal de que o fiscal
+  // está comparando seções de propósito).
+  const [openSections, setOpenSections] = useState<string[]>([]);
+  const expandirTodasSecoes = () => setOpenSections(checklist.secoes.map(s => s.id));
+  const recolherTodasSecoes = () => setOpenSections([]);
+  // [respondidos, total] — só itens com resposta própria contam (isHeader é
+  // só um rótulo de agrupamento, sem SIM/NÃO/ND/nota).
+  const progressoSecao = (secao: ChecklistSection): [number, number] => {
+    const itensRespondiveis = secao.itens.filter(i => !i.isHeader);
+    const respondidos = itensRespondiveis.filter(i => answers[i.id] !== undefined).length;
+    return [respondidos, itensRespondiveis.length];
+  };
+
+  // Guia o preenchimento por seção: quais seções já foram concluídas e
+  // avançadas sozinhas (evita reabrir a próxima toda vez que `answers`
+  // muda) — zerado sempre que troca de roteiro ou de inspeção.
+  const secoesAvancadasRef = useRef<Set<string>>(new Set());
+
+  // Abre a primeira seção pendente ao entrar no roteiro ou ao trocar de
+  // inspeção (rascunho carregado, ou "Nova inspeção") — não roda a cada
+  // resposta, só nessas trocas, pra não brigar com o fechamento manual do
+  // fiscal em seguida.
+  useEffect(() => {
+    secoesAvancadasRef.current = new Set();
+    const primeiraPendente = checklist.secoes.find(s => {
+      const [respondidos, total] = progressoSecao(s);
+      return total > 0 && respondidos < total;
+    });
+    setOpenSections(primeiraPendente ? [primeiraPendente.id] : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, currentInspecaoId]);
+
+  // Quando a única seção aberta é concluída, fecha ela e abre sozinho a
+  // próxima seção pendente — é o "sistema guiando" de uma seção pra outra.
+  useEffect(() => {
+    if (openSections.length !== 1) return;
+    const secaoAtual = checklist.secoes.find(s => s.id === openSections[0]);
+    if (!secaoAtual) return;
+    const [respondidos, total] = progressoSecao(secaoAtual);
+    if (total === 0 || respondidos < total) return;
+    if (secoesAvancadasRef.current.has(secaoAtual.id)) return;
+    secoesAvancadasRef.current.add(secaoAtual.id);
+
+    const idxAtual = checklist.secoes.findIndex(s => s.id === secaoAtual.id);
+    const proxima = checklist.secoes.slice(idxAtual + 1).find(s => {
+      const [r, t] = progressoSecao(s);
+      return t > 0 && r < t;
+    });
+    setOpenSections(proxima ? [proxima.id] : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answers]);
+
+  // Auto-save em tempo real (Heartbeat a cada 8 segundos).
+  // Antes a condição extra `(Object.keys(answers).length > 0 || idData.fantasia)`
+  // lia `answers`/`idData` direto da closure deste efeito — como o efeito só
+  // recria o `setInterval` quando `profile`/`view` mudam (praticamente nunca
+  // durante o preenchimento), essa checagem ficava presa no valor do
+  // primeiro render (form vazio) e nunca mais virava verdadeira. Resultado:
+  // o heartbeat nunca chamava handleSaveDraft, e só os cliques em SIM/NÃO/ND
+  // (que salvam direto) escapavam da perda de dados ao dar F5 — identificação
+  // do estabelecimento, observações e itens personalizados dependiam só
+  // deste heartbeat quebrado. isDirtyRef já é mantido corretamente por ref
+  // (ver efeito abaixo, que reage a answers/observations/itemPhotos/idData/
+  // introducaoHtml/conclusaoHtml), então basta confiar nele.
   useEffect(() => {
     if (view === 'report' || !profile) return;
     const timer = setInterval(() => {
-        if (isDirtyRef.current && (Object.keys(answers).length > 0 || idData.fantasia)) {
+        if (isDirtyRef.current) {
             handleSaveDraftRef.current?.(false);
             setLastAutoSave(new Date());
         }
-    }, 15000);
+    }, 8000);
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, view]);
 
   // Avisa antes de fechar/recarregar a aba se houver alteração ainda não
@@ -1771,6 +2707,13 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     if (!file || !profile) return;
     setUploadingItem(itemId);
     try {
+      // Dispara a captura de geolocalização em paralelo com a compressão e o
+      // upload da imagem (em vez de depois, em sequência) — assim o registro
+      // da foto não fica mais lento à toa; o prazo próprio de
+      // captureCurrentLocation (8s) já evita travar o anexo se o GPS demorar
+      // ou o fiscal negar a permissão.
+      const locationPromise = captureCurrentLocation();
+
       const compressed = await compressImage(file);
       let url: string;
       try {
@@ -1793,7 +2736,16 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         // foto comprimida direto no documento, como já é feito com a assinatura.
         url = await blobToDataUrl(compressed);
       }
-      const newPhoto: PhotoEvidence = { url, timestamp: format(new Date(), "dd/MM/yyyy HH:mm"), location: idData.fantasia || "Local da Inspeção" };
+      // Sem permissão de localização, sem sinal de GPS ou sem internet pra
+      // geocodificar: cai no texto padrão de sempre (nome do
+      // estabelecimento) — nunca bloqueia o anexo da foto por causa disso.
+      const capturedLocation = await locationPromise;
+      const newPhoto: PhotoEvidence = {
+        url,
+        timestamp: format(new Date(), "dd/MM/yyyy HH:mm"),
+        location: capturedLocation?.address || idData.fantasia || "Local da Inspeção",
+        ...(capturedLocation ? { latitude: capturedLocation.latitude, longitude: capturedLocation.longitude } : {}),
+      };
       setItemPhotos(prev => ({ ...prev, [itemId]: [...(prev[itemId] || []), newPhoto] }));
       toast({ title: "Foto Anexada" });
       handleSaveDraft(false);
@@ -2091,18 +3043,29 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                                                     const photoSrc = photoIsDataUrl ? photo.url : `/api/proxy-image?url=${encodeURIComponent(photo.url)}`;
                                                     const size = photo.size || 'M';
                                                     return (
-                                                      <div key={pIdx} className={cn("border border-zinc-200 rounded-lg overflow-hidden bg-zinc-50", size === 'G' && "col-span-2")}>
+                                                      <div key={pIdx} className={cn("border border-zinc-200 rounded-lg bg-zinc-50", size === 'G' && "col-span-2")}>
                                                         {/* Sem altura fixa nem object-fit — a imagem sempre mostra na
                                                             proporção natural (w-full h-auto), preenchendo a caixa por
                                                             completo, sem cortar e sem sobrar espaço vazio. O tamanho
-                                                            P/M/G agora controla a largura máxima, não mais a altura. */}
+                                                            P/M/G agora controla a largura máxima, não mais a altura.
+                                                            Arredondado só no topo (rounded-t-lg), na própria imagem —
+                                                            não por overflow-hidden no contêiner, que cortava o texto
+                                                            da legenda de cantos quando ela quebrava linha. */}
                                                         <img
                                                           src={photoSrc}
                                                           alt={`Evidência ${pIdx + 1}`}
                                                           crossOrigin={photoIsDataUrl ? undefined : "anonymous"}
-                                                          className={cn("block mx-auto w-full h-auto", PHOTO_SIZE_MAX_WIDTH[size])}
+                                                          className={cn("block mx-auto w-full h-auto rounded-t-lg", PHOTO_SIZE_MAX_WIDTH[size])}
                                                         />
-                                                        <p className="text-[6.5pt] text-zinc-400 font-bold uppercase px-2 py-1 border-t border-zinc-200">{photo.timestamp} — {photo.location}</p>
+                                                        <p className="text-[6.5pt] text-zinc-400 font-bold uppercase px-2 py-1 border-t border-zinc-200">
+                                                          {photo.timestamp} — {photo.location}
+                                                          {photo.latitude !== undefined && photo.longitude !== undefined && (
+                                                            <>
+                                                              {' '}
+                                                              <a href={mapsLinkFor(photo.latitude, photo.longitude)} target="_blank" rel="noopener noreferrer" className="text-primary underline normal-case font-normal">(ver no mapa)</a>
+                                                            </>
+                                                          )}
+                                                        </p>
                                                       </div>
                                                     );
                                                   })}
@@ -2247,19 +3210,38 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                       className="h-10 border-none focus:ring-0 text-sm"
                     />
                     <CommandList className="max-h-[300px] overflow-y-auto">
-                      {filteredMunicipiosPicker.length === 0 && (
+                      {filteredMunicipiosPicker.ativos.length === 0 && filteredMunicipiosPicker.inativos.length === 0 && (
                         <CommandEmpty className="p-4 text-center text-xs text-[#A39D8C] font-medium">Não encontrado.</CommandEmpty>
                       )}
                       <CommandGroup>
-                        {filteredMunicipiosPicker.map((m) => (
-                          <div
-                            key={m}
-                            onClick={() => escolherMunicipioRoot(m)}
-                            className="hover:bg-[#E4EEEC] cursor-pointer py-2.5 px-4 transition-colors font-medium text-sm border-b border-[#F1EEE4] last:border-b-0"
-                          >
-                            {m}
-                          </div>
-                        ))}
+                        {filteredMunicipiosPicker.ativos.length > 0 && (
+                          <>
+                            <p className="px-4 pt-2.5 pb-1 text-[10px] font-black uppercase tracking-widest text-primary/70">Com cadastro ativo</p>
+                            {filteredMunicipiosPicker.ativos.map((m) => (
+                              <div
+                                key={m}
+                                onClick={() => escolherMunicipioRoot(m)}
+                                className="hover:bg-[#E4EEEC] cursor-pointer py-2.5 px-4 transition-colors font-medium text-sm border-b border-[#F1EEE4] last:border-b-0"
+                              >
+                                {m}
+                              </div>
+                            ))}
+                          </>
+                        )}
+                        {filteredMunicipiosPicker.inativos.length > 0 && (
+                          <>
+                            <p className="px-4 pt-2.5 pb-1 text-[10px] font-black uppercase tracking-widest text-[#A39D8C]">Demais municípios</p>
+                            {filteredMunicipiosPicker.inativos.map((m) => (
+                              <div
+                                key={m}
+                                onClick={() => escolherMunicipioRoot(m)}
+                                className="hover:bg-[#E4EEEC] cursor-pointer py-2.5 px-4 transition-colors font-medium text-sm border-b border-[#F1EEE4] last:border-b-0"
+                              >
+                                {m}
+                              </div>
+                            ))}
+                          </>
+                        )}
                       </CommandGroup>
                     </CommandList>
                   </Command>
@@ -2427,11 +3409,28 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
               {/* Rótulo sem citar a SESA: este cabeçalho vale pra qualquer
                   roteiro, e nem todos são estaduais (farmácia é lei federal,
                   os ROI são da ANVISA). */}
-              <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><FileSearch className="h-4 w-4 text-primary" /> Avaliação Técnica</h2>
-              {checklist.secoes.map((secao) => (
-                <div key={secao.id} className="space-y-6">
-                  <h3 className="text-sm font-black text-[#262420] border-l-4 border-primary pl-4 uppercase">{secao.titulo}</h3>
-                  <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><FileSearch className="h-4 w-4 text-primary" /> Avaliação Técnica</h2>
+                <div className="flex items-center gap-2 no-print">
+                  <button type="button" onClick={expandirTodasSecoes} className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-[#6B6659] hover:bg-[#F1EEE4] transition-colors">Expandir tudo</button>
+                  <button type="button" onClick={recolherTodasSecoes} className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-[#6B6659] hover:bg-[#F1EEE4] transition-colors">Recolher tudo</button>
+                </div>
+              </div>
+              <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="space-y-4">
+              {checklist.secoes.map((secao) => {
+                const [respondidos, totalItens] = progressoSecao(secao);
+                return (
+                <AccordionItem key={secao.id} value={secao.id} className="border border-[#E4DFD1] rounded-xl px-5 bg-white">
+                  <AccordionTrigger className="hover:no-underline py-4">
+                    <div className="flex items-center gap-3 flex-1 text-left">
+                      <h3 className="text-sm font-black text-[#262420] border-l-4 border-primary pl-4 uppercase">{secao.titulo}</h3>
+                      <Badge className={cn("text-[10px] font-black shrink-0", respondidos === totalItens && totalItens > 0 ? "bg-emerald-100 text-emerald-700" : "bg-[#F1EEE4] text-[#6B6659]")}>
+                        {respondidos}/{totalItens}
+                      </Badge>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                  <div className="space-y-4 pt-2">
                     {secao.itens.map((item) => (
                       item.isHeader ? (
                         <p key={item.id} className="pt-2 text-[11px] font-black uppercase tracking-widest text-[#6B6659]">{item.text}</p>
@@ -2502,8 +3501,12 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                             {itemPhotos[item.id].map((photo, pIdx) => {
                               const size = photo.size || 'M';
                               return (
-                              <div key={pIdx} className={cn("relative group/photo rounded-xl overflow-hidden border border-[#E4DFD1] bg-white", size === 'G' && "col-span-2")}>
-                                <img src={photo.url} alt={`Evidência ${pIdx + 1}`} className={cn("block mx-auto w-full h-auto", PHOTO_SIZE_MAX_WIDTH[size])} />
+                              <div key={pIdx} className={cn("relative group/photo rounded-xl border border-[#E4DFD1] bg-white", size === 'G' && "col-span-2")}>
+                                {/* Arredondado na própria imagem, não por overflow-hidden no
+                                    contêiner: overflow-hidden cortava o cantinho dos botões de
+                                    excluir/tamanho (absolute, encostados no canto) — mesmo
+                                    problema do menu de base legal do Fiscal AI, corrigido antes. */}
+                                <img src={photo.url} alt={`Evidência ${pIdx + 1}`} className={cn("block mx-auto w-full h-auto rounded-xl", PHOTO_SIZE_MAX_WIDTH[size])} />
                                 {/* Sempre visíveis por padrão — em toque (celular/tablet, o uso
                                     predominante em campo) não existe estado de :hover pra revelar
                                     esses controles, então ficavam invisíveis e intocáveis. Some só
@@ -2531,8 +3534,11 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                       )
                     ))}
                   </div>
-                </div>
-              ))}
+                  </AccordionContent>
+                </AccordionItem>
+                );
+              })}
+              </Accordion>
             </div>
 
             <div className="h-px bg-[#F1EEE4]" />
@@ -2593,8 +3599,8 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                           {itemPhotos[item.id].map((photo, pIdx) => {
                             const size = photo.size || 'M';
                             return (
-                            <div key={pIdx} className={cn("relative group/photo rounded-xl overflow-hidden border border-[#E4DFD1] bg-white", size === 'G' && "col-span-2")}>
-                              <img src={photo.url} alt={`Evidência ${pIdx + 1}`} className={cn("block mx-auto w-full h-auto", PHOTO_SIZE_MAX_WIDTH[size])} />
+                            <div key={pIdx} className={cn("relative group/photo rounded-xl border border-[#E4DFD1] bg-white", size === 'G' && "col-span-2")}>
+                              <img src={photo.url} alt={`Evidência ${pIdx + 1}`} className={cn("block mx-auto w-full h-auto rounded-xl", PHOTO_SIZE_MAX_WIDTH[size])} />
                               <button type="button" onClick={() => handleRemovePhoto(item.id, pIdx)} className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-100 md:opacity-0 md:group-hover/photo:opacity-100 transition-opacity"><X className="h-3.5 w-3.5" /></button>
                               <div className="absolute bottom-1 left-1 flex gap-0.5 opacity-100 md:opacity-0 md:group-hover/photo:opacity-100 transition-opacity">
                                 {(['P', 'M', 'G'] as PhotoSize[]).map(s => (
@@ -2651,12 +3657,24 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             <div className="space-y-10 pt-4">
                 <div className="bg-[#262420] text-white p-8 rounded-lg shadow-2xl space-y-8">
                     <div className="flex items-center justify-between border-b border-white/10 pb-4"><div className="flex items-center gap-3"><div className="p-2.5 rounded-2xl bg-primary/20"><ClipboardList className="h-5 w-5 text-primary" /></div><div><h3 className="font-serif text-xl">Resumo da Vistoria</h3></div></div><Badge className="bg-primary text-white border-none text-[10px] font-black px-4 h-8">{Object.keys(answers).length} ITENS</Badge></div>
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between px-1"><p className="text-[10px] font-black uppercase text-white/60">Assinaturas</p><SelecionarAutoridadeParaFormulario onSelect={(f) => { setFiscais(prev => [...prev, f]); handleSaveDraft(false); }} /></div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {fiscais.map((f, i) => (<Button key={i} onClick={() => setSigningFiscalIndex(i)} variant="outline" className={cn("h-14 rounded-2xl justify-between px-5 font-bold text-[10px] uppercase border-white/10 bg-white/5 text-white", f.signature && "border-emerald-500/50 bg-emerald-500/10")}><span className="truncate">{(f as any).nome}</span>{f.signature ? <CheckCircle2 className="h-5 w-5 text-emerald-400" /> : <PenTool className="h-4 w-4 text-white/20" />}</Button>))}
-                            <Button onClick={() => setSigningResponsavel(true)} variant="outline" className={cn("h-14 rounded-2xl justify-between px-5 font-bold text-[10px] uppercase border-white/10 bg-white/5 text-white", idData.signatureResponsavel && "border-emerald-500/50 bg-emerald-500/10")}><span className="truncate">{idData.responsavel || "ASSINAR RESPONSÁVEL"}</span>{idData.signatureResponsavel ? <CheckCircle2 className="h-5 w-5 text-emerald-400" /> : <PenTool className="h-4 w-4 text-white/20" />}</Button>
+                    <div className="space-y-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase text-white/60">1. Equipe de Fiscalização</p>
+                          <p className="text-[11px] text-white/40 mt-0.5">Adicione quem esteve na vistoria e toque no nome para assinar.</p>
                         </div>
+                        {fiscais.length > 0 && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {fiscais.map((f, i) => (<Button key={i} onClick={() => setSigningFiscalIndex(i)} variant="outline" className={cn("h-14 rounded-2xl justify-between px-5 font-bold text-[10px] uppercase border-white/10 bg-white/5 text-white", f.signature && "border-emerald-500/50 bg-emerald-500/10")}><span className="truncate">{(f as any).nome}</span>{f.signature ? <CheckCircle2 className="h-5 w-5 text-emerald-400" /> : <PenTool className="h-4 w-4 text-white/20" />}</Button>))}
+                          </div>
+                        )}
+                        <SelecionarAutoridadeParaFormulario onSelect={(f) => { setFiscais(prev => [...prev, f]); handleSaveDraft(false); }} />
+                    </div>
+                    <div className="space-y-3 pt-2 border-t border-white/10">
+                        <div>
+                          <p className="text-[10px] font-black uppercase text-white/60">2. Ciência do Inspecionado</p>
+                          <p className="text-[11px] text-white/40 mt-0.5">O responsável pelo estabelecimento assina para confirmar o recebimento do relatório.</p>
+                        </div>
+                        <Button onClick={() => setSigningResponsavel(true)} variant="outline" className={cn("w-full sm:w-1/2 h-14 rounded-2xl justify-between px-5 font-bold text-[10px] uppercase border-white/10 bg-white/5 text-white", idData.signatureResponsavel && "border-emerald-500/50 bg-emerald-500/10")}><span className="truncate">{idData.responsavel || "Toque para assinar"}</span>{idData.signatureResponsavel ? <CheckCircle2 className="h-5 w-5 text-emerald-400" /> : <PenTool className="h-4 w-4 text-white/20" />}</Button>
                     </div>
                 </div>
             </div>

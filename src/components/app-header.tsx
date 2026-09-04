@@ -24,6 +24,7 @@ import { ProfileEditDialog } from "./profile-edit-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { requestChecklistExit } from "@/hooks/use-checklist-exit-guard"
+import { QuickAccessFab } from "@/components/quick-access-fab"
 import { auth } from "@/lib/firebase"
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth"
 import { useToast } from "@/hooks/use-toast"
@@ -166,6 +167,7 @@ export function AppHeader() {
 
   return (
     <>
+      <QuickAccessFab />
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-14 items-center justify-between">
           <div className="flex items-center gap-1">

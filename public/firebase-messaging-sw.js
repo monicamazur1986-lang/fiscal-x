@@ -23,8 +23,8 @@ messaging.onBackgroundMessage((payload) => {
 
   self.registration.showNotification(title, {
     body,
-    icon: '/fiscal_x_hq.png',
-    badge: '/fiscal_x_hq.png',
+    icon: '/app-icon-192.png',
+    badge: '/app-icon-192.png',
     data: { link },
   });
 });

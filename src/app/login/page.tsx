@@ -152,7 +152,7 @@ export default function LoginPage() {
           <div className="w-full lg:w-[56%] p-7 sm:p-10 lg:p-12 relative">
             <div className="flex lg:hidden flex-col items-center mb-8">
               <div className="rounded-[2rem] bg-white p-2 shadow-[0_10px_30px_-8px_rgba(38,36,32,0.25)] border border-[#E4DFD1] mb-4">
-                <SentinelaMascot width={96} height={96} className="rounded-[1.5rem]" />
+                <SentinelaMascot width={96} height={96} className="rounded-[1.5rem]" simplified />
               </div>
               <p className="font-black text-[#262420] text-sm tracking-tight">FISCAL-X</p>
               <p className="text-[9px] font-black uppercase tracking-[0.25em] text-[#A39D8C] mt-1.5">Vigilância Sanitária</p>

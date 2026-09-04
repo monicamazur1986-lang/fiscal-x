@@ -10,7 +10,8 @@ import {
   Sparkles,
   ClipboardList,
   MessageSquare,
-  Library
+  Library,
+  ShieldAlert
 } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/agenda", icon: CalendarDays, label: "Agenda" },
   { href: "/roteiros", icon: ClipboardList, label: "Roteiros" },
   { href: "/legislacao", icon: Library, label: "Biblioteca" },
+  { href: "/risco-sanitario", icon: ShieldAlert, label: "Risco Sanitário" },
 ]
 
 export function AppSidebar() {
@@ -36,7 +38,7 @@ export function AppSidebar() {
         <div className="flex h-14 items-center justify-center border-b px-2 lg:h-[60px] lg:justify-start lg:px-6">
           <Link href="/" className="flex items-center gap-2 group">
             <div className="scale-75 -ml-2 lg:scale-100 lg:-ml-0">
-              <SentinelaMascot className="w-12 h-12" />
+              <SentinelaMascot className="w-12 h-12" simplified />
             </div>
           </Link>
         </div>

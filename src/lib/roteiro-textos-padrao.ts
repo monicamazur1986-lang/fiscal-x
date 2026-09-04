@@ -21,57 +21,69 @@ import { format } from 'date-fns';
 
 const p = (text: string) => `<p style="margin:0 0 10px 0">${text}</p>`;
 
+// Modelo de referência (nem todo estabelecimento é de alto risco, nem todo
+// exige licença sanitária, nem toda inspeção decorre de protocolo aberto —
+// por isso o parágrafo de abertura não presume nenhuma dessas coisas, e o
+// fechamento fala em "documento sanitário correspondente" em vez de
+// "licença", cobrindo também parecer, auto de vistoria etc.):
+//
+// "No dia ___, a equipe de fiscalização da Vigilância Sanitária Municipal
+// realizou inspeção no estabelecimento ___, inscrito sob CNPJ/CPF ___, com a
+// finalidade de verificar as condições sanitárias do local.
+//
+// A inspeção foi conduzida de acordo com os critérios legais e técnicos
+// estabelecidos pela ___ (RDC/legislação aplicável), além das demais normas
+// sanitárias e protocolos de biossegurança pertinentes.
+//
+// Durante a vistoria, foram identificadas inconformidades que necessitam de
+// correção, a fim de garantir o cumprimento da legislação vigente e
+// assegurar a proteção da saúde de usuários e profissionais.
+//
+// Para que seja possível a emissão do documento sanitário correspondente, o
+// estabelecimento deverá promover a regularização integral das
+// recomendações e ajustes apontados, conforme os itens descritos a seguir."
 export const DEFAULT_INTRO_HTML: Record<string, string> = {
   alimentacao: [
-    p('No dia {{DATA}} a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {{ESTABELECIMENTO}}, CNPJ/CPF {{CNPJ}}, com a finalidade de verificar as condições sanitárias e proceder à renovação da licença sanitária, conforme protocolo.'),
-    p('O funcionamento do estabelecimento está condicionado à posse de licença sanitária válida, nos termos do Código de Saúde do Estado do Paraná (Lei Estadual nº 13.331/2001), com renovação anual.'),
-    p('A inspeção observou os critérios estabelecidos pela RDC nº 216/2004 da Anvisa (Boas Práticas para Serviços de Alimentação) e pela RDC nº 275/2002 da Anvisa (Procedimentos Operacionais Padronizados), além das demais normas sanitárias aplicáveis.'),
-    p('Durante a vistoria, foram identificadas inconformidades que necessitam de correção para garantir o cumprimento da legislação e a proteção da saúde de usuários e profissionais.'),
-    p('Para a emissão da licença sanitária, o estabelecimento deverá regularizar integralmente as recomendações apontadas, conforme os itens a seguir.'),
+    p('No dia {{DATA}}, a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {{ESTABELECIMENTO}}, inscrito sob CNPJ/CPF {{CNPJ}}, com a finalidade de verificar as condições sanitárias do local.'),
+    p('A inspeção foi conduzida de acordo com os critérios legais e técnicos estabelecidos pela RDC nº 216/2004 e pela RDC nº 275/2002 da Anvisa, além das demais normas sanitárias e protocolos de biossegurança pertinentes.'),
+    p('Durante a vistoria, foram identificadas inconformidades que necessitam de correção, a fim de garantir o cumprimento da legislação vigente e assegurar a proteção da saúde de usuários e profissionais.'),
+    p('Para que seja possível a emissão do documento sanitário correspondente, o estabelecimento deverá promover a regularização integral das recomendações e ajustes apontados, conforme os itens descritos a seguir.'),
   ].join(''),
   farmacia: [
-    p('No dia {{DATA}} a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {{ESTABELECIMENTO}}, CNPJ/CPF {{CNPJ}}, com a finalidade de verificar as condições sanitárias e proceder à renovação da licença sanitária, conforme protocolo.'),
-    p('O funcionamento de farmácias e drogarias está condicionado à posse de licença sanitária válida, nos termos do Código de Saúde do Estado do Paraná (Lei Estadual nº 13.331/2001) e da Lei Federal nº 5.991/1973, com renovação anual.'),
-    p('A inspeção foi conduzida com base na RDC nº 44/2009 da Anvisa (Boas Práticas Farmacêuticas) e, quando aplicável ao estabelecimento, na Portaria nº 344/1998 (medicamentos sujeitos a controle especial) e na RDC nº 22/2014, além das demais normas sanitárias aplicáveis ao setor.'),
-    p('Durante a vistoria, foram identificadas inconformidades que necessitam de correção para garantir o cumprimento da legislação e a proteção da saúde de usuários e profissionais.'),
-    p('Para a emissão da licença sanitária, o estabelecimento deverá regularizar integralmente as recomendações apontadas, conforme os itens a seguir.'),
+    p('No dia {{DATA}}, a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {{ESTABELECIMENTO}}, inscrito sob CNPJ/CPF {{CNPJ}}, com a finalidade de verificar as condições sanitárias do local.'),
+    p('A inspeção foi conduzida de acordo com os critérios legais e técnicos estabelecidos pela RDC nº 44/2009 da Anvisa e, quando aplicável, pela Portaria nº 344/1998, além da Lei Federal nº 5.991/1973 e das demais normas sanitárias e protocolos de biossegurança pertinentes.'),
+    p('Durante a vistoria, foram identificadas inconformidades que necessitam de correção, a fim de garantir o cumprimento da legislação vigente e assegurar a proteção da saúde de usuários e profissionais.'),
+    p('Para que seja possível a emissão do documento sanitário correspondente, o estabelecimento deverá promover a regularização integral das recomendações e ajustes apontados, conforme os itens descritos a seguir.'),
   ].join(''),
   'clinica-estetica-prudentopolis': [
-    p('No dia {{DATA}} a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {{ESTABELECIMENTO}}, CNPJ/CPF {{CNPJ}}, com a finalidade de verificar as condições sanitárias e proceder à renovação da licença sanitária, conforme protocolo.'),
-    p('Considerando que se trata de clínica de estética que realiza procedimentos invasivos, atividade classificada como de risco sanitário, o funcionamento está condicionado à posse de licença sanitária válida, nos termos do Código de Saúde do Estado do Paraná (Lei Estadual nº 13.331/2001) e do Decreto Estadual nº 5.711/2002, com renovação anual.'),
-    p('A inspeção foi conduzida com base na RDC nº 63/2011 da Anvisa (Boas Práticas de Funcionamento de Serviços de Saúde), na RDC nº 15/2012 (processamento de produtos para saúde) e na RDC nº 222/2018 (gerenciamento de resíduos de serviços de saúde), além das demais normas de biossegurança aplicáveis a procedimentos invasivos.'),
-    p('Durante a vistoria, foram identificadas inconformidades que necessitam de correção para garantir o cumprimento da legislação e a proteção da saúde de usuários, profissionais e pacientes.'),
-    p('Para a emissão da licença sanitária, o estabelecimento deverá regularizar integralmente as recomendações apontadas, conforme os itens a seguir.'),
+    p('No dia {{DATA}}, a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {{ESTABELECIMENTO}}, inscrito sob CNPJ/CPF {{CNPJ}}, com a finalidade de verificar as condições sanitárias do local.'),
+    p('A inspeção foi conduzida de acordo com os critérios legais e técnicos estabelecidos pela RDC nº 63/2011, pela RDC nº 15/2012 e pela RDC nº 222/2018 da Anvisa, além das demais normas sanitárias e protocolos de biossegurança pertinentes a procedimentos invasivos.'),
+    p('Durante a vistoria, foram identificadas inconformidades que necessitam de correção, a fim de garantir o cumprimento da legislação vigente e assegurar a proteção da saúde de usuários, profissionais e pacientes.'),
+    p('Para que seja possível a emissão do documento sanitário correspondente, o estabelecimento deverá promover a regularização integral das recomendações e ajustes apontados, conforme os itens descritos a seguir.'),
   ].join(''),
   default: [
-    p('No dia {{DATA}} a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {{ESTABELECIMENTO}}, CNPJ/CPF {{CNPJ}}, com a finalidade de verificar as condições sanitárias do estabelecimento e proceder à renovação da licença sanitária, conforme protocolo.'),
-    p('Considerando que se trata de atividade classificada como de alto risco sanitário, nos termos da Resolução SESA nº 1024/2020, o funcionamento está condicionado à posse de licença sanitária válida, cuja renovação deve ser realizada anualmente.'),
-    p('A inspeção foi conduzida de acordo com os critérios legais e técnicos estabelecidos pela RDC 1002/25 da Anvisa, além das demais normas sanitárias e protocolos de biossegurança aplicáveis aos serviços de saúde.'),
-    p('Durante a vistoria realizada, foram identificadas algumas inconformidades que necessitam de correção, a fim de garantir o cumprimento da legislação vigente e assegurar a proteção da saúde de usuários e profissionais.'),
-    p('Dessa forma, para que seja possível a emissão da licença sanitária, o estabelecimento deverá promover a regularização integral das recomendações e ajustes apontados, conforme os itens descritos a seguir.'),
+    p('No dia {{DATA}}, a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {{ESTABELECIMENTO}}, inscrito sob CNPJ/CPF {{CNPJ}}, com a finalidade de verificar as condições sanitárias do local.'),
+    p('A inspeção foi conduzida de acordo com os critérios legais e técnicos estabelecidos na legislação sanitária aplicável às atividades do estabelecimento, além das demais normas e protocolos de biossegurança pertinentes.'),
+    p('Durante a vistoria, foram identificadas inconformidades que necessitam de correção, a fim de garantir o cumprimento da legislação vigente e assegurar a proteção da saúde de usuários e profissionais.'),
+    p('Para que seja possível a emissão do documento sanitário correspondente, o estabelecimento deverá promover a regularização integral das recomendações e ajustes apontados, conforme os itens descritos a seguir.'),
   ].join(''),
 };
 
 export const DEFAULT_CONCLUSAO_HTML: Record<string, string> = {
   farmacia: [
-    p('O estabelecimento deverá sanar todas as não conformidades apontadas neste relatório no prazo máximo de {{PRAZO_DIAS}} dias, contados a partir do recebimento do documento{{BASE_LEGAL_PRAZO}}.'),
-    p('O fato de determinada exigência não constar neste roteiro não exime o estabelecimento de observar as demais obrigações previstas na legislação sanitária vigente, em especial a Lei Federal nº 5.991/1973 e a RDC nº 44/2009 da Anvisa.'),
-    p('Para a concessão ou renovação da licença sanitária, o estabelecimento deve manter, de forma permanente, condições higiênico-sanitárias e estruturais em conformidade com a legislação vigente, além de toda a documentação pertinente ao desenvolvimento de suas atividades.'),
-    p('Caso o estabelecimento não cumpra o prazo estipulado ou não formalize pedido de prorrogação, será lavrado um Termo de Intimação ou de Infração, fundamentado na legislação vigente, determinando a regularização das situações de não conformidade, podendo, nos casos de maior gravidade, resultar em interdição total ou parcial do estabelecimento e/ou apreensão de produtos.'),
-    p('A Vigilância Sanitária Municipal acompanhará a implementação das medidas corretivas e permanecerá disponível para prestar orientações técnicas. Em caso de dúvidas, estamos à disposição.'),
+    p('O estabelecimento deverá sanar todas as não conformidades apontadas neste relatório no prazo máximo de {{PRAZO_DIAS}} dias, contados do recebimento deste documento{{BASE_LEGAL_PRAZO}}, mantendo permanentemente as condições exigidas pela Lei Federal nº 5.991/1973 e pela RDC nº 44/2009 da Anvisa.'),
+    p('O não cumprimento do prazo, sem pedido de prorrogação, resultará em Termo de Intimação ou de Infração, podendo levar à interdição do estabelecimento e/ou à apreensão de produtos nos casos mais graves.'),
+    p('A Vigilância Sanitária Municipal acompanhará a regularização e permanece à disposição para orientações.'),
   ].join(''),
   'clinica-estetica-prudentopolis': [
-    p('O estabelecimento deverá sanar todas as não conformidades apontadas neste relatório no prazo máximo de {{PRAZO_DIAS}} dias, contados a partir do recebimento do documento{{BASE_LEGAL_PRAZO}}.'),
-    p('O fato de determinada exigência não constar neste roteiro não exime o estabelecimento de observar as demais obrigações previstas na legislação sanitária vigente, em especial a RDC nº 63/2011, a RDC nº 15/2012 e a RDC nº 222/2018 da Anvisa.'),
-    p('Para a concessão ou renovação da licença sanitária, o estabelecimento deve manter, de forma permanente, condições de biossegurança, esterilização e infraestrutura compatíveis com os procedimentos invasivos realizados, além de toda a documentação técnica exigida.'),
-    p('Caso o estabelecimento não cumpra o prazo estipulado ou não formalize pedido de prorrogação, será lavrado um Termo de Intimação ou de Infração, fundamentado na legislação vigente, determinando a regularização das situações de não conformidade, podendo, nos casos de risco à saúde do paciente ou do trabalhador, resultar em interdição total ou parcial do estabelecimento.'),
-    p('A Vigilância Sanitária Municipal acompanhará a implementação das medidas corretivas e permanecerá disponível para prestar orientações técnicas. Em caso de dúvidas, estamos à disposição.'),
+    p('O estabelecimento deverá sanar todas as não conformidades apontadas neste relatório no prazo máximo de {{PRAZO_DIAS}} dias, contados do recebimento deste documento{{BASE_LEGAL_PRAZO}}, mantendo permanentemente as condições de biossegurança, esterilização e infraestrutura exigidas pela RDC nº 63/2011, pela RDC nº 15/2012 e pela RDC nº 222/2018 da Anvisa.'),
+    p('O não cumprimento do prazo, sem pedido de prorrogação, resultará em Termo de Intimação ou de Infração, podendo levar à interdição do estabelecimento nos casos de risco à saúde do paciente ou do trabalhador.'),
+    p('A Vigilância Sanitária Municipal acompanhará a regularização e permanece à disposição para orientações.'),
   ].join(''),
   default: [
-    p('O estabelecimento deverá sanar todas as não conformidades apontadas neste relatório no prazo máximo de {{PRAZO_DIAS}} dias, contados a partir do recebimento do documento{{BASE_LEGAL_PRAZO}}.'),
-    p('Caso o estabelecimento não cumpra o prazo estipulado ou não formalize pedido de prorrogação, será lavrado um Termo de Intimação ou de Infração, fundamentado na legislação vigente, determinando a regularização das situações de não conformidade.'),
-    p('A Vigilância Sanitária Municipal acompanhará a implementação das medidas corretivas e permanecerá disponível para prestar orientações técnicas. Havendo necessidade devidamente justificada, o estabelecimento poderá solicitar prorrogação dos prazos, a qual será analisada e deliberada conforme a legislação aplicável.'),
-    p('Em caso de dúvidas, estamos à disposição.'),
+    p('O estabelecimento deverá sanar todas as não conformidades apontadas neste relatório no prazo máximo de {{PRAZO_DIAS}} dias, contados do recebimento deste documento{{BASE_LEGAL_PRAZO}}.'),
+    p('O não cumprimento do prazo, sem pedido de prorrogação devidamente justificado, resultará em Termo de Intimação ou de Infração, conforme a legislação vigente.'),
+    p('A Vigilância Sanitária Municipal acompanhará a regularização e permanece à disposição para orientações.'),
   ].join(''),
 };
 

@@ -51,7 +51,7 @@ export function SelecionarAutoridadeParaFormulario({ onSelect }: { onSelect: (au
             <DialogTrigger asChild>
                  <Button variant="ghost" size="sm" className="no-print h-9 gap-1.5 px-4 rounded-xl font-black text-[9px] uppercase tracking-widest menu-metallic-cobalt text-white shadow-lg shadow-blue-500/20 active:scale-95 transition-all shrink-0">
                     <UserPlus className="h-4 w-4" />
-                    + FISCAL
+                    Adicionar Fiscal
                 </Button>
             </DialogTrigger>
             <DialogContent 
@@ -65,7 +65,7 @@ export function SelecionarAutoridadeParaFormulario({ onSelect }: { onSelect: (au
                         <div>
                             <DialogTitle className="text-xl font-black uppercase italic tracking-tighter">Fiscais Disponíveis</DialogTitle>
                             <DialogDescription className="text-zinc-400 text-[10px] font-bold uppercase tracking-widest mt-1">
-                                Selecione o fiscal para adicionar à autuação
+                                Toque no nome para adicionar como assinante
                             </DialogDescription>
                         </div>
                     </div>

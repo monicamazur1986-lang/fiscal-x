@@ -35,34 +35,22 @@ import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
 import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { Badge } from "@/components/ui/badge"
-import legislacaoData from "@/lib/legislacao.json"
+import { getBaseLawOptions, getIndividualLawOptions, toggleLawPreference as toggleLawPreferenceValue, type LawPreference } from "@/lib/legal-search"
 
 type ReportType = 'intimação' | 'infração' | 'apreensão' | 'interdição';
-type LawPreference = 'todas' | 'municipal' | 'estadual' | string;
 
-const lawOptions = [
-  { id: 'estadual', label: 'Código Sanitário Estadual', icon: BookOpen },
-  { id: 'municipal', label: 'Código Municipal', icon: Gavel },
-  { id: 'todas', label: 'Todo o banco de dados', icon: Scale },
-] as const;
-
-const individualLawOptions = Object.entries(
-  legislacaoData as Record<string, {
-    titulo: string;
-    municipioId?: string;
-    biblioteca?: { esfera: 'municipal' | 'estadual' | 'federal'; categoria: string };
-  }>
-)
-  .filter(([, law]) => !!law.biblioteca)
-  .map(([lawKey, law]) => ({
-    id: lawKey,
-    label: law.titulo,
-    group: law.municipioId ? 'Código Municipal' : 'Código Sanitário Estadual',
-  }))
-  .sort((a, b) => a.label.localeCompare(b.label));
+// Ícone de cada opção "Geral" — as opções em si (inclusive se "Código
+// Municipal" aparece) vêm de getBaseLawOptions, que já sabe que só
+// Prudentópolis tem código municipal cadastrado.
+const lawOptionIcons: Record<string, typeof BookOpen> = {
+  estadual: BookOpen,
+  municipal: Gavel,
+  todas: Scale,
+};
 
 interface GerarRascunhoProps {
   caseDescription: string;
@@ -96,6 +84,9 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
   const { toast } = useToast()
   const { profile } = useAuth()
   const recognitionRef = useRef<any>(null)
+
+  const lawOptions = getBaseLawOptions(profile?.municipioId)
+  const individualLawOptions = getIndividualLawOptions()
 
   useEffect(() => {
     setError(null);
@@ -139,29 +130,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
   }
 
   const toggleLawPreference = (value: LawPreference) => {
-    setLawPreferences(prev => {
-      if (value === 'todas') {
-        return prev.includes('todas') ? ['estadual'] : ['todas'];
-      }
-
-      if (value === 'estadual' || value === 'municipal') {
-        const next = prev.includes(value)
-          ? prev.filter(item => item !== value)
-          : [...prev, value];
-
-        if (next.length === 0) return ['estadual'];
-        if (next.includes('todas')) return next.filter(item => item !== 'todas');
-        return next;
-      }
-
-      const next = prev.includes(value)
-        ? prev.filter(item => item !== value)
-        : [...prev, value];
-
-      if (next.length === 0) return ['estadual'];
-      if (next.includes('todas')) return next.filter(item => item !== 'todas');
-      return next;
-    });
+    setLawPreferences(prev => toggleLawPreferenceValue(prev, value));
   };
 
   const handleGenerate = async () => {
@@ -338,74 +307,81 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
 
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-zinc-500">Base legal</Label>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setIsLegalMenuOpen((prev) => !prev)}
-                  className="flex h-11 w-full items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-3 text-left text-sm font-medium text-zinc-700 transition-colors hover:border-primary/50"
+              {/* Popover em vez de uma div "absolute" solta: o Card ao redor
+                  tem overflow-hidden (pros cantos arredondados do rodapé), o
+                  que cortava o menu antes de mostrar as últimas opções — o
+                  Popover do Radix renderiza o conteúdo num portal, fora da
+                  árvore do Card, então nada mais corta o menu. */}
+              <Popover open={isLegalMenuOpen} onOpenChange={setIsLegalMenuOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex h-11 w-full items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-3 text-left text-sm font-medium text-zinc-700 transition-colors hover:border-primary/50"
+                  >
+                    <span className="truncate">{legalSelectionSummary}</span>
+                    <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', isLegalMenuOpen && 'rotate-180')} />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  className="w-[var(--radix-popover-trigger-width)] p-2 rounded-xl border-zinc-200 shadow-[0_20px_50px_rgba(0,0,0,0.18)] max-h-[55vh] overflow-y-auto custom-scrollbar overscroll-contain"
                 >
-                  <span className="truncate">{legalSelectionSummary}</span>
-                  <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', isLegalMenuOpen && 'rotate-180')} />
-                </button>
+                  <div className="space-y-2">
+                    <div className="px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Geral</div>
+                    {lawOptions.map((opt) => {
+                      const selected = lawPreferences.includes(opt.id as LawPreference);
+                      const OptIcon = lawOptionIcons[opt.id] || Scale;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            toggleLawPreference(opt.id as LawPreference);
+                          }}
+                          className={cn(
+                            'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors',
+                            selected ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
+                          )}
+                        >
+                          <span className="flex items-center gap-2">
+                            <OptIcon className="h-3.5 w-3.5" />
+                            {opt.label}
+                          </span>
+                          {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                        </button>
+                      );
+                    })}
 
-                {isLegalMenuOpen && (
-                  <div className="absolute z-50 mt-2 w-full rounded-xl border border-zinc-200 bg-white p-2 shadow-[0_20px_50px_rgba(0,0,0,0.18)] max-h-[55vh] overflow-y-auto custom-scrollbar overscroll-contain">
-                    <div className="space-y-2">
-                      <div className="px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Geral</div>
-                      {lawOptions.map((opt) => {
-                        const selected = lawPreferences.includes(opt.id as LawPreference);
+                    <div className="my-1 h-px bg-zinc-200" />
+
+                    <div className="px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Legislação opcional (biblioteca)</div>
+                    <div className="space-y-2 pr-1">
+                      {individualLawOptions.map((opt) => {
+                        const selected = lawPreferences.includes(opt.id);
                         return (
                           <button
                             key={opt.id}
                             type="button"
                             onClick={() => {
-                              toggleLawPreference(opt.id as LawPreference);
+                              toggleLawPreference(opt.id);
                             }}
                             className={cn(
                               'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors',
                               selected ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
                             )}
                           >
-                            <span className="flex items-center gap-2">
-                              <opt.icon className="h-3.5 w-3.5" />
-                              {opt.label}
-                            </span>
+                            <div className="flex flex-col">
+                              <span>{opt.label}</span>
+                              <span className="text-[9px] uppercase text-zinc-500">{opt.group}</span>
+                            </div>
                             {selected ? <Check className="h-3.5 w-3.5" /> : null}
                           </button>
                         );
                       })}
-
-                      <div className="my-1 h-px bg-zinc-200" />
-
-                      <div className="px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Leis individuais</div>
-                      <div className="space-y-2 pr-1">
-                        {individualLawOptions.map((opt) => {
-                          const selected = lawPreferences.includes(opt.id);
-                          return (
-                            <button
-                              key={opt.id}
-                              type="button"
-                              onClick={() => {
-                                toggleLawPreference(opt.id);
-                              }}
-                              className={cn(
-                                'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors',
-                                selected ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
-                              )}
-                            >
-                              <div className="flex flex-col">
-                                <span>{opt.label}</span>
-                                <span className="text-[9px] uppercase text-zinc-500">{opt.group}</span>
-                              </div>
-                              {selected ? <Check className="h-3.5 w-3.5" /> : null}
-                            </button>
-                          );
-                        })}
-                      </div>
                     </div>
                   </div>
-                )}
-              </div>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 

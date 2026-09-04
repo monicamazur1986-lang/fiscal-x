@@ -24,14 +24,19 @@ export const metadata: Metadata = {
     title: 'Fiscal-X',
   },
   icons: {
+    // Ícone próprio (escudo + check) gerado em tamanho real por resolução —
+    // antes todos os tamanhos declarados apontavam pro mesmo JPEG grande da
+    // ilustração completa (o navegador só reamostrava), e o favicon.ico
+    // estático em src/app/favicon.ico tinha uma versão ainda mais antiga
+    // gravada nos bytes, por isso a aba mostrava uma imagem desatualizada
+    // mesmo depois de trocar o arquivo do logo. Query ?v= força os
+    // navegadores/PWA a descartar qualquer cópia em cache.
     icon: [
-      { url: '/logo-fiscalx-oficial.jpeg?v=20260811', sizes: '16x16', type: 'image/jpeg' },
-      { url: '/logo-fiscalx-oficial.jpeg?v=20260811', sizes: '32x32', type: 'image/jpeg' },
-      { url: '/logo-fiscalx-oficial.jpeg?v=20260811', sizes: '192x192', type: 'image/jpeg' },
-      { url: '/logo-fiscalx-oficial.jpeg?v=20260811', sizes: '512x512', type: 'image/jpeg' },
+      { url: '/app-icon-192.png?v=20260903', sizes: '192x192', type: 'image/png' },
+      { url: '/app-icon-512.png?v=20260903', sizes: '512x512', type: 'image/png' },
     ],
-    shortcut: '/logo-fiscalx-oficial.jpeg?v=20260811',
-    apple: '/logo-fiscalx-oficial.jpeg?v=20260811',
+    shortcut: '/favicon.ico?v=20260903',
+    apple: '/app-icon-180.png?v=20260903',
   },
 };
 

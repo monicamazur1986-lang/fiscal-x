@@ -2,8 +2,13 @@ import { ImageResponse } from 'next/og'
 
 export const runtime = 'edge'
 export const size = { width: 512, height: 512 }
-export const contentType = 'image/jpeg'
+export const contentType = 'image/png'
 
+// Ícone do app (aba do navegador, PWA, atalho instalado) — marca própria
+// (escudo + check, cores da marca), não mais o recorte da ilustração
+// completa do mascote (que tinha texto/traços finos ilegíveis em tamanho
+// pequeno). A arte cheia do mascote continua em logo-fiscalx-oficial.jpeg,
+// usada só em espaços grandes (login, etc.), não como ícone.
 export default function Icon() {
   return new ImageResponse(
     (
@@ -14,17 +19,17 @@ export default function Icon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#ffffff',
+          background: '#0B3733',
           overflow: 'hidden',
         }}
       >
         <img
-          src="/logo-fiscalx-oficial.jpeg"
+          src="/app-icon-512.png"
           alt=""
           style={{
             width: '100%',
             height: '100%',
-            objectFit: 'cover',
+            objectFit: 'contain',
             display: 'block',
           }}
         />

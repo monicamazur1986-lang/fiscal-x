@@ -1247,7 +1247,6 @@
     "titulo": "Resolução SESA nº 700/2013",
     "descricao": "Salão de Beleza, Barbearia e Depilação",
     "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Servicos-de-Saude",
-    "biblioteca": { "esfera": "estadual", "categoria": "Resolução" },
     "artigos": [
       {
         "id": "sesa-700-13-art5",
@@ -1400,7 +1399,6 @@
     "titulo": "Resolução SESA nº 590/2014",
     "descricao": "Higiene e segurança em estabelecimentos e serviços sob vigilância sanitária no Paraná",
     "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Servicos-de-Saude",
-    "biblioteca": { "esfera": "estadual", "categoria": "Resolução" },
     "artigos": [
       {
         "id": "sesa-590-14-art1",
@@ -1420,7 +1418,6 @@
     "titulo": "RDC ANVISA nº 46/2013",
     "descricao": "Produtos de tabaco, cigarros eletrônicos e dispositivos correlatos",
     "linkOficial": "https://www.gov.br/anvisa/pt-br",
-    "biblioteca": { "esfera": "federal", "categoria": "RDC" },
     "artigos": [
       {
         "id": "rdc-46-13-art1",

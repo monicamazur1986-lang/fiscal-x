@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { FileWarning, LogOut, Loader2 } from "lucide-react";
 import { Button } from "./ui/button";
+import { BetaNoticeGate } from "./beta-notice-gate";
 
 /**
  * AuthGuard - Proteção de rotas resiliente.
@@ -70,6 +71,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (profile?.role === 'root' || isAuthorized) {
+    if (!profile?.betaTermsAcceptedAt) {
+      return <BetaNoticeGate />;
+    }
     return <>{children}</>;
   }
 
