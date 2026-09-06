@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
-import { Sparkles, Loader2, Check, Trash2, FileText, Ban, PackageSearch, AlertOctagon, Scale, BookOpen, Mic, MicOff, AlertCircle, X, Gavel, ChevronDown } from "lucide-react"
+import { useState, useRef, useEffect, useMemo } from "react"
+import { Sparkles, Loader2, Check, Trash2, FileText, Ban, PackageSearch, AlertOctagon, Scale, BookOpen, Mic, MicOff, AlertCircle, X, Gavel, ChevronDown, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -13,6 +13,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
 import { generateIntimacaoDraft, type MatchedArticle } from "@/ai/flows/generate-intimacao-draft"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
@@ -20,7 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils"
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
 import { useAuth } from "@/hooks/use-auth"
-import { getBaseLawOptions, getIndividualLawOptions, toggleLawPreference as toggleLawPreferenceValue, type LawPreference } from "@/lib/legal-search"
+import { getBaseLawOptions, getIndividualLawOptions, toggleLawPreference as toggleLawPreferenceValue, searchLegislacao, buildFundamentacaoFromArticles, type LawPreference } from "@/lib/legal-search"
 
 interface Props {
   onApply: (text: string, fundamentacao?: string) => void;
@@ -50,12 +51,39 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
   const [isUppercase, setIsUppercase] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [isLegalMenuOpen, setIsLegalMenuOpen] = useState(false)
-  
+  const [addArticleQuery, setAddArticleQuery] = useState("")
+
   const recognitionRef = useRef<any>(null)
   const { profile } = useAuth()
 
   const lawOptions = getBaseLawOptions(profile?.municipioId)
-  const individualLawOptions = getIndividualLawOptions()
+  const individualLawOptions = getIndividualLawOptions(profile?.municipioId)
+
+  // Fiscal pode corrigir a fundamentação que a IA sugeriu — remover um artigo
+  // que não se aplica, ou adicionar um que ela deixou passar (mesmo padrão de
+  // gerar-rascunho.tsx).
+  const addArticleResults = useMemo(() => {
+    if (addArticleQuery.trim().length < 3) return [];
+    return searchLegislacao(addArticleQuery, { pref: lawPreferences, municipioId: profile?.municipioId || undefined, limit: 6 })
+      .filter((a) => !matchedArticles.some((m) => m.id === a.id));
+  }, [addArticleQuery, lawPreferences, profile?.municipioId, matchedArticles]);
+
+  const removerArtigoFundamentacao = (id: string) => {
+    setMatchedArticles((prev) => {
+      const next = prev.filter((a) => a.id !== id);
+      setFundamentacao(buildFundamentacaoFromArticles(next));
+      return next;
+    });
+  };
+
+  const adicionarArtigoFundamentacao = (artigo: ReturnType<typeof searchLegislacao>[number]) => {
+    setMatchedArticles((prev) => {
+      const next = [...prev, { id: artigo.id, label: artigo.label, lawTitle: artigo.lawTitle, texto: artigo.texto }];
+      setFundamentacao(buildFundamentacaoFromArticles(next));
+      return next;
+    });
+    setAddArticleQuery("");
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
@@ -305,27 +333,64 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
                 <div className="bg-slate-900 p-4 rounded-xl text-white border-l-4 border-l-primary">
                    <p className="text-[10px] font-semibold uppercase tracking-wide text-primary mb-1">Enquadramento detectado</p>
                    <p className="text-sm font-medium leading-snug">{fundamentacao}</p>
-                   {matchedArticles.length > 0 && (
-                       <Popover>
-                           <PopoverTrigger asChild>
-                               <button type="button" className="mt-2.5 flex items-center gap-1.5 text-[11px] font-medium text-primary hover:text-primary/80 transition-colors">
-                                   <BookOpen className="h-3.5 w-3.5" /> Conferir texto integral ({matchedArticles.length})
-                               </button>
-                           </PopoverTrigger>
-                           <PopoverContent align="start" className="w-[min(26rem,90vw)] max-h-[50vh] overflow-y-auto p-0 bg-white border-zinc-200 rounded-xl shadow-xl">
-                               <div className="p-4 space-y-3">
-                                   <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Base usada na fundamentação</p>
-                                   {matchedArticles.map((art) => (
-                                       <div key={art.id} className="border border-zinc-100 rounded-lg p-3 space-y-1 bg-zinc-50/60">
-                                           <p className="text-[10px] font-semibold uppercase text-primary tracking-wide">{art.lawTitle}</p>
-                                           <p className="text-xs font-semibold text-zinc-700">{art.label}</p>
-                                           <p className="text-xs text-zinc-600 leading-relaxed">{art.texto}</p>
-                                       </div>
-                                   ))}
+                   <Popover>
+                       <PopoverTrigger asChild>
+                           <button type="button" className="mt-2.5 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors">
+                               <BookOpen className="h-3.5 w-3.5" /> Conferir e ajustar base legal ({matchedArticles.length})
+                           </button>
+                       </PopoverTrigger>
+                       <PopoverContent align="start" className="w-[min(26rem,90vw)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto p-0 bg-white border-zinc-200 rounded-xl shadow-xl">
+                           <div className="p-4 space-y-3">
+                               <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Base usada na fundamentação</p>
+                               {matchedArticles.length === 0 && (
+                                   <p className="text-xs text-zinc-400 italic">Nenhum artigo selecionado — busque abaixo pra adicionar.</p>
+                               )}
+                               {matchedArticles.map((art) => (
+                                   <div key={art.id} className="border border-zinc-100 rounded-lg p-3 space-y-1 bg-zinc-50/60 relative">
+                                       <button
+                                           type="button"
+                                           onClick={() => removerArtigoFundamentacao(art.id)}
+                                           aria-label={`Remover ${art.label} da fundamentação`}
+                                           className="absolute right-2 top-2 h-5 w-5 flex items-center justify-center text-zinc-300 hover:text-rose-500 transition-colors"
+                                       >
+                                           <X className="h-3.5 w-3.5" />
+                                       </button>
+                                       <p className="text-[10px] font-semibold uppercase text-primary tracking-wide pr-6">{art.lawTitle}</p>
+                                       <p className="text-xs font-semibold text-zinc-700">{art.label}</p>
+                                       <p className="text-xs text-zinc-600 leading-relaxed">{art.texto}</p>
+                                   </div>
+                               ))}
+
+                               <div className="pt-2 border-t border-zinc-100 space-y-1.5">
+                                   <Input
+                                       value={addArticleQuery}
+                                       onChange={(e) => setAddArticleQuery(e.target.value)}
+                                       placeholder="Buscar outro artigo pra adicionar..."
+                                       className="h-8 text-xs"
+                                   />
+                                   {addArticleQuery.trim().length >= 3 && (
+                                       addArticleResults.length === 0 ? (
+                                           <p className="text-[11px] text-zinc-400 px-1">Nenhum artigo encontrado.</p>
+                                       ) : (
+                                           <div className="max-h-40 overflow-y-auto space-y-1">
+                                               {addArticleResults.map((a) => (
+                                                   <button
+                                                       key={a.id}
+                                                       type="button"
+                                                       onClick={() => adicionarArtigoFundamentacao(a)}
+                                                       className="w-full text-left flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded-lg hover:bg-zinc-100 transition-colors"
+                                                   >
+                                                       <span className="truncate"><strong>{a.label}</strong> — {a.lawTitle}</span>
+                                                       <Plus className="h-3.5 w-3.5 shrink-0 text-primary" />
+                                                   </button>
+                                               ))}
+                                           </div>
+                                       )
+                                   )}
                                </div>
-                           </PopoverContent>
-                       </Popover>
-                   )}
+                           </div>
+                       </PopoverContent>
+                   </Popover>
                 </div>
               )}
               <div className="space-y-1.5">

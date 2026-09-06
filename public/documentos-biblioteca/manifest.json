@@ -1,5 +1,5 @@
 {
-  "version": "2.6.0",
+  "version": "2.7.0",
   "documents": [
     {
       "id": "codigo-sanitario-estadual-pr",
@@ -7,6 +7,7 @@
       "path": "/documentos-biblioteca/codigo_sanitario_estadual.pdf",
       "esfera": "estadual",
       "categoria": "Código",
+      "tema": "Normas Gerais e Institucionais",
       "descricao": "Lei Estadual nº 13.331/2001 e Decreto nº 5.711/2002 — organização, regulamentação, fiscalização e infrações sanitárias no Estado do Paraná.",
       "keywords": "codigo sanitario, lei 13331, decreto 5711, parana, infracoes sanitarias, vigilancia sanitaria, sus, licenca sanitaria, penalidades"
     },
@@ -16,6 +17,7 @@
       "path": "/documentos-biblioteca/RDC%201002%202025.pdf",
       "esfera": "federal",
       "categoria": "RDC",
+      "tema": "Serviços de Saúde (Assistência)",
       "descricao": "Resolução da Diretoria Colegiada da ANVISA que estabelece requisitos de boas práticas para serviços de assistência odontológica e laboratórios de prótese dentária em todo o país.",
       "keywords": "rdc 1002, anvisa, odontologia, boas praticas, biosseguranca, clinica odontologica, protese dentaria"
     },
@@ -25,6 +27,7 @@
       "path": "/documentos-biblioteca/rdc-216-2004-servicos-alimentacao.pdf",
       "esfera": "federal",
       "categoria": "RDC",
+      "tema": "Alimentos e Bebidas",
       "descricao": "Resolução da ANVISA que aprova o Regulamento Técnico de Boas Práticas para Serviços de Alimentação, com os requisitos higiênico-sanitários gerais aplicáveis em todo o território nacional. É a base do roteiro de inspeção de Serviços de Alimentação.",
       "keywords": "rdc 216, anvisa, alimentos, servicos de alimentacao, boas praticas, higiene, manipulacao de alimentos, restaurante, lanchonete, cozinha, manipulador, pop, controle sanitario"
     },
@@ -34,6 +37,7 @@
       "path": "/documentos-biblioteca/rdc%2015.pdf",
       "esfera": "federal",
       "categoria": "RDC",
+      "tema": "Serviços de Saúde (Assistência)",
       "descricao": "Normas de boas práticas em serviços de saúde e critérios técnicos para a organização, estrutura e funcionamento dos estabelecimentos de saúde.",
       "keywords": "rdc 15, anvisa, boas praticas servicos de saude, clinica hospital atendimento"
     },
@@ -43,6 +47,7 @@
       "path": "/documentos-biblioteca/rdc%2063.pdf",
       "esfera": "federal",
       "categoria": "RDC",
+      "tema": "Serviços de Saúde (Assistência)",
       "descricao": "Normas gerais de boas práticas e requisitos sanitários para funcionamento de serviços de saúde, incluindo consultórios, clínicas e estabelecimentos correlatos.",
       "keywords": "rdc 63, anvisa, servicos de saude, boas praticas, consultorio, clinica, higiene"
     },
@@ -52,6 +57,7 @@
       "path": "/documentos-biblioteca/rdc%2067%20manipulaca.pdf",
       "esfera": "federal",
       "categoria": "RDC",
+      "tema": "Alimentos e Bebidas",
       "descricao": "Base regulatória para boas práticas em manipulação e processamento de alimentos, com foco em higiene, segurança e controle operacional.",
       "keywords": "rdc 67, anvisa, manipulacao de alimentos, boas praticas, higiene, alimentos, processo"
     },
@@ -61,6 +67,7 @@
       "path": "/documentos-biblioteca/rdc%20222.pdf",
       "esfera": "federal",
       "categoria": "RDC",
+      "tema": "Saneamento, Resíduos e Meio Ambiente",
       "descricao": "Regulamentação sanitária aplicada à estruturas, processos e procedimentos dos serviços de saúde e unidades relacionadas.",
       "keywords": "rdc 222, anvisa, servicos de saude, regulamento tecnico, boas praticas"
     },
@@ -70,6 +77,7 @@
       "path": "/documentos-biblioteca/rdc%20471.pdf",
       "esfera": "federal",
       "categoria": "RDC",
+      "tema": "Normas Gerais e Institucionais",
       "descricao": "Norma sanitária da ANVISA que reforça exigências técnicas e de controle para serviços e estabelecimentos sob vigilância sanitária.",
       "keywords": "rdc 471, anvisa, vigilância sanitária, boas praticas, normas tecnicas, segurança"
     },
@@ -79,6 +87,7 @@
       "path": "/documentos-biblioteca/rdc%20611.pdf",
       "esfera": "federal",
       "categoria": "RDC",
+      "tema": "Normas Gerais e Institucionais",
       "descricao": "Norma complementar de exigências sanitárias aplicáveis a serviços e atividades sob vigilância sanitária, com foco em requisitos técnicos e de controle.",
       "keywords": "rdc 611, anvisa, requisitos tecnicos, vigilância sanitária, controle sanitário"
     },
@@ -88,6 +97,7 @@
       "path": "/documentos-biblioteca/344.pdf",
       "esfera": "federal",
       "categoria": "Portaria",
+      "tema": "Farmácias e Medicamentos",
       "descricao": "Portaria de regulamentação sanitária referente a medicamentos de controle especial e procedimentos correlatos de dispensação, armazenamento e controle.",
       "keywords": "portaria 344, medicamentos, controle especial, farmacêutica, vigilância sanitária"
     },
@@ -97,6 +107,7 @@
       "path": "/documentos-biblioteca/1034_20.pdf",
       "esfera": "federal",
       "categoria": "Portaria",
+      "tema": "Serviços de Saúde (Assistência)",
       "descricao": "Portaria que complementa e orienta requisitos sanitários, procedimentos e obrigações aplicáveis em serviços de saúde e atividades correlatas.",
       "keywords": "portaria 1034, vigilância sanitária, serviços de saúde, normas técnicas, controle sanitário"
     },
@@ -106,6 +117,7 @@
       "path": "/documentos-biblioteca/Resolu%C3%A7%C3%A3o%20SESA%20n%20590-2014.pdf",
       "esfera": "estadual",
       "categoria": "Resolução",
+      "tema": "Normas Gerais e Institucionais",
       "descricao": "Norma estadual para higiene, biossegurança, controle e critérios sanitários aplicáveis a estabelecimentos e serviços sob vigilância sanitária do Paraná.",
       "keywords": "resolucao sesa 590, parana, higienizacao, biosseguranca, vigilancia sanitaria, estabelecimento sanitaria"
     },
@@ -115,6 +127,7 @@
       "path": "/documentos-biblioteca/rdc%2046%20cigarro%20eletronico.pdf",
       "esfera": "federal",
       "categoria": "RDC",
+      "tema": "Normas Gerais e Institucionais",
       "descricao": "Norma da ANVISA sobre dispositivos eletrônicos para fumar e produtos relacionados, com exigências sanitárias e restrições de uso e comercialização.",
       "keywords": "rdc 46, anvisa, cigarro eletronico, vape, dispositivos eletrônicos, tabaco, controle sanitário"
     },
@@ -124,6 +137,7 @@
       "path": "/documentos-biblioteca/Lei%20Estadual%20n%2020.362-2020.pdf",
       "esfera": "estadual",
       "categoria": "Lei",
+      "tema": "Serviços de Saúde (Assistência)",
       "descricao": "Lei estadual que exige formação de nível superior na área da saúde para o Responsável Técnico de Instituições de Longa Permanência para Idosos (ILPI) no Paraná.",
       "keywords": "lei 20362, ilpi, idosos, responsavel tecnico, instituicao de longa permanencia, asilo, casa de repouso"
     },
@@ -133,6 +147,7 @@
       "path": "/documentos-biblioteca/Resolucao%20SESA%20004%202017.pdf",
       "esfera": "estadual",
       "categoria": "Resolução",
+      "tema": "Alimentos e Bebidas",
       "descricao": "Norma estadual sobre regularização sanitária e boas práticas de fabricação de alimentos processados por empreendimento familiar rural, microempreendedor individual (MEI) e empreendimento econômico solidário no Paraná.",
       "keywords": "resolucao sesa 004, agroindustria familiar, empreendimento familiar rural, mei, economia solidaria, boas praticas de fabricacao, licenca sanitaria"
     },
@@ -142,6 +157,7 @@
       "path": "/documentos-biblioteca/Resolucao%20SESA-SEAB%20003%202013.pdf",
       "esfera": "estadual",
       "categoria": "Resolução",
+      "tema": "Alimentos e Bebidas",
       "descricao": "Resolução conjunta SESA/SEAB que institui as Comissões Regionais da Qualidade do Leite (CRQL) no Paraná, com o regulamento técnico de composição, atribuições e funcionamento.",
       "keywords": "resolucao 003 2013, sesa seab, qualidade do leite, crql, laticinios, producao leiteira"
     },
@@ -151,6 +167,7 @@
       "path": "/documentos-biblioteca/Resolu%C3%A7%C3%A3o%20Conjunta%20SEMA_SESA%20n%20002_2005.pdf",
       "esfera": "estadual",
       "categoria": "Resolução",
+      "tema": "Saneamento, Resíduos e Meio Ambiente",
       "descricao": "Resolução conjunta que estabelece diretrizes para elaboração do Plano de Gerenciamento de Resíduos de Serviços de Saúde (PGRSS) no Paraná, com modelos de Plano Simplificado e Termo de Referência completo.",
       "keywords": "resolucao 002 2005, sema sesa, pgrss, residuos de servicos de saude, gerenciamento de residuos, grupos a b c d e"
     },
@@ -160,6 +177,7 @@
       "path": "/documentos-biblioteca/Resolu%C3%A7%C3%A3o%20SESA%20n%20473_2016.pdf",
       "esfera": "estadual",
       "categoria": "Resolução",
+      "tema": "Farmácias e Medicamentos",
       "descricao": "Norma técnica estadual sobre condições físicas, técnicas e sanitárias para guarda, comercialização e administração de vacinas em farmácias privadas no Paraná. Parcialmente alterada pela Resolução SESA nº 956/2018 quanto à vacinação extramuro.",
       "keywords": "resolucao sesa 473, vacinas, farmacia, sala de vacina, rede de frio, camara refrigerada, drogaria"
     },
@@ -169,6 +187,7 @@
       "path": "/documentos-biblioteca/Resolu%C3%A7%C3%A3o%20SESA%20n%20956-2018.pdf",
       "esfera": "estadual",
       "categoria": "Resolução",
+      "tema": "Serviços de Saúde (Assistência)",
       "descricao": "Norma técnica estadual que padroniza e controla o funcionamento dos serviços de vacinação extramuro (fora do estabelecimento) oferecidos por estabelecimentos públicos e privados no Paraná, alterando a Resolução SESA nº 473/2016.",
       "keywords": "resolucao sesa 956, vacinacao extramuro, campanha de vacinacao, sala de vacina, rede de frio"
     },
@@ -178,6 +197,7 @@
       "path": "/documentos-roteiros/resolucao7002013.pdf",
       "esfera": "estadual",
       "categoria": "Resolução",
+      "tema": "Estética, Beleza e Bem-estar",
       "descricao": "Norma técnica estadual que estabelece os requisitos sanitários para funcionamento de salões de beleza, barbearias e serviços de depilação no Paraná. É a base do roteiro de inspeção de Salão de Beleza.",
       "keywords": "resolucao sesa 700, salao de beleza, barbearia, depilacao, estetica, manicure, pedicure, licenca sanitaria"
     }

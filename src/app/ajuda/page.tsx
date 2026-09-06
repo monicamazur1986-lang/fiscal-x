@@ -1,13 +1,15 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { HelpCircle, Search, Plus, Pencil, Trash2, Loader2, Inbox, Download } from "lucide-react"
+import Link from "next/link"
+import { HelpCircle, Search, Plus, Pencil, Trash2, Loader2, Inbox, Download, ChevronRight, BookOpen } from "lucide-react"
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   Dialog,
   DialogContent,
@@ -21,6 +23,7 @@ import { useFaq } from "@/hooks/use-faq"
 import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import type { FaqItem } from "@/lib/types"
+import { MANUAL_GUIDES } from "@/lib/manual-guides"
 
 const CATEGORIA_PADRAO = "Geral";
 
@@ -244,7 +247,40 @@ export default function AjudaPage() {
         ) : undefined}
       />
 
-      <div className="max-w-5xl mx-auto w-full p-4 sm:p-8 space-y-8 pb-40">
+      <div className="max-w-5xl mx-auto w-full p-4 sm:p-8 space-y-6 pb-40">
+        <Tabs defaultValue="manual">
+          <TabsList className="bg-white border border-[#E4DFD1] p-1 h-auto rounded-lg">
+            <TabsTrigger value="manual" className="rounded-md text-xs font-bold uppercase tracking-wide gap-1.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white px-4 py-2">
+              <BookOpen className="h-3.5 w-3.5" /> Manual de Uso
+            </TabsTrigger>
+            <TabsTrigger value="faq" className="rounded-md text-xs font-bold uppercase tracking-wide gap-1.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white px-4 py-2">
+              <HelpCircle className="h-3.5 w-3.5" /> Perguntas Frequentes
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="manual" className="pt-6 space-y-3">
+            <p className="text-sm text-[#6B6659] px-1">Passo a passo ilustrado de cada área do sistema — toque num tópico pra abrir o guia completo.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {MANUAL_GUIDES.map((guia) => (
+                <Link
+                  key={guia.slug}
+                  href={`/ajuda/manual/${guia.slug}`}
+                  className="group flex items-center gap-3 bg-white border border-[#E4DFD1] rounded-lg p-4 shadow-[0_1px_2px_rgba(38,36,32,0.04)] hover:border-[#0E4A44]/30 hover:shadow-md transition-all"
+                >
+                  <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${guia.color}1A`, color: guia.color }}>
+                    <guia.icon className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-serif text-base text-[#262420]">{guia.label}</p>
+                    <p className="text-xs text-[#8A8474] leading-snug line-clamp-1">{guia.description}</p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-[#C4BEAC] shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:text-[#0E4A44]" />
+                </Link>
+              ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="faq" className="pt-6 space-y-8">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A39D8C]" />
           <Input
@@ -312,6 +348,8 @@ export default function AjudaPage() {
             ))}
           </div>
         )}
+          </TabsContent>
+        </Tabs>
       </div>
 
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>

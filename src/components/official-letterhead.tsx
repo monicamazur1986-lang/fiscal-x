@@ -21,15 +21,22 @@ export function OfficialLetterhead({ className }: { className?: string }) {
     : undefined;
 
   return (
-    <div className={cn("flex flex-row items-center justify-between gap-6", className)}>
-      <div className="w-[140px] h-[100px] flex items-center justify-start overflow-hidden shrink-0">
+    // Grid de 3 colunas (brasão | texto | espaço-fantasma) em vez de um flex
+    // de 2 filhos com justify-between: com só 2 filhos, a coluna de texto
+    // preenchia todo o espaço sobrando à direita do brasão e centralizava
+    // dentro DAQUELE espaço — não da folha inteira —, deixando o timbre
+    // visivelmente deslocado pra direita. A 3ª coluna (mesma largura da 1ª,
+    // vazia) garante que a coluna do meio fique realmente centralizada na
+    // página, com ou sem brasão.
+    <div className={cn("grid grid-cols-[140px_1fr_140px] items-center gap-4", className)}>
+      <div className="h-[100px] flex items-center justify-center overflow-hidden">
         {hasLogo ? (
           <img src={displayLogoUrl} className="max-w-full max-h-full object-contain block" alt="Brasão" crossOrigin={isDataUrl ? undefined : "anonymous"} />
         ) : (
           <Landmark className="w-2/3 h-2/3 text-zinc-300" strokeWidth={1} />
         )}
       </div>
-      <div className="flex-1 text-center font-serif">
+      <div className="text-center font-serif">
         {config.headerRichText ? (
           <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(config.headerRichText) }} />
         ) : (
@@ -40,6 +47,7 @@ export function OfficialLetterhead({ className }: { className?: string }) {
           </>
         )}
       </div>
+      <div aria-hidden="true" />
     </div>
   );
 }

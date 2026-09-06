@@ -11,6 +11,7 @@ import { z as z4 } from 'zod/v4';
 import { claude, isClaudeReady, CLAUDE_MODEL } from '@/ai/claude';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { searchLegislacao } from '@/lib/legal-search';
+import { isSemanticSearchReady, searchLegislacaoSemantic } from '@/lib/legal-vector-search';
 import { checkAndConsumeAiQuota, MONTHLY_AI_LIMIT } from '@/ai/usage-limit';
 import { buscarMelhorExemplo, resolverMunicipioId } from '@/lib/draft-examples-search';
 import { normalizeText } from '@/lib/text-normalize';
@@ -278,7 +279,17 @@ export const generateIntimacaoDraftFlow = ai.defineFlow(
       const pref: Array<'todas' | 'municipal' | 'estadual'> = Array.isArray(input.lawPreference)
         ? input.lawPreference as Array<'todas' | 'municipal' | 'estadual'>
         : (input.lawPreference ? [input.lawPreference] as Array<'todas' | 'municipal' | 'estadual'> : ['estadual']);
-      const selectedArticles = searchLegislacao(input.caseDescription, { pref, limit: 10, municipioId: municipioId || undefined });
+      // Busca semântica (vetorial) quando disponível — ver
+      // scripts/generate-legal-embeddings.ts e legal-vector-search.ts. Sem
+      // isso configurado (ou se a chamada falhar), cai pra busca por
+      // palavra-chave de sempre; o motor local (offline) continua usando só
+      // a busca por palavra-chave, de propósito, pra não depender de rede.
+      let selectedArticles = isSemanticSearchReady()
+        ? await searchLegislacaoSemantic(input.caseDescription, { pref, limit: 10, municipioId: municipioId || undefined }).catch(() => [])
+        : [];
+      if (selectedArticles.length === 0) {
+        selectedArticles = searchLegislacao(input.caseDescription, { pref, limit: 10, municipioId: municipioId || undefined });
+      }
 
       if (selectedArticles.length === 0) {
         return generateLocalHeuristicDraft(input, municipioId);

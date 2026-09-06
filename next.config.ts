@@ -48,9 +48,10 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  devIndicators: {
-    position: 'bottom-right',
-  },
+  // Indicador de desenvolvimento do Next.js (bolinha "N" no canto) — só
+  // aparece com `npm run dev`, nunca em produção; desligado por ser só ruído
+  // visual durante os testes.
+  devIndicators: false,
 };
 
 export default nextConfig;

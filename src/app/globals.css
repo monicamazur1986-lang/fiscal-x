@@ -202,6 +202,10 @@
       border-bottom: 1px solid #f4f4f5 !important;
       box-shadow: none !important;
       outline: none !important;
+      /* Mesma margem lateral do timbre (20mm) — sem isso, os ícones da
+         barra iam até a borda da folha enquanto o timbre e o texto ficavam
+         recuados, criando um desalinhamento visível entre os dois blocos. */
+      padding: 6px 20mm !important;
     }
     .docfacil-paper .sun-editor .se-wrapper {
       background-color: #ffffff !important;

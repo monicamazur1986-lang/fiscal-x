@@ -2,16 +2,17 @@
 
 import { useState, useMemo } from "react"
 import Link from "next/link"
-import { FileText, Plus, Search, Loader2, Send, Pencil, Folder, FolderPlus, MoreVertical, Inbox, Download, Trash2, Zap, RotateCcw } from "lucide-react"
+import { FileText, Plus, Search, Loader2, Send, Pencil, Folder, FolderPlus, MoreVertical, Inbox, Trash2, Zap, RotateCcw, Copy, ShieldCheck } from "lucide-react"
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { useDocfacil } from "@/hooks/use-docfacil"
+import { useDocfacil, DOCFACIL_MODELO_GLOBAL } from "@/hooks/use-docfacil"
 import { useFolders } from "@/hooks/use-folders"
 import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/hooks/use-auth"
 import type { DocfacilTipo } from "@/lib/types"
 import { format } from "date-fns"
 import {
@@ -35,81 +36,20 @@ const TIPO_LABEL: Record<DocfacilTipo, string> = {
   circular: "Circular",
 };
 
-// Modelos padrão de referência (transcritos dos moldes oficiais fornecidos
-// pela usuária) — importados sob demanda pelo botão "Importar Modelos
-// Padrão", nunca criados sozinhos. O timbre (brasão, nome do órgão,
-// endereço) já é preenchido automaticamente pelo <OfficialLetterhead />
-// a partir da Identidade Municipal — por isso o conteúdo abaixo começa
-// direto no título do documento, sem repetir o cabeçalho.
-const DEFAULT_MODELOS_SEED: { tipo: DocfacilTipo; descricao: string; tags: string[]; conteudo: string }[] = [
-  {
-    tipo: 'oficio',
-    descricao: 'Ofício Padrão',
-    tags: ['padrao', 'oficio'],
-    conteudo: `<p style="text-align:right;">Ofício nº [000]/[ANO]/[SIGLA DA UNIDADE]</p>
-<p style="text-align:right;">[Cidade], [dia] de [mês] de [ano].</p>
-<p><br></p>
-<p>A Sua Senhoria o Senhor<br><strong>[NOME DO DESTINATÁRIO]</strong><br>[Cargo do destinatário]<br>[Órgão/Instituição — Cidade/UF]</p>
-<p><br></p>
-<p><strong>Assunto:</strong> [Resumo objetivo do assunto do ofício, em uma linha]</p>
-<p><br></p>
-<p>Senhor [Cargo do destinatário],</p>
-<p style="text-indent:40px;">Dirijo-me a Vossa Senhoria para [apresentar / solicitar / informar / comunicar] [objeto do ofício, indicando de forma clara e direta o assunto principal a ser tratado neste primeiro parágrafo].</p>
-<p style="text-indent:40px;">[Desenvolvimento: detalhar o assunto, apresentar fundamentação, dados, justificativas ou esclarecimentos necessários. Cada assunto novo deve iniciar um novo parágrafo.]</p>
-<p style="text-indent:40px;">[Conclusão: reafirmar a posição, solicitar providências ou informar próximos passos, encerrando o assunto de forma clara.]</p>
-<p><br></p>
-<p>Atenciosamente,</p>
-<p><br></p>
-<p style="text-align:center;"><strong>[NOME DO SIGNATÁRIO]</strong><br>[Cargo do signatário]</p>`,
-  },
-  {
-    tipo: 'memorando',
-    descricao: 'Memorando Padrão',
-    tags: ['padrao', 'memorando'],
-    conteudo: `<p style="text-align:right;">Memorando nº [000]/[ANO]/[SIGLA DA UNIDADE]</p>
-<p style="text-align:right;">[Cidade], [dia] de [mês] de [ano].</p>
-<p><br></p>
-<p>Ao Senhor<br><strong>[Cargo do destinatário — ex.: Diretor do Departamento de Administração]</strong></p>
-<p><br></p>
-<p><strong>Assunto:</strong> [Resumo objetivo do assunto do memorando, em uma linha]</p>
-<p><br></p>
-<p>Senhor Diretor,</p>
-<p style="text-indent:40px;">Dirijo-me a Vossa Senhoria para [apresentar / solicitar / informar / comunicar] [objeto do memorando, indicando de forma clara e direta o assunto principal a ser tratado neste primeiro parágrafo].</p>
-<p style="text-indent:40px;">[Desenvolvimento: detalhar o assunto, apresentar fundamentação, dados, justificativas ou esclarecimentos necessários. Cada assunto novo deve iniciar um novo parágrafo.]</p>
-<p style="text-indent:40px;">[Conclusão: reafirmar a posição, solicitar providências ou informar próximos passos, encerrando o assunto de forma clara.]</p>
-<p><br></p>
-<p>Atenciosamente,</p>
-<p><br></p>
-<p style="text-align:center;"><strong>[NOME DO SIGNATÁRIO]</strong><br>[Cargo do signatário]</p>`,
-  },
-  {
-    tipo: 'circular',
-    descricao: 'Ofício Circular Padrão',
-    tags: ['padrao', 'circular'],
-    conteudo: `<p style="text-align:right;">Ofício Circular nº [000]/[ANO]/[SIGLA DA UNIDADE]</p>
-<p style="text-align:right;">[Cidade], [dia] de [mês] de [ano].</p>
-<p><br></p>
-<p>Aos Senhores e às Senhoras<br><strong>[Cargo/categoria dos destinatários — ex.: Diretores e Diretoras das Unidades Regionais]</strong><br>(Lista de destinatários no Anexo I, quando aplicável)</p>
-<p><br></p>
-<p><strong>Assunto:</strong> [Resumo objetivo do assunto do ofício circular, em uma linha]</p>
-<p><br></p>
-<p>Senhoras e Senhores,</p>
-<p style="text-indent:40px;">Dirijo-me a Vossas Senhorias para [apresentar / solicitar / informar / comunicar] [objeto do ofício circular, indicando de forma clara e direta o assunto a ser comunicado a todos os destinatários].</p>
-<p style="text-indent:40px;">[Desenvolvimento: detalhar o assunto, apresentar fundamentação, dados, orientações ou prazos necessários. Cada assunto novo deve iniciar um novo parágrafo.]</p>
-<p style="text-indent:40px;">[Conclusão: reafirmar a orientação, solicitar providências ou confirmar o recebimento, encerrando o assunto de forma clara.]</p>
-<p><br></p>
-<p>Atenciosamente,</p>
-<p><br></p>
-<p style="text-align:center;"><strong>[NOME DO SIGNATÁRIO]</strong><br>[Cargo do signatário]</p>
-<p><br></p>
-<p style="font-style:italic; font-size:9pt;">Observação: mantenha rigorosamente o mesmo texto para todos os destinatários — se o conteúdo for alterado para um deles, o documento deixa de ser considerado "circular".</p>`,
-  },
-];
+// Os 3 modelos padrão (Ofício, Memorando, Circular) não são mais "importados"
+// por município — vivem uma única vez no Firestore, com
+// municipioId = DOCFACIL_MODELO_GLOBAL, e o hook useDocfacil já traz esse rol
+// junto com os modelos próprios de cada município (ver use-docfacil.ts).
+// Só o root edita o conteúdo deles diretamente pela tela de edição de
+// modelo; qualquer outro município pode "Duplicar" um deles pra ter uma
+// cópia própria e customizável, sem afetar o padrão de ninguém mais.
 
 export default function DocfacilPage() {
   const { modelos, documentos, loading, moverDocumento, salvarModelo, excluirModelo, excluirDocumento, moverParaLixeira } = useDocfacil();
   const { folders, createFolder, loading: loadingFolders } = useFolders('docfacil');
   const { toast } = useToast();
+  const { profile } = useAuth();
+  const isRoot = profile?.role === 'root';
 
   const [search, setSearch] = useState("");
   const [tipoFilter, setTipoFilter] = useState<DocfacilTipo | "todos">("todos");
@@ -117,27 +57,19 @@ export default function DocfacilPage() {
   const [isFolderDialogOpen, setIsFolderDialogOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [movingDocId, setMovingDocId] = useState<string | null>(null);
-  const [isImportingModelos, setIsImportingModelos] = useState(false);
+  const [duplicandoModeloId, setDuplicandoModeloId] = useState<string | null>(null);
 
   const normalize = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-  const handleImportDefaultModelos = async () => {
-    setIsImportingModelos(true);
+  const handleDuplicarModelo = async (m: (typeof modelos)[number]) => {
+    setDuplicandoModeloId(m.id);
     try {
-      const existingDescricoes = new Set(modelos.map((m) => normalize(m.descricao)));
-      const toImport = DEFAULT_MODELOS_SEED.filter((seed) => !existingDescricoes.has(normalize(seed.descricao)));
-      if (toImport.length === 0) {
-        toast({ title: "Nada para importar", description: "Todos os modelos padr\u00e3o j\u00e1 est\u00e3o cadastrados." });
-        return;
-      }
-      for (const seed of toImport) {
-        await salvarModelo({ tipo: seed.tipo, descricao: seed.descricao, tags: seed.tags, conteudo: seed.conteudo });
-      }
-      toast({ title: `${toImport.length} modelo(s) importado(s)` });
+      await salvarModelo({ tipo: m.tipo, descricao: `${m.descricao} (c\u00f3pia)`, tags: m.tags, conteudo: m.conteudo });
+      toast({ title: "Modelo duplicado", description: "Uma c\u00f3pia edit\u00e1vel foi criada pro seu munic\u00edpio." });
     } catch (e) {
-      toast({ variant: "destructive", title: "Erro ao importar modelos" });
+      toast({ variant: "destructive", title: "Erro ao duplicar modelo" });
     } finally {
-      setIsImportingModelos(false);
+      setDuplicandoModeloId(null);
     }
   };
 
@@ -231,20 +163,9 @@ export default function DocfacilPage() {
         title="Docfacil"
         subtitle="Modelos e documentos oficiais"
         actions={
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleImportDefaultModelos}
-              disabled={isImportingModelos}
-              className="h-9 rounded-md gap-1.5 text-xs font-medium border-[#E4DFD1]"
-            >
-              {isImportingModelos ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Importar Modelos Padrão
-            </Button>
-            <Button asChild size="sm" className="h-9 rounded-md gap-1.5 text-xs font-medium bg-[#0E4A44] hover:bg-[#0B3A35]">
-              <Link href="/docfacil/modelo/novo"><Plus className="h-4 w-4" /> Novo Modelo</Link>
-            </Button>
-          </div>
+          <Button asChild size="sm" className="h-9 rounded-md gap-1.5 text-xs font-medium bg-[#0E4A44] hover:bg-[#0B3A35]">
+            <Link href="/docfacil/modelo/novo"><Plus className="h-4 w-4" /> Novo Modelo</Link>
+          </Button>
         }
       />
 
@@ -277,12 +198,22 @@ export default function DocfacilPage() {
             <>
               <h2 className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Modelos</h2>
               <div className="bg-white border border-[#E4DFD1] rounded-lg divide-y divide-[#F1EEE4] overflow-hidden shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
-                {filteredModelos.map((m) => (
+                {filteredModelos.map((m) => {
+                  const isGlobal = m.municipioId === DOCFACIL_MODELO_GLOBAL;
+                  const podeEditar = !isGlobal || isRoot;
+                  return (
                   <div key={m.id} className="flex items-center justify-between gap-4 px-4 py-3">
                     <div className="min-w-0 flex-1 flex items-center gap-3">
                       <span className="text-xs text-[#A39D8C] tabular-nums shrink-0">Nº {String(m.codigo).padStart(3, "0")}</span>
                       <div className="min-w-0">
-                        <p className="font-serif text-[15px] text-[#262420] truncate">{m.descricao}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-serif text-[15px] text-[#262420] truncate">{m.descricao}</p>
+                          {isGlobal && (
+                            <Badge variant="outline" className="text-[9px] font-medium h-4 px-1.5 border-none bg-[#E4EEEC] text-[#0E4A44] shrink-0 gap-1">
+                              <ShieldCheck className="h-2.5 w-2.5" /> Padrão do sistema
+                            </Badge>
+                          )}
+                        </div>
                         <p className="text-xs text-[#A39D8C] mt-0.5">
                           {TIPO_LABEL[m.tipo]}{m.tags.length > 0 ? ` · ${m.tags.map((t) => `#${t}`).join(" ")}` : ""}
                         </p>
@@ -292,15 +223,25 @@ export default function DocfacilPage() {
                       <Button asChild size="sm" className="h-8 text-xs font-medium gap-1.5 bg-[#0E4A44] hover:bg-[#0B3A35]">
                         <Link href={gerarHref(m.id)}><Send className="h-3.5 w-3.5" /> Iniciar Redação</Link>
                       </Button>
-                      <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-md text-[#A39D8C] hover:bg-[#F5F2EA]" title="Editar modelo">
-                        <Link href={`/docfacil/modelo/${m.id}`}><Pencil className="h-3.5 w-3.5" /></Link>
-                      </Button>
-                      <Button onClick={() => handleExcluirModelo(m.id, m.descricao)} variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-md text-[#A39D8C] hover:bg-rose-50 hover:text-rose-600" title="Excluir modelo">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {isGlobal && !isRoot && (
+                        <Button onClick={() => handleDuplicarModelo(m)} disabled={duplicandoModeloId === m.id} variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-md text-[#A39D8C] hover:bg-[#F5F2EA]" title="Duplicar pro meu município (pra poder editar)">
+                          {duplicandoModeloId === m.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
+                        </Button>
+                      )}
+                      {podeEditar && (
+                        <>
+                          <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-md text-[#A39D8C] hover:bg-[#F5F2EA]" title="Editar modelo">
+                            <Link href={`/docfacil/modelo/${m.id}`}><Pencil className="h-3.5 w-3.5" /></Link>
+                          </Button>
+                          <Button onClick={() => handleExcluirModelo(m.id, m.descricao)} variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-md text-[#A39D8C] hover:bg-rose-50 hover:text-rose-600" title="Excluir modelo">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
 
                 {filteredModelos.length === 0 && (
                   <div className="py-16 flex flex-col items-center justify-center gap-2">

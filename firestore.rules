@@ -174,8 +174,13 @@ service cloud.firestore {
     // DOCFACIL — modelos e documentos oficiais (ofício/memorando/circular),
     // isolados por município. Leitura aberta a todo o município (modelos são
     // pra reaproveitar em equipe); escrita só de quem criou ou de um gestor.
+    // municipioId == 'global' é o rol de modelos padrão do sistema (Ofício,
+    // Memorando, Circular) — visível a QUALQUER município (por isso o OR
+    // abaixo, fora do isolamento normal de belongsToMyMunicipio), mas só
+    // editável/excluível pelo root (a regra de update/delete abaixo não dá
+    // esse "OR" — só bate na condição normal de dono do próprio município).
     match /docfacilModelos/{id} {
-      allow read: if belongsToMyMunicipio(resource.data);
+      allow read: if belongsToMyMunicipio(resource.data) || resource.data.municipioId == 'global';
       allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
       allow update: if isAuthenticated() && (
         isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()) && request.resource.data.municipioId == resource.data.municipioId)

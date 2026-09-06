@@ -2152,6 +2152,10 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // podia mais ser alterada depois, então isso reaproveita o mesmo
   // formulário pra editar um item já existente.
   const [editingCustomItemId, setEditingCustomItemId] = useState<string | null>(null)
+  // Controlado (em vez de descontrolado) só pra poder abrir sozinho quando o
+  // fiscal clica em editar um item já existente — senão o formulário some
+  // dentro do accordion recolhido sem nenhuma pista de onde foi parar.
+  const [nnConformidadeAberto, setNnConformidadeAberto] = useState<string | undefined>(undefined)
   // Textos de "Considerações Gerais" (introdução) e "Conclusão e Prazo Legal"
   // do relatório — editáveis pelo fiscal. Até o fiscal editar manualmente
   // (introTravadaRef/conclusaoTravadaRef), ficam sincronizados automaticamente
@@ -2875,6 +2879,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     setEditingCustomItemId(item.id);
     setNewCustomText(item.text);
     setNewCustomCrit(item.crit);
+    setNnConformidadeAberto('nova-nao-conformidade');
   };
 
   const handleCancelEditCustomItem = () => {
@@ -3402,9 +3407,13 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             <>
             <div className="h-px bg-[#F1EEE4]" />
 
-            <div className="space-y-3">
-                <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><FileText className="h-4 w-4 text-primary" /> Texto de Abertura do Relatório</h2>
-                <p className="text-[11px] font-medium text-[#6B6659] -mt-1">Texto que abre o relatório final ("Considerações Gerais") — editável. Pré-preenchido com o padrão do município e os dados acima.</p>
+            <Accordion type="single" collapsible>
+              <AccordionItem value="introducao" className="border-none">
+                <AccordionTrigger className="py-0 hover:no-underline [&>svg]:text-primary">
+                  <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><FileText className="h-4 w-4 text-primary" /> Texto de Abertura do Relatório</h2>
+                </AccordionTrigger>
+                <AccordionContent className="pt-3 space-y-3">
+                <p className="text-[11px] font-medium text-[#6B6659]">Texto que abre o relatório final ("Considerações Gerais") — editável. Pré-preenchido com o padrão do município e os dados acima.</p>
                 <div className="p-2 bg-[#FAF8F3] rounded-lg border border-[#E4DFD1] font-serif">
                   <RichTextEditor value={introducaoHtml} onChange={handleIntroducaoChange} fontSize="10.5pt" minHeight="140px" />
                 </div>
@@ -3427,7 +3436,9 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                     Restaurar padrão
                   </button>
                 </div>
-            </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
             </>
             )}
 
@@ -3438,13 +3449,19 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             <>
             <div className="h-px bg-[#F1EEE4]" />
 
-            <div className="space-y-3">
-                <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Clock className="h-4 w-4 text-primary" /> Prazo para Regularização e Anexos</h2>
+            <Accordion type="single" collapsible>
+              <AccordionItem value="prazo" className="border-none">
+                <AccordionTrigger className="py-0 hover:no-underline [&>svg]:text-primary">
+                  <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Clock className="h-4 w-4 text-primary" /> Prazo para Regularização e Anexos</h2>
+                </AccordionTrigger>
+                <AccordionContent className="pt-3">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                    <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-[#6B6659]">Prazo (dias)</Label><Input type="number" min="1" value={idData.prazoDias} onChange={e => setIdData({...idData, prazoDias: e.target.value})} className="h-10 rounded-xl bg-[#FAF8F3] border-none font-bold" /></div>
                    <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-black uppercase text-[#6B6659]">Base Legal do Prazo</Label><Input value={idData.baseLegalPrazo} onChange={e => setIdData({...idData, baseLegalPrazo: e.target.value})} placeholder="Ex.: Lei Municipal nº 0000/0000" className="h-10 rounded-xl bg-[#FAF8F3] border-none font-bold" /></div>
                 </div>
-            </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
             </>
             )}
 
@@ -3589,33 +3606,41 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             <div className="h-px bg-[#F1EEE4]" />
 
             <div className="space-y-6">
-              <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Plus className="h-4 w-4 text-primary" /> Não Conformidade Adicional</h2>
-              <p className="text-xs text-[#6B6659] -mt-4">Para fatos constatados que não estão previstos em nenhum item do roteiro oficial — entra no relatório junto com os demais, ao final do grupo de criticidade escolhido.</p>
-              <div className="p-6 bg-[#FAF8F3] rounded-lg border border-[#E4DFD1] space-y-4">
-                <Textarea
-                  value={newCustomText}
-                  onChange={e => setNewCustomText(e.target.value)}
-                  placeholder="Descreva o fato constatado..."
-                  className="min-h-[80px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium"
-                />
-                <div className="flex flex-wrap items-center gap-3">
-                  <RadioGroup value={newCustomCrit} onValueChange={(v: any) => setNewCustomCrit(v)} className="flex items-center gap-2 bg-white p-1 rounded-lg border border-[#E4DFD1]">
-                    {(['I', 'N', 'R'] as Criticality[]).map(c => (
-                      <label key={c} className={cn("flex items-center justify-center h-10 px-4 rounded-xl text-[10px] font-black cursor-pointer transition-all", newCustomCrit === c ? "bg-primary text-white" : "text-[#6B6659] hover:bg-[#F1EEE4]")}>
-                        <RadioGroupItem value={c} className="sr-only" /> {c === 'I' ? 'IMPRESCINDÍVEL' : c === 'N' ? 'NECESSÁRIO' : 'RECOMENDÁVEL'}
-                      </label>
-                    ))}
-                  </RadioGroup>
-                  <Button type="button" onClick={handleSaveCustomItem} disabled={!newCustomText.trim()} className="h-10 px-6 rounded-xl bg-primary text-white font-black text-[11px] uppercase gap-2">
-                    {editingCustomItemId ? <><Pencil className="h-4 w-4" /> Salvar Alteração</> : <><Plus className="h-4 w-4" /> Adicionar</>}
-                  </Button>
-                  {editingCustomItemId && (
-                    <Button type="button" onClick={handleCancelEditCustomItem} variant="ghost" className="h-10 px-4 rounded-xl text-[#A39D8C] font-black text-[11px] uppercase">
-                      Cancelar
-                    </Button>
-                  )}
-                </div>
-              </div>
+              <Accordion type="single" collapsible value={nnConformidadeAberto} onValueChange={setNnConformidadeAberto}>
+                <AccordionItem value="nova-nao-conformidade" className="border-none">
+                  <AccordionTrigger className="py-0 hover:no-underline [&>svg]:text-primary">
+                    <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Plus className="h-4 w-4 text-primary" /> Adicionar Não Conformidade</h2>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-3 space-y-4">
+                  <p className="text-xs text-[#6B6659]">Para fatos constatados que não estão previstos em nenhum item do roteiro oficial — entra no relatório junto com os demais, ao final do grupo de criticidade escolhido.</p>
+                  <div className="p-6 bg-[#FAF8F3] rounded-lg border border-[#E4DFD1] space-y-4">
+                    <Textarea
+                      value={newCustomText}
+                      onChange={e => setNewCustomText(e.target.value)}
+                      placeholder="Descreva o fato constatado..."
+                      className="min-h-[80px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium"
+                    />
+                    <div className="flex flex-wrap items-center gap-3">
+                      <RadioGroup value={newCustomCrit} onValueChange={(v: any) => setNewCustomCrit(v)} className="flex items-center gap-2 bg-white p-1 rounded-lg border border-[#E4DFD1]">
+                        {(['I', 'N', 'R'] as Criticality[]).map(c => (
+                          <label key={c} className={cn("flex items-center justify-center h-10 px-4 rounded-xl text-[10px] font-black cursor-pointer transition-all", newCustomCrit === c ? "bg-primary text-white" : "text-[#6B6659] hover:bg-[#F1EEE4]")}>
+                            <RadioGroupItem value={c} className="sr-only" /> {c === 'I' ? 'IMPRESCINDÍVEL' : c === 'N' ? 'NECESSÁRIO' : 'RECOMENDÁVEL'}
+                          </label>
+                        ))}
+                      </RadioGroup>
+                      <Button type="button" onClick={handleSaveCustomItem} disabled={!newCustomText.trim()} className="h-10 px-6 rounded-xl bg-primary text-white font-black text-[11px] uppercase gap-2">
+                        {editingCustomItemId ? <><Pencil className="h-4 w-4" /> Salvar Alteração</> : <><Plus className="h-4 w-4" /> Adicionar</>}
+                      </Button>
+                      {editingCustomItemId && (
+                        <Button type="button" onClick={handleCancelEditCustomItem} variant="ghost" className="h-10 px-4 rounded-xl text-[#A39D8C] font-black text-[11px] uppercase">
+                          Cancelar
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
 
               {customItems.length > 0 && (
                 <div className="space-y-4">
@@ -3668,9 +3693,13 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             <>
             <div className="h-px bg-[#F1EEE4]" />
 
-            <div className="space-y-3">
-                <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Scale className="h-4 w-4 text-primary" /> Texto de Conclusão do Relatório</h2>
-                <p className="text-[11px] font-medium text-[#6B6659] -mt-1">Texto que fecha o relatório final ("Conclusão e Prazo Legal") — editável. Pré-preenchido com o padrão do município e o prazo acima.</p>
+            <Accordion type="single" collapsible>
+              <AccordionItem value="conclusao" className="border-none">
+                <AccordionTrigger className="py-0 hover:no-underline [&>svg]:text-primary">
+                  <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Scale className="h-4 w-4 text-primary" /> Texto de Conclusão do Relatório</h2>
+                </AccordionTrigger>
+                <AccordionContent className="pt-3 space-y-3">
+                <p className="text-[11px] font-medium text-[#6B6659]">Texto que fecha o relatório final ("Conclusão e Prazo Legal") — editável. Pré-preenchido com o padrão do município e o prazo acima.</p>
                 <div className="p-2 bg-[#FAF8F3] rounded-lg border border-[#E4DFD1] font-serif">
                   <RichTextEditor value={conclusaoHtml} onChange={handleConclusaoChange} fontSize="10.5pt" minHeight="140px" />
                 </div>
@@ -3693,7 +3722,9 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                     Restaurar padrão
                   </button>
                 </div>
-            </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
             </>
             )}
 

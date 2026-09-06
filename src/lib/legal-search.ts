@@ -1,5 +1,6 @@
 import MiniSearch from 'minisearch';
 import legislacaoData from '@/lib/legislacao.json';
+import legalCatalog from '@/lib/legal-catalog.json';
 
 export type LawPreference = 'todas' | 'municipal' | 'estadual' | string;
 export type LawPreferenceSelection = LawPreference | LawPreference[];
@@ -42,8 +43,8 @@ interface IndexedArticle extends LegalArticle {
 // tende a pontuar mais alto pra casos muito específicos e empurraria pra
 // fora do top a infração geral que também se aplica (ex: falta de licença
 // sanitária, que vale pra qualquer ramo).
-const GENERAL_LAW_KEYS = new Set(['LEI_MUNICIPAL_2276_2017', 'LEI_ESTADUAL_13331_2001']);
-const GENERAL_SLOTS = 3;
+export const GENERAL_LAW_KEYS = new Set(['LEI_MUNICIPAL_2276_2017', 'LEI_ESTADUAL_13331_2001']);
+export const GENERAL_SLOTS = 3;
 
 const allArticles: IndexedArticle[] = [];
 Object.entries(legislacaoData).forEach(([lawKey, law]: [string, any]) => {
@@ -99,7 +100,10 @@ index.addAll(allArticles);
 // enquadramento — o padrão precisa ser sempre o código de base (estadual ou,
 // só em Prudentópolis, o municipal); as leis de biblioteca só entram se
 // selecionadas individualmente (`specificLawKeys`), como itens opcionais.
-function matchesPreference(art: IndexedArticle, pref: LawPreferenceSelection): boolean {
+// Assinatura reduzida (não exige o IndexedArticle inteiro) — reaproveitada
+// por src/lib/legal-vector-search.ts, cujos chunks (vindos de PDF ou de
+// legislacao.json) têm esses 3 campos mas não os demais de IndexedArticle.
+export function matchesPreference(art: { lawKey: string; municipioId?: string; isBiblioteca: boolean }, pref: LawPreferenceSelection): boolean {
   const prefs = normalizeLawPreferenceSelection(pref);
   const specificLawKeys = prefs.filter(value => value !== 'todas' && value !== 'municipal' && value !== 'estadual');
 
@@ -121,7 +125,7 @@ function matchesPreference(art: IndexedArticle, pref: LawPreferenceSelection): b
 // Lei com `municipioId` só entra na busca se bater com o município de quem
 // está gerando o rascunho — mesmo isolamento por município já aplicado nos
 // roteiros (`roteiros/page.tsx`) e nas Storage Rules.
-function matchesMunicipio(artMunicipioId: string | undefined, fiscalMunicipioId: string | undefined): boolean {
+export function matchesMunicipio(artMunicipioId: string | undefined, fiscalMunicipioId: string | undefined): boolean {
   if (!artMunicipioId) return true;
   return artMunicipioId === fiscalMunicipioId;
 }
@@ -206,10 +210,21 @@ export function getBaseLawOptions(municipioId?: string | null): LawOption[] {
   return options;
 }
 
-/** Leis "de biblioteca" (RDC/resolução setorial) — sempre opcionais, nunca
- * entram sozinhas com a seleção padrão. Ver `isBiblioteca` acima. */
-export function getIndividualLawOptions(): IndividualLawOption[] {
-  return Object.entries(
+/**
+ * Leis "de biblioteca" (RDC/resolução setorial) — sempre opcionais, nunca
+ * entram sozinhas com a seleção padrão. Ver `isBiblioteca` acima.
+ *
+ * Combina duas fontes: as leis cadastradas à mão com artigos avulsos em
+ * legislacao.json (sempre existiu) e as leis que só existem como PDF na
+ * Biblioteca, listadas em legal-catalog.json — gerado por
+ * scripts/generate-legal-embeddings.ts, o mesmo script que indexa o texto
+ * delas pra busca semântica (ver legal-vector-search.ts). Antes desse
+ * catálogo, uma lei só aparecia aqui se alguém a recadastrasse manualmente
+ * artigo por artigo em legislacao.json — a maioria das leis da Biblioteca
+ * nunca tinha esse trabalho feito e ficava de fora.
+ */
+export function getIndividualLawOptions(municipioId?: string | null): IndividualLawOption[] {
+  const doJson = Object.entries(
     legislacaoData as Record<string, { titulo: string; municipioId?: string; biblioteca?: unknown }>
   )
     .filter(([, law]) => !!law.biblioteca)
@@ -217,8 +232,38 @@ export function getIndividualLawOptions(): IndividualLawOption[] {
       id: lawKey,
       label: law.titulo,
       group: law.municipioId ? 'Código Municipal' : 'Código Sanitário Estadual',
-    }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+    }));
+
+  const doPdf = (legalCatalog as { id: string; titulo: string; municipioId?: string }[])
+    .filter((lei) => !lei.municipioId || lei.municipioId === municipioId)
+    .map((lei) => ({
+      id: lei.id,
+      label: lei.titulo,
+      group: lei.municipioId ? 'Código Municipal' : 'Código Sanitário Estadual',
+    }));
+
+  return [...doJson, ...doPdf].sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Reconstrói o texto de fundamentação ("LEI X (ART. 1º, ART. 2º); LEI Y
+ * (ART. 3º)") a partir de uma lista de artigos — mesmo formato usado pelo
+ * motor local de geração (generate-intimacao-draft.ts). Usada pra recalcular
+ * a fundamentação no cliente sempre que o fiscal adiciona ou remove um
+ * artigo da lista sugerida pela IA (ver gerar-rascunho.tsx e
+ * assistente-ia-form-dialog.tsx) — sem isso, o texto de fundamentação
+ * ficaria desatualizado em relação aos artigos realmente selecionados.
+ */
+export function buildFundamentacaoFromArticles(articles: { label: string; lawTitle: string }[]): string {
+  const groupedByLaw: Record<string, string[]> = {};
+  articles.forEach((art) => {
+    const lawName = art.lawTitle.split(' - ')[0];
+    if (!groupedByLaw[lawName]) groupedByLaw[lawName] = [];
+    groupedByLaw[lawName].push(art.label.toUpperCase());
+  });
+  return Object.entries(groupedByLaw)
+    .map(([lawName, labels]) => `${lawName.toUpperCase()} (${Array.from(new Set(labels)).join(', ')})`)
+    .join('; ');
 }
 
 /**

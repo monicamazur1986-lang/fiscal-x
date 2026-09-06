@@ -4,11 +4,12 @@ export const runtime = 'edge'
 export const size = { width: 512, height: 512 }
 export const contentType = 'image/png'
 
-// Ícone do app (aba do navegador, PWA, atalho instalado) — recorte
-// quadrado do próprio mascote oficial (logo-fiscalx-oficial.jpeg), sem a
-// faixa de texto "FISCAL-X" do rodapé da arte original (ilegível em
-// tamanho pequeno). Gerado por src/app/favicon.ico e public/app-icon-*.png
-// (ver histórico de conversa/commits pra o script que faz o recorte).
+// Ícone do app (aba do navegador, PWA, atalho instalado) — mascote colorido
+// original sobre fundo branco, com moldura arredondada em verde
+// institucional padrão (#0E4A44), já embutido em app-icon-512.png. O fundo
+// aqui só aparece se a imagem não cobrir 100% da moldura; mantido em branco
+// por consistência. Ver public/app-icon-*.png (script de geração não
+// versionado, ver histórico de conversa).
 export default function Icon() {
   return new ImageResponse(
     (
@@ -19,7 +20,7 @@ export default function Icon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#0B3733',
+          background: '#FFFFFF',
           overflow: 'hidden',
         }}
       >

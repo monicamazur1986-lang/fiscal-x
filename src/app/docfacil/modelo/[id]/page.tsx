@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DocfacilEditor } from "@/components/docfacil-editor"
-import { useDocfacil } from "@/hooks/use-docfacil"
+import { useDocfacil, DOCFACIL_MODELO_GLOBAL } from "@/hooks/use-docfacil"
 import { useAuth } from "@/hooks/use-auth"
 import { useToast } from "@/hooks/use-toast"
 import { polishDocfacilText } from "@/ai/flows/polish-docfacil-text"
@@ -126,7 +126,12 @@ export default function ModeloDocfacilPage({ params }: { params: Promise<{ id: s
     );
   }
 
-  const codigoAtual = modelos.find((m) => m.id === id)?.codigo;
+  const modeloAtual = modelos.find((m) => m.id === id);
+  const codigoAtual = modeloAtual?.codigo;
+  // Modelo padrão do sistema (ver DOCFACIL_MODELO_GLOBAL) — só o root edita
+  // diretamente; qualquer outro município usa "Duplicar" na lista pra ter
+  // sua própria cópia editável, sem afetar o padrão de ninguém mais.
+  const isReadOnly = !isNovo && modeloAtual?.municipioId === DOCFACIL_MODELO_GLOBAL && profile?.role !== 'root';
 
   return (
     <div className="min-h-screen bg-white">
@@ -135,21 +140,28 @@ export default function ModeloDocfacilPage({ params }: { params: Promise<{ id: s
         title={isNovo ? "Novo Modelo" : "Editar Modelo"}
         actions={
           <div className="flex items-center gap-2">
-            <Button onClick={handleClickSalvar} disabled={isSaving || isPolishing} size="sm" className="h-9 rounded-md gap-1.5 text-xs font-medium">
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Salvar
-            </Button>
+            {!isReadOnly && (
+              <Button onClick={handleClickSalvar} disabled={isSaving || isPolishing} size="sm" className="h-9 rounded-md gap-1.5 text-xs font-medium">
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Salvar
+              </Button>
+            )}
           </div>
         }
       />
 
       <div className="max-w-6xl mx-auto w-full py-6 space-y-4 pb-40">
+        {isReadOnly && (
+          <div className="mx-4 sm:mx-0 p-4 rounded-lg border border-[#E4DFD1] bg-[#FAF8F3] text-xs text-[#6B6659]">
+            Este é um modelo padrão do sistema, disponível para todos os municípios — só o administrador do sistema pode editá-lo diretamente. Volte à lista de modelos e use "Duplicar" para criar sua própria cópia editável.
+          </div>
+        )}
         {/* Faixa de propriedades — compacta, tudo numa linha só, pra não competir com a folha do editor abaixo */}
         <div className="flex flex-wrap items-center gap-3 px-4 sm:px-0">
           <span className="text-xs text-zinc-400 tabular-nums shrink-0">
             {isNovo ? "Código: atribuído ao salvar" : `Nº ${String(codigoAtual ?? "").padStart(3, "0")}`}
           </span>
 
-          <Select value={tipo} onValueChange={(v) => setTipo(v as DocfacilTipo)}>
+          <Select value={tipo} onValueChange={(v) => setTipo(v as DocfacilTipo)} disabled={isReadOnly}>
             <SelectTrigger className="h-8 w-[130px] rounded-md text-xs shrink-0">
               <SelectValue />
             </SelectTrigger>
@@ -164,6 +176,7 @@ export default function ModeloDocfacilPage({ params }: { params: Promise<{ id: s
             value={descricao}
             onChange={(e) => setDescricao(e.target.value)}
             placeholder="Descrição do modelo"
+            disabled={isReadOnly}
             className="h-8 flex-1 min-w-[180px] rounded-md text-xs"
           />
 
@@ -171,23 +184,27 @@ export default function ModeloDocfacilPage({ params }: { params: Promise<{ id: s
             {tags.map((tag) => (
               <span key={tag} className="flex items-center gap-1 bg-zinc-100 rounded px-2 py-1 text-xs text-zinc-600">
                 #{tag}
-                <button type="button" onClick={() => setTags((prev) => prev.filter((t) => t !== tag))}>
-                  <X className="h-3 w-3 text-zinc-400 hover:text-rose-500" />
-                </button>
+                {!isReadOnly && (
+                  <button type="button" onClick={() => setTags((prev) => prev.filter((t) => t !== tag))}>
+                    <X className="h-3 w-3 text-zinc-400 hover:text-rose-500" />
+                  </button>
+                )}
               </span>
             ))}
-            <input
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(); } }}
-              onBlur={addTag}
-              placeholder="+ tag"
-              className="w-20 bg-transparent outline-none text-xs text-zinc-600 placeholder:text-zinc-400"
-            />
+            {!isReadOnly && (
+              <input
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(); } }}
+                onBlur={addTag}
+                placeholder="+ tag"
+                className="w-20 bg-transparent outline-none text-xs text-zinc-600 placeholder:text-zinc-400"
+              />
+            )}
           </div>
         </div>
 
-        <DocfacilEditor defaultValue={conteudo} onChange={setConteudo} forceContent={conteudo} />
+        <DocfacilEditor defaultValue={conteudo} onChange={setConteudo} forceContent={conteudo} disable={isReadOnly} />
       </div>
 
       <Dialog open={isConfirmSalvarOpen} onOpenChange={setIsConfirmSalvarOpen}>

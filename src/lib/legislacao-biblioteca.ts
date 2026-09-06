@@ -34,9 +34,12 @@ interface LeiJson {
   artigos: ArtigoJson[];
   biblioteca?: {
     esfera: 'municipal' | 'estadual' | 'federal';
-    /** Alimenta o agrupamento da Biblioteca — "RDC" e "Resolução" viram
-     * grupos próprios; ver groupOf() em src/app/biblioteca/page.tsx. */
+    /** Alimenta o agrupamento por tipo de norma — ver categoria em
+     * src/lib/types.ts. */
     categoria: string;
+    /** Pasta temática da Biblioteca — ver TEMA_ORDER em
+     * src/app/biblioteca/page.tsx. */
+    tema?: string;
   };
 }
 
@@ -96,6 +99,7 @@ export const documentosDaLegislacao: LegislacaoDocumento[] = Object.entries(
       id: `legislacao-${chave.toLowerCase().replace(/_/g, '-')}`,
       titulo: lei.titulo,
       categoria: lei.biblioteca!.categoria,
+      tema: lei.biblioteca!.tema,
       esfera: lei.biblioteca!.esfera,
       municipioId: lei.municipioId,
       descricao: lei.descricao || '',

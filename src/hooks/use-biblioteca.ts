@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { LegislacaoDocumento } from '@/lib/types';
 import { documentosDaLegislacao } from '@/lib/legislacao-biblioteca';
+import { extractPageText } from '@/lib/pdf-text-extract';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // pdfjs-dist 4.x só publica o worker como ES module (.mjs) — precisa estar em
@@ -18,42 +19,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs`;
 // vendo o texto espaçado errado até limpar o cache manualmente.
 const LOCAL_STORAGE_KEY = 'fiscal_x_biblioteca_local_v4';
 const MANIFEST_VERSION_KEY = 'fiscal_x_biblioteca_version_v4';
-
-// Alguns PDFs (comuns em publicações de órgãos públicos) gravam cada letra
-// como um "item" de texto separado, sem espaço nenhum no conteúdo — o join(' ')
-// ingênuo que existia antes colocava um espaço ENTRE CADA LETRA ("G A B I N E
-// T E"). A posição x/y de cada item é real, então em vez de sempre juntar com
-// espaço (ou nunca), só inserimos um espaço quando o vão horizontal entre o
-// fim de um item e o início do próximo é comparável à largura de um espaço de
-// verdade — kerning entre letras da mesma palavra é bem menor que isso.
-function extractPageText(items: any[]): string {
-  let text = '';
-  let last: any = null;
-  for (const item of items) {
-    if (!item?.str) {
-      if (item?.hasEOL) { text += '\n'; last = null; }
-      continue;
-    }
-    if (last) {
-      const sameLine = Math.abs(item.transform[5] - last.transform[5]) < Math.abs(item.transform[0] || 10) * 0.5;
-      if (!sameLine) {
-        text += '\n';
-      } else {
-        const prevEndX = last.transform[4] + (last.width || 0);
-        const gap = item.transform[4] - prevEndX;
-        const fontSize = Math.abs(item.transform[0]) || 10;
-        const alreadySpaced = text.endsWith(' ') || item.str.startsWith(' ');
-        if (!alreadySpaced && gap > fontSize * 0.2) {
-          text += ' ';
-        }
-      }
-    }
-    text += item.str;
-    last = item;
-    if (item.hasEOL) { text += '\n'; last = null; }
-  }
-  return text;
-}
 
 interface ManifestFile {
   version: string;
@@ -115,6 +80,7 @@ async function processManifestDocuments(
         esfera: forceMunicipioId ? 'municipal' : docInfo.esfera,
         municipioId: forceMunicipioId,
         categoria: docInfo.categoria,
+        tema: docInfo.tema,
         descricao: docInfo.descricao || `Documento carregado de ${docInfo.path}`,
         conteudoIntegral: fullText,
         keywords: docInfo.keywords || '',

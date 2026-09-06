@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { DocfacilModelo, DocfacilDocumento, DocfacilTipo } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import {
@@ -21,11 +21,20 @@ import { normalizeId } from '@/lib/utils';
 const MODELOS_KEY = 'fiscal_x_docfacil_modelos_v1';
 const DOCUMENTOS_KEY = 'fiscal_x_docfacil_documentos_v1';
 
-/** Modelos e documentos oficiais (ofício/memorando/circular) do DOCFACIL,
- * sempre isolados pelo município do usuário logado. */
+/** municipioId reservado para os modelos padrão do sistema (Ofício,
+ * Memorando, Circular) — visíveis a QUALQUER município (ver regra de leitura
+ * em firestore.rules), mas só editáveis/excluíveis pelo root. Cada município
+ * pode "Duplicar" um deles pra ter uma cópia própria e customizável. */
+export const DOCFACIL_MODELO_GLOBAL = 'global';
+
+/** Modelos e documentos oficiais (ofício/memorando/circular) do DOCFACIL —
+ * documentos sempre isolados pelo município do usuário logado; modelos
+ * combinam os do próprio município com o rol padrão global (ver
+ * DOCFACIL_MODELO_GLOBAL). */
 export function useDocfacil() {
   const { profile, user, configError } = useAuth();
-  const [modelos, setModelos] = useState<DocfacilModelo[]>([]);
+  const [modelosMunicipio, setModelosMunicipio] = useState<DocfacilModelo[]>([]);
+  const [modelosGlobais, setModelosGlobais] = useState<DocfacilModelo[]>([]);
   const [documentos, setDocumentos] = useState<DocfacilDocumento[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -39,7 +48,11 @@ export function useDocfacil() {
 
     const savedModelos = localStorage.getItem(`${MODELOS_KEY}_${municipioId}`);
     if (savedModelos) {
-      try { setModelos(JSON.parse(savedModelos)); } catch {}
+      try { setModelosMunicipio(JSON.parse(savedModelos)); } catch {}
+    }
+    const savedModelosGlobais = localStorage.getItem(`${MODELOS_KEY}_${DOCFACIL_MODELO_GLOBAL}`);
+    if (savedModelosGlobais) {
+      try { setModelosGlobais(JSON.parse(savedModelosGlobais)); } catch {}
     }
     const savedDocumentos = localStorage.getItem(`${DOCUMENTOS_KEY}_${municipioId}`);
     if (savedDocumentos) {
@@ -55,9 +68,19 @@ export function useDocfacil() {
     const unsubModelos = onSnapshot(qModelos, (snapshot) => {
       const items = snapshot.docs.map((d) => ({ ...d.data(), id: d.id } as DocfacilModelo));
       localStorage.setItem(`${MODELOS_KEY}_${municipioId}`, JSON.stringify(items));
-      setModelos(items);
+      setModelosMunicipio(items);
       setLoading(false);
     }, () => setLoading(false));
+
+    // Rol de modelos padrão do sistema — mesmo município fictício em todo
+    // lugar ('global'), lido junto por qualquer conta, mas só editável pelo
+    // root (ver firestore.rules).
+    const qModelosGlobais = query(collection(db, 'docfacilModelos'), where('municipioId', '==', DOCFACIL_MODELO_GLOBAL), orderBy('codigo', 'asc'));
+    const unsubModelosGlobais = onSnapshot(qModelosGlobais, (snapshot) => {
+      const items = snapshot.docs.map((d) => ({ ...d.data(), id: d.id } as DocfacilModelo));
+      localStorage.setItem(`${MODELOS_KEY}_${DOCFACIL_MODELO_GLOBAL}`, JSON.stringify(items));
+      setModelosGlobais(items);
+    });
 
     const qDocumentos = query(collection(db, 'docfacilDocumentos'), where('municipioId', '==', municipioId), orderBy('createdAt', 'desc'));
     const unsubDocumentos = onSnapshot(qDocumentos, (snapshot) => {
@@ -66,8 +89,12 @@ export function useDocfacil() {
       setDocumentos(items);
     });
 
-    return () => { unsubModelos(); unsubDocumentos(); };
+    return () => { unsubModelos(); unsubModelosGlobais(); unsubDocumentos(); };
   }, [municipioId, user?.uid, configError]);
+
+  // Padrão global primeiro (Ofício/Memorando/Circular do sistema, sempre os
+  // mesmos 3 primeiros da lista), seguido dos modelos próprios do município.
+  const modelos = useMemo(() => [...modelosGlobais, ...modelosMunicipio], [modelosGlobais, modelosMunicipio]);
 
   // Contador atômico por chave (um pros códigos de modelo, um por tipo+ano
   // pros números de documento emitido) — mesmo mecanismo já usado pra

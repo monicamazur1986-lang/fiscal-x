@@ -24,19 +24,18 @@ export const metadata: Metadata = {
     title: 'Fiscal-X',
   },
   icons: {
-    // Ícone do mascote oficial, recortado em tamanho real por resolução —
-    // antes todos os tamanhos declarados apontavam pro mesmo JPEG grande da
-    // ilustração completa (o navegador só reamostrava), e o favicon.ico
-    // estático em src/app/favicon.ico tinha uma versão ainda mais antiga
-    // gravada nos bytes, por isso a aba mostrava uma imagem desatualizada
-    // mesmo depois de trocar o arquivo do logo. Query ?v= força os
-    // navegadores/PWA a descartar qualquer cópia em cache.
+    // Mascote colorido original (fundo branco), com moldura arredondada em
+    // verde institucional padrão (#0E4A44) — testamos versões em traço/preto
+    // e em fundo neon/verde escuro antes desta (ver histórico de conversa),
+    // mas a colorida com moldura clara foi a aprovada. Tamanho real por
+    // resolução; script de geração não versionado. Query ?v= força os
+    // navegadores/PWA a descartar qualquer cópia em cache do ícone antigo.
     icon: [
-      { url: '/app-icon-192.png?v=20260904', sizes: '192x192', type: 'image/png' },
-      { url: '/app-icon-512.png?v=20260904', sizes: '512x512', type: 'image/png' },
+      { url: '/app-icon-192.png?v=20260906c', sizes: '192x192', type: 'image/png' },
+      { url: '/app-icon-512.png?v=20260906c', sizes: '512x512', type: 'image/png' },
     ],
-    shortcut: '/favicon.ico?v=20260904',
-    apple: '/app-icon-180.png?v=20260904',
+    shortcut: '/favicon.ico?v=20260906c',
+    apple: '/app-icon-180.png?v=20260906c',
   },
 };
 

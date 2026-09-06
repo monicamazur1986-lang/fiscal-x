@@ -19,7 +19,7 @@ export function SentinelaMascot({ className, width = 280, height = 280, simplifi
   // ilegível num espaço de ~36px. Antes essa condição existia mas apontava
   // pro mesmo arquivo nos dois casos (bug: a distinção nunca foi
   // implementada de fato).
-  const defaultFallback = simplified ? "/app-icon-512.png?v=20260904" : "/logo-fiscalx-oficial.jpeg?v=20260811";
+  const defaultFallback = simplified ? "/app-icon-512.png?v=20260906c" : "/logo-fiscalx-oficial.jpeg?v=20260811";
   const [fallbackSrc, setFallbackSrc] = useState(defaultFallback);
   const [mounted, setMounted] = useState(false);
 

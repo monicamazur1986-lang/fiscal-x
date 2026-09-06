@@ -130,6 +130,11 @@ export type LegislacaoDocumento = {
   esfera: 'municipal' | 'estadual' | 'federal';
   /** Só presente em documentos municipais — vem da pasta do manifest, nunca do conteúdo dele (evita erro de copiar/colar entre municípios). */
   municipioId?: string;
+  /** Pasta temática da Biblioteca (ver TEMA_ORDER em src/app/biblioteca/page.tsx)
+   * — ex.: "Alimentos e Bebidas", "Farmácias e Medicamentos". Ausente (ou
+   * "Normas Gerais e Institucionais") pra códigos-base que cobrem qualquer
+   * ramo de atividade, não um tema específico. */
+  tema?: string;
   descricao: string;
   conteudoIntegral?: string;
   linkOficial?: string;

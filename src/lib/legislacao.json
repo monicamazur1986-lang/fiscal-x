@@ -1207,7 +1207,7 @@
     "titulo": "Alimentos e Boas Práticas",
     "descricao": "Manipulação, Fabricação e Comercialização de Produtos Alimentícios",
     "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Alimentos",
-    "biblioteca": { "esfera": "federal", "categoria": "RDC" },
+    "biblioteca": { "esfera": "federal", "categoria": "RDC", "tema": "Alimentos e Bebidas" },
     "artigos": [
       {
         "id": "rdc-216-04",
@@ -1227,7 +1227,7 @@
     "titulo": "Serviços de Odontologia",
     "descricao": "Clínicas, Consultórios e Processamento de Materiais",
     "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Servicos-de-Saude",
-    "biblioteca": { "esfera": "federal", "categoria": "RDC" },
+    "biblioteca": { "esfera": "federal", "categoria": "RDC", "tema": "Serviços de Saúde (Assistência)" },
     "artigos": [
       {
         "id": "sesa-442-12",
@@ -1313,7 +1313,7 @@
   "FARMACIA": {
     "titulo": "RDC ANVISA nº 44/2009",
     "descricao": "Boas Práticas Farmacêuticas para Farmácias e Drogarias",
-    "biblioteca": { "esfera": "federal", "categoria": "RDC" },
+    "biblioteca": { "esfera": "federal", "categoria": "RDC", "tema": "Farmácias e Medicamentos" },
     "artigos": [
       {
         "id": "rdc-44-09-art2",

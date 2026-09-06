@@ -9,64 +9,81 @@ import { ScrollText, Gavel, Lock, Unlock, PackageX, Trash2, Ban, Scale, ChevronR
 // Mesmas opções de "termoOptions" (documento-oficial-body.tsx), com a
 // orientação de quando usar cada uma — a mesma escolha que hoje só existe
 // como um <select> dentro do próprio documento, agora explicada antes de
-// abrir a página em branco. A ordem acompanha o fluxo processual e mantém
-// juntos os pares que se referenciam.
-const TIPOS_AUTUACAO = [
+// abrir a página em branco. Agrupadas por fase do processo (em vez de uma
+// lista plana de 8 itens, cada um com uma cor diferente) para reduzir a
+// poluição visual: uma cor por grupo, não uma por item.
+const GRUPOS_AUTUACAO = [
   {
-    value: "AUTO DE INFRAÇÃO",
-    label: "Auto de Infração",
-    description: "Registra a irregularidade constatada e abre prazo de defesa. Ponto de partida mais comum.",
-    icon: Gavel,
-    accent: "#9C7A3C",
-  },
-  {
-    value: "TERMO DE INTIMAÇÃO",
-    label: "Termo de Intimação",
-    description: "Notifica formalmente uma exigência, sem caracterizar infração ainda.",
-    icon: ScrollText,
+    titulo: "Abertura do processo",
     accent: "#0E4A44",
+    tipos: [
+      {
+        value: "AUTO DE INFRAÇÃO",
+        label: "Auto de Infração",
+        description: "Registra a irregularidade e abre prazo de defesa. Ponto de partida mais comum.",
+        icon: Gavel,
+      },
+      {
+        value: "TERMO DE INTIMAÇÃO",
+        label: "Termo de Intimação",
+        description: "Notifica formalmente uma exigência, sem caracterizar infração ainda.",
+        icon: ScrollText,
+      },
+    ],
   },
   {
-    value: "TERMO DE INTERDIÇÃO",
-    label: "Termo de Interdição",
-    description: "Suspende total ou parcialmente o funcionamento do estabelecimento até a regularização.",
-    icon: Lock,
+    titulo: "Interdição",
+    accent: "#9C7A3C",
+    tipos: [
+      {
+        value: "TERMO DE INTERDIÇÃO",
+        label: "Termo de Interdição",
+        description: "Suspende o funcionamento até a regularização.",
+        icon: Lock,
+      },
+      {
+        value: "TERMO DE DESINTERDIÇÃO",
+        label: "Termo de Desinterdição",
+        description: "Encerra a interdição e libera o reinício das atividades.",
+        icon: Unlock,
+      },
+    ],
+  },
+  {
+    titulo: "Apreensão e inutilização",
     accent: "#A15437",
+    tipos: [
+      {
+        value: "TERMO DE APREENSÃO",
+        label: "Termo de Apreensão",
+        description: "Recolhe produtos irregulares. Defesa corre no Auto vinculado.",
+        icon: PackageX,
+      },
+      {
+        value: "TERMO DE APREENSÃO E INUTILIZAÇÃO",
+        label: "Termo de Apreensão e Inutilização",
+        description: "Recolhe e já inutiliza produtos impróprios, num só documento.",
+        icon: Trash2,
+      },
+      {
+        value: "TERMO DE INUTILIZAÇÃO",
+        label: "Termo de Inutilização",
+        description: "Formaliza a inutilização de produtos impróprios.",
+        icon: Ban,
+      },
+    ],
   },
   {
-    value: "TERMO DE DESINTERDIÇÃO",
-    label: "Termo de Desinterdição",
-    description: "Encerra a interdição depois de sanadas as irregularidades e libera o reinício das atividades.",
-    icon: Unlock,
-    accent: "#3F6B4A",
-  },
-  {
-    value: "TERMO DE APREENSÃO",
-    label: "Termo de Apreensão",
-    description: "Recolhe produtos ou materiais irregulares. O prazo de defesa corre no Auto de Infração vinculado.",
-    icon: PackageX,
+    titulo: "Encerramento",
     accent: "#3D5A73",
-  },
-  {
-    value: "TERMO DE APREENSÃO E INUTILIZAÇÃO",
-    label: "Termo de Apreensão e Inutilização",
-    description: "Reúne os dois atos: recolhe e já inutiliza produtos impróprios, num único documento.",
-    icon: Trash2,
-    accent: "#7A4A3A",
-  },
-  {
-    value: "TERMO DE INUTILIZAÇÃO",
-    label: "Termo de Inutilização",
-    description: "Formaliza a inutilização de produtos impróprios para consumo ou uso.",
-    icon: Ban,
-    accent: "#6B4C80",
-  },
-  {
-    value: "TERMO DE IMPOSIÇÃO DE PENALIDADE",
-    label: "Termo de Imposição de Penalidade",
-    description: "Aplica a penalidade ao final do processo. Abre prazo de recurso, não de defesa prévia.",
-    icon: Scale,
-    accent: "#5A4632",
+    tipos: [
+      {
+        value: "TERMO DE IMPOSIÇÃO DE PENALIDADE",
+        label: "Termo de Imposição de Penalidade",
+        description: "Aplica a penalidade ao final do processo. Abre prazo de recurso.",
+        icon: Scale,
+      },
+    ],
   },
 ] as const;
 
@@ -75,30 +92,37 @@ function EscolherTipoAutuacao() {
 
   return (
     <div className="min-h-screen bg-[#F5F2EA] p-4 sm:p-8">
-      <div className="max-w-5xl mx-auto w-full space-y-8 py-8">
-        <div className="space-y-2 text-center sm:text-left">
+      <div className="max-w-3xl mx-auto w-full space-y-10 py-8">
+        <div className="space-y-1.5 text-center">
           <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#9C7A3C]">Nova Autuação</p>
           <h1 className="font-serif text-2xl sm:text-3xl text-[#262420]">Qual documento você vai lavrar?</h1>
-          <p className="text-sm text-[#6B6659] max-w-xl sm:mx-0 mx-auto">Escolha o tipo — o documento já abre com o texto e o prazo padrão certos para ele. Dá pra trocar depois, se precisar.</p>
+          <p className="text-sm text-[#6B6659] max-w-lg mx-auto">Escolha o tipo — o documento já abre com o texto e o prazo certos para ele.</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {TIPOS_AUTUACAO.map((tipo) => (
-            <button
-              key={tipo.value}
-              type="button"
-              onClick={() => router.push(`/intimacoes/nova?tipo=${encodeURIComponent(tipo.value)}`)}
-              className="group flex items-start gap-4 text-left bg-white border border-[#E4DFD1] rounded-lg p-5 shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)] hover:border-[#0E4A44]/30 hover:shadow-[0_1px_2px_rgba(38,36,32,0.06),0_12px_28px_-12px_rgba(14,74,68,0.18)] transition-all"
-            >
-              <div className="h-11 w-11 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${tipo.accent}1A`, color: tipo.accent }}>
-                <tipo.icon className="h-5 w-5" />
+        <div className="space-y-7">
+          {GRUPOS_AUTUACAO.map((grupo) => (
+            <div key={grupo.titulo} className="space-y-2.5">
+              <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: grupo.accent }}>{grupo.titulo}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {grupo.tipos.map((tipo) => (
+                  <button
+                    key={tipo.value}
+                    type="button"
+                    onClick={() => router.push(`/intimacoes/nova?tipo=${encodeURIComponent(tipo.value)}`)}
+                    className="group flex items-center gap-3 text-left bg-white border border-[#E4DFD1] rounded-lg p-3.5 shadow-sm hover:border-[#0E4A44]/30 hover:shadow-md transition-all"
+                  >
+                    <div className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${grupo.accent}14`, color: grupo.accent }}>
+                      <tipo.icon className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-serif text-[15px] text-[#262420] leading-tight">{tipo.label}</p>
+                      <p className="text-xs text-[#8A8474] leading-snug line-clamp-1">{tipo.description}</p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-[#C4BEAC] shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:text-[#0E4A44]" />
+                  </button>
+                ))}
               </div>
-              <div className="flex-1 min-w-0 space-y-1">
-                <p className="font-serif text-lg text-[#262420]">{tipo.label}</p>
-                <p className="text-xs text-[#6B6659] leading-relaxed">{tipo.description}</p>
-              </div>
-              <ChevronRight className="h-4 w-4 text-[#A39D8C] shrink-0 mt-1.5 transition-transform group-hover:translate-x-0.5 group-hover:text-[#0E4A44]" />
-            </button>
+            </div>
           ))}
         </div>
       </div>

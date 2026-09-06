@@ -1,6 +1,6 @@
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { normalizeText } from './text-normalize';
+import { jaccardSimilarity } from './text-similarity';
 
 const serviceAccountKey = process.env.FIREBASE_ADMIN_SDK_PRIVATE_KEY_JSON;
 // storageBucket incluído mesmo sem uso de Storage aqui — ver justificativa
@@ -8,19 +8,6 @@ const serviceAccountKey = process.env.FIREBASE_ADMIN_SDK_PRIVATE_KEY_JSON;
 // o primeiro módulo a rodar decide a config pra todos os outros).
 if (!getApps().length && serviceAccountKey) {
   initializeApp({ credential: cert(JSON.parse(serviceAccountKey)), storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET });
-}
-
-/** Similaridade simples por sobreposição de palavras (Jaccard sobre o menor
- * conjunto) — suficiente pra achar "o exemplo mais parecido" num corpus
- * pequeno por município, sem precisar de embeddings/infra extra. */
-function similarity(a: string, b: string): number {
-  const wordsOf = (t: string) => new Set(normalizeText(t).split(/\s+/).filter((w) => w.length > 3));
-  const wordsA = wordsOf(a);
-  const wordsB = wordsOf(b);
-  if (wordsA.size === 0 || wordsB.size === 0) return 0;
-  let common = 0;
-  for (const w of wordsA) if (wordsB.has(w)) common++;
-  return common / Math.min(wordsA.size, wordsB.size);
 }
 
 interface ExemploEncontrado {
@@ -65,7 +52,7 @@ export async function buscarMelhorExemplo(caseDescription: string, municipioId: 
     let melhor: { score: number; exemplo: ExemploEncontrado } | null = null;
     snap.forEach((docSnap) => {
       const data = docSnap.data();
-      const score = similarity(caseDescription, data.caseDescription || '');
+      const score = jaccardSimilarity(caseDescription, data.caseDescription || '');
       if (score >= 0.3 && (!melhor || score > melhor.score)) {
         melhor = { score, exemplo: { caseDescription: data.caseDescription, draftGerado: data.draftGerado, reportType: data.reportType } };
       }

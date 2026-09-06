@@ -27,7 +27,7 @@ export interface DashboardMenuItem {
 // abaixo) em vez de um preenchimento chapado.
 export const DASHBOARD_MENU_ITEMS: DashboardMenuItem[] = [
   { href: "/intimacoes/nova", label: "Nova Autuação", description: "Termo de intimação ou auto de infração", icon: FileText, color: "#1F7A5C" },
-  { href: "/rascunho", label: "Fiscal AI", description: "Assistente de redação com inteligência artificial", icon: Sparkles, color: "#9C7A3C" },
+  { href: "/rascunho", label: "Fiscal AI", description: "Gerar rascunho ou tirar dúvidas com inteligência artificial", icon: Sparkles, color: "#9C7A3C" },
   { href: "/agenda", label: "Agenda", description: "Compromissos e inspeções do dia", icon: CalendarDays, color: "#3D5A73" },
   { href: "/intimacoes", label: "Documentos", description: "Autuações emitidas e rascunhos", icon: Archive, color: "#524E45" },
   { href: "/roteiros", label: "Roteiros", description: "Checklists técnicos de inspeção", icon: ClipboardList, color: "#6B4C80" },

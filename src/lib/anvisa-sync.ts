@@ -37,40 +37,53 @@ export const DEFAULT_MAX_WRITES_PER_RUN = 15000;
 // Campo que identifica cada linha de forma única por dataset — vira o ID do
 // documento no Firestore. Mapeado explicitamente (em vez de adivinhado por
 // regex) porque só existem 4 datasets fixos, todos já conhecidos.
+// Nomes de coluna conferidos direto no cabeçalho real de cada CSV (2026-09-06)
+// — vários datasets tinham nomes "adivinhados" aqui que nunca bateram com o
+// arquivo de verdade, fazendo TODA linha ser descartada por falta de um docId
+// (ver resolveDocId) sem nenhum erro visível: a sincronização "funcionava"
+// (completo: true) mas gravava zero registros. Cada lista mantém o nome real
+// primeiro; os demais ficam como fallback caso a ANVISA renomeie de novo.
 const ID_FIELD: Record<string, string[]> = {
   empresas: ['NU_CNPJ'],
   'produtos-saude': ['NU_REGISTRO_PRODUTO', 'NUMERO_REGISTRO', 'REGISTRO', 'NU_REGISTRO'],
   medicamentos: ['NU_REGISTRO_PRODUTO', 'NUMERO_REGISTRO', 'REGISTRO', 'NU_REGISTRO'],
-  saneantes: ['NUMERO_REGISTRO', 'NU_REGISTRO', 'REGISTRO'],
-  alimentos: ['NUMERO_REGISTRO', 'NU_REGISTRO', 'REGISTRO', 'NU_CNPJ'],
-  cosmeticos: ['NUMERO_REGISTRO', 'NU_REGISTRO', 'REGISTRO', 'NU_CNPJ'],
-  'ensaios-clinicos': ['NU_REGISTRO', 'NUMERO_REGISTRO', 'REGISTRO'],
-  cannabis: ['NUMERO_REGISTRO', 'NU_REGISTRO', 'REGISTRO', 'NU_CNPJ'],
-  tabaco: ['NUMERO_REGISTRO', 'NU_REGISTRO', 'REGISTRO', 'NU_CNPJ'],
+  // Saneantes: NU_REGISTRO_PRODUTO vem vazio em boa parte das linhas
+  // (produto dispensado de registro) — NU_PROCESSO é o único campo sempre
+  // preenchido no arquivo real, por isso vai primeiro.
+  saneantes: ['NU_PROCESSO', 'NU_REGISTRO_PRODUTO', 'NUMERO_REGISTRO', 'NU_REGISTRO'],
+  alimentos: ['NU_REGISTRO_PRODUTO', 'NUMERO_REGISTRO', 'REGISTRO', 'NU_CNPJ_EMPRESA'],
+  cosmeticos: ['NU_REGISTRO', 'NUMERO_REGISTRO', 'REGISTRO', 'NU_CNPJ_EMPRESA'],
+  // Ensaios clínicos não tem "número de registro" (não é um produto
+  // registrado) — CO_CE é o código do processo/comitê de ética, único por
+  // estudo no arquivo.
+  'ensaios-clinicos': ['CO_CE', 'NU_PROTOCOLO_CLINICO', 'NU_REGISTRO', 'NUMERO_REGISTRO'],
+  cannabis: ['NUMERO_REGISTRO_PRODUTO', 'NUMERO_REGISTRO', 'NU_REGISTRO', 'REGISTRO'],
+  // Tabaco também não tem número de registro — usa o nº do processo.
+  tabaco: ['NU_PROCESSO', 'NUMERO_REGISTRO', 'NU_REGISTRO', 'REGISTRO'],
 };
 
 const CNPJ_FIELD: Record<string, string[]> = {
   empresas: ['NU_CNPJ'],
   'produtos-saude': ['NU_CNPJ_EMPRESA', 'CNPJ', 'NU_CNPJ'],
   medicamentos: ['NU_CNPJ_EMPRESA', 'CNPJ', 'NU_CNPJ'],
-  saneantes: ['NU_CNPJ', 'CNPJ', 'CNPJ_EMPRESA'],
-  alimentos: ['NU_CNPJ', 'CNPJ'],
-  cosmeticos: ['NU_CNPJ', 'CNPJ'],
-  'ensaios-clinicos': ['NU_CNPJ', 'CNPJ'],
-  cannabis: ['NU_CNPJ', 'CNPJ'],
-  tabaco: ['NU_CNPJ', 'CNPJ'],
+  saneantes: ['NU_CNPJ_EMPRESA', 'NU_CNPJ', 'CNPJ'],
+  alimentos: ['NU_CNPJ_EMPRESA', 'NU_CNPJ', 'CNPJ'],
+  cosmeticos: ['NU_CNPJ_EMPRESA', 'NU_CNPJ', 'CNPJ'],
+  'ensaios-clinicos': ['NU_CNPJ_EMPRESA', 'NU_CNPJ', 'CNPJ'],
+  cannabis: ['NUMERO_CNPJ_EMPRESA', 'NU_CNPJ', 'CNPJ'],
+  tabaco: ['NU_CNPJ_EMPRESA', 'NU_CNPJ', 'CNPJ'],
 };
 
 const NAME_FIELD: Record<string, string[]> = {
   empresas: ['NO_RAZAO_SOCIAL', 'RAZAO_SOCIAL', 'NOME_EMPRESA', 'NO_FANTASIA'],
   'produtos-saude': ['NO_PRODUTO', 'NOME_PRODUTO', 'DESCRICAO_PRODUTO'],
   medicamentos: ['NO_PRODUTO', 'NOME_PRODUTO', 'DESCRICAO_PRODUTO'],
-  saneantes: ['NOME_PRODUTO', 'NO_PRODUTO', 'DESCRICAO_PRODUTO'],
-  alimentos: ['NOME_PRODUTO', 'NO_PRODUTO', 'DESCRICAO_PRODUTO', 'RAZAO_SOCIAL'],
-  cosmeticos: ['NOME_PRODUTO', 'NO_PRODUTO', 'DESCRICAO_PRODUTO', 'RAZAO_SOCIAL'],
-  'ensaios-clinicos': ['NO_PRODUTO', 'NOME_PRODUTO', 'DESCRICAO_PRODUTO', 'RAZAO_SOCIAL'],
-  cannabis: ['NOME_PRODUTO', 'NO_PRODUTO', 'DESCRICAO_PRODUTO', 'RAZAO_SOCIAL'],
-  tabaco: ['NOME_PRODUTO', 'NO_PRODUTO', 'DESCRICAO_PRODUTO', 'RAZAO_SOCIAL'],
+  saneantes: ['NO_PRODUTO', 'NOME_PRODUTO', 'DESCRICAO_PRODUTO', 'NO_RAZAO_SOCIAL_EMPRESA'],
+  alimentos: ['NO_PRODUTO', 'NOME_PRODUTO', 'DESCRICAO_PRODUTO', 'NO_RAZAO_SOCIAL_EMPRESA'],
+  cosmeticos: ['NO_PRODUTO', 'NOME_PRODUTO', 'DESCRICAO_PRODUTO', 'NO_RAZAO_SOCIAL_EMPRESA'],
+  'ensaios-clinicos': ['NOME_PRODUTO', 'NO_PRODUTO', 'DESCRICAO_PRODUTO', 'NO_RAZAO_SOCIAL_EMPRESA'],
+  cannabis: ['NOME_PRODUTO', 'NO_PRODUTO', 'DESCRICAO_PRODUTO', 'NOME_RAZAO_SOCIAL_EMPRESA'],
+  tabaco: ['NO_PRODUTO', 'NOME_PRODUTO', 'DESCRICAO_PRODUTO', 'NO_RAZAO_SOCIAL_EMPRESA'],
 };
 
 function normalizeRowKey(value: string): string {

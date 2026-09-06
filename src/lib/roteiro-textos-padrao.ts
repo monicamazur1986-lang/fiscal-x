@@ -43,6 +43,17 @@ const p = (text: string) => `<p style="margin:0 0 10px 0">${text}</p>`;
 // estabelecimento deverá promover a regularização integral das
 // recomendações e ajustes apontados, conforme os itens descritos a seguir."
 export const DEFAULT_INTRO_HTML: Record<string, string> = {
+  // Promovido do padrão já configurado em Identidade Municipal de
+  // Prudentópolis (roteiro "odontologia") pra virar o padrão de código pra
+  // qualquer município/fiscal que ainda não tenha personalizado o próprio —
+  // antes esse roteiro caía no texto genérico da chave "default" abaixo.
+  odontologia: [
+    p('No dia {{DATA}} a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {{ESTABELECIMENTO}}, CNPJ/CPF {{CNPJ}}, com a finalidade de verificar as condições sanitárias do estabelecimento e proceder à renovação da licença sanitária, conforme protocolo.'),
+    p('Considerando que se trata de atividade classificada como de alto risco sanitário, nos termos da Resolução SESA nº 1024/2020, o funcionamento está condicionado à posse de licença sanitária válida, cuja renovação deve ser realizada anualmente.'),
+    p('A inspeção foi conduzida de acordo com os critérios legais e técnicos estabelecidos pela RDC 1002/25 da Anvisa, além das demais normas sanitárias e protocolos de biossegurança aplicáveis aos serviços de saúde.'),
+    p('Durante a vistoria realizada, foram identificadas algumas inconformidades que necessitam de correção, a fim de garantir o cumprimento da legislação vigente e assegurar a proteção da saúde de usuários e profissionais.'),
+    p('Dessa forma, para que seja possível a emissão da licença sanitária, o estabelecimento deverá promover a regularização integral das recomendações e ajustes apontados, conforme os itens descritos a seguir.'),
+  ].join(''),
   alimentacao: [
     p('No dia {{DATA}}, a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {{ESTABELECIMENTO}}, inscrito sob CNPJ/CPF {{CNPJ}}, com a finalidade de verificar as condições sanitárias do local.'),
     p('A inspeção foi conduzida de acordo com os critérios legais e técnicos estabelecidos pela RDC nº 216/2004 e pela RDC nº 275/2002 da Anvisa, além das demais normas sanitárias e protocolos de biossegurança pertinentes.'),
@@ -70,6 +81,13 @@ export const DEFAULT_INTRO_HTML: Record<string, string> = {
 };
 
 export const DEFAULT_CONCLUSAO_HTML: Record<string, string> = {
+  // Ver comentário equivalente em DEFAULT_INTRO_HTML acima.
+  odontologia: [
+    p('O estabelecimento deverá sanar todas as não conformidades apontadas neste relatório no prazo máximo de {{PRAZO_DIAS}} dias, contados a partir do recebimento do documento{{BASE_LEGAL_PRAZO}}.'),
+    p('Caso o estabelecimento não cumpra o prazo estipulado ou não formalize pedido de prorrogação, será lavrado um Termo de Intimação ou de Infração, fundamentado na legislação vigente, determinando a regularização das situações de não conformidade.'),
+    p('A Vigilância Sanitária Municipal acompanhará a implementação das medidas corretivas e permanecerá disponível para prestar orientações técnicas. Havendo necessidade devidamente justificada, o estabelecimento poderá solicitar prorrogação dos prazos, a qual será analisada e deliberada conforme a legislação aplicável.'),
+    p('Em caso de dúvidas, estamos à disposição.'),
+  ].join(''),
   farmacia: [
     p('O estabelecimento deverá sanar todas as não conformidades apontadas neste relatório no prazo máximo de {{PRAZO_DIAS}} dias, contados do recebimento deste documento{{BASE_LEGAL_PRAZO}}, mantendo permanentemente as condições exigidas pela Lei Federal nº 5.991/1973 e pela RDC nº 44/2009 da Anvisa.'),
     p('O não cumprimento do prazo, sem pedido de prorrogação, resultará em Termo de Intimação ou de Infração, podendo levar à interdição do estabelecimento e/ou à apreensão de produtos nos casos mais graves.'),

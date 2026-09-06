@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, type Dispatch, type SetStateAction } from "react"
+import { useState, useRef, useEffect, useMemo, type Dispatch, type SetStateAction } from "react"
 import {
   Loader2,
   Sparkles,
@@ -23,12 +23,14 @@ import {
   RotateCcw,
   Eraser,
   MessageSquareWarning,
-  ChevronDown
+  ChevronDown,
+  Plus
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
 import { generateIntimacaoDraft } from "@/ai/flows/generate-intimacao-draft"
 import { salvarExemploFiscalAi } from "@/lib/fiscal-ai-exemplos"
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
@@ -39,7 +41,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { Badge } from "@/components/ui/badge"
-import { getBaseLawOptions, getIndividualLawOptions, toggleLawPreference as toggleLawPreferenceValue, type LawPreference } from "@/lib/legal-search"
+import { getBaseLawOptions, getIndividualLawOptions, toggleLawPreference as toggleLawPreferenceValue, searchLegislacao, buildFundamentacaoFromArticles, type LawPreference } from "@/lib/legal-search"
 import type { MatchedArticle } from "@/ai/flows/generate-intimacao-draft"
 
 type ReportType = 'intimação' | 'infração' | 'apreensão' | 'interdição';
@@ -81,6 +83,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
   const [isRecording, setIsRecording] = useState(false)
   const [coolDown, setCoolDown] = useState(0)
   const [isLegalMenuOpen, setIsLegalMenuOpen] = useState(false)
+  const [addArticleQuery, setAddArticleQuery] = useState("")
 
   const router = useRouter()
   const { toast } = useToast()
@@ -88,7 +91,34 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
   const recognitionRef = useRef<any>(null)
 
   const lawOptions = getBaseLawOptions(profile?.municipioId)
-  const individualLawOptions = getIndividualLawOptions()
+  const individualLawOptions = getIndividualLawOptions(profile?.municipioId)
+
+  // Fiscal pode corrigir a fundamentação que a IA sugeriu — remover um artigo
+  // que não se aplica, ou adicionar um que ela deixou passar. A fundamentação
+  // (texto de citação) é sempre recalculada a partir da lista final, pra
+  // nunca ficar dessincronizada dos artigos realmente selecionados.
+  const addArticleResults = useMemo(() => {
+    if (addArticleQuery.trim().length < 3) return [];
+    return searchLegislacao(addArticleQuery, { pref: lawPreferences, municipioId: profile?.municipioId || undefined, limit: 6 })
+      .filter((a) => !matchedArticles.some((m) => m.id === a.id));
+  }, [addArticleQuery, lawPreferences, profile?.municipioId, matchedArticles]);
+
+  const removerArtigoFundamentacao = (id: string) => {
+    setMatchedArticles((prev) => {
+      const next = prev.filter((a) => a.id !== id);
+      setFundamentacao(buildFundamentacaoFromArticles(next));
+      return next;
+    });
+  };
+
+  const adicionarArtigoFundamentacao = (artigo: ReturnType<typeof searchLegislacao>[number]) => {
+    setMatchedArticles((prev) => {
+      const next = [...prev, { id: artigo.id, label: artigo.label, lawTitle: artigo.lawTitle, texto: artigo.texto }];
+      setFundamentacao(buildFundamentacaoFromArticles(next));
+      return next;
+    });
+    setAddArticleQuery("");
+  };
 
   useEffect(() => {
     setError(null);
@@ -256,7 +286,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
   }
 
   return (
-    <div className="max-w-5xl mx-auto w-full space-y-5 pt-4 font-sans pb-40 px-4">
+    <div className="space-y-5 font-sans pb-40">
       {/* Cabeçalho discreto — uma linha só, sem repetir informação dentro do card */}
       <div className="flex items-center gap-3 no-print">
         <div className="flex items-center gap-2 text-slate-500">
@@ -433,27 +463,64 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                                       <Badge className={cn("text-[9px] font-medium border-none", engine === 'local' ? "bg-emerald-500/20 text-emerald-400" : "bg-blue-500/20 text-blue-400")}>{engine === 'local' ? "Local" : "Nuvem"}</Badge>
                                   </div>
                                   <p className="text-sm font-medium leading-snug">{fundamentacao}</p>
-                                  {matchedArticles.length > 0 && (
-                                      <Popover>
-                                          <PopoverTrigger asChild>
-                                              <button type="button" className="mt-3 flex items-center gap-1.5 text-[11px] font-medium text-primary hover:text-primary/80 transition-colors">
-                                                  <BookOpen className="h-3.5 w-3.5" /> Conferir texto integral ({matchedArticles.length} {matchedArticles.length === 1 ? 'artigo' : 'artigos'})
-                                              </button>
-                                          </PopoverTrigger>
-                                          <PopoverContent align="start" className="w-[min(28rem,90vw)] max-h-[60vh] overflow-y-auto p-0 bg-white border-zinc-200 rounded-xl shadow-xl">
-                                              <div className="p-4 space-y-3">
-                                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Base usada na fundamentação</p>
-                                                  {matchedArticles.map((art) => (
-                                                      <div key={art.id} className="border border-zinc-100 rounded-lg p-3 space-y-1 bg-zinc-50/60">
-                                                          <p className="text-[10px] font-semibold uppercase text-primary tracking-wide">{art.lawTitle}</p>
-                                                          <p className="text-xs font-semibold text-zinc-700">{art.label}</p>
-                                                          <p className="text-xs text-zinc-600 leading-relaxed">{art.texto}</p>
-                                                      </div>
-                                                  ))}
+                                  <Popover>
+                                      <PopoverTrigger asChild>
+                                          <button type="button" className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition-colors">
+                                              <BookOpen className="h-3.5 w-3.5" /> Conferir e ajustar base legal ({matchedArticles.length})
+                                          </button>
+                                      </PopoverTrigger>
+                                      <PopoverContent align="start" className="w-[min(28rem,90vw)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto p-0 bg-white border-zinc-200 rounded-xl shadow-xl">
+                                          <div className="p-4 space-y-3">
+                                              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Base usada na fundamentação</p>
+                                              {matchedArticles.length === 0 && (
+                                                  <p className="text-xs text-zinc-400 italic">Nenhum artigo selecionado — busque abaixo pra adicionar.</p>
+                                              )}
+                                              {matchedArticles.map((art) => (
+                                                  <div key={art.id} className="border border-zinc-100 rounded-lg p-3 space-y-1 bg-zinc-50/60 relative">
+                                                      <button
+                                                          type="button"
+                                                          onClick={() => removerArtigoFundamentacao(art.id)}
+                                                          aria-label={`Remover ${art.label} da fundamentação`}
+                                                          className="absolute right-2 top-2 h-5 w-5 flex items-center justify-center text-zinc-300 hover:text-rose-500 transition-colors"
+                                                      >
+                                                          <X className="h-3.5 w-3.5" />
+                                                      </button>
+                                                      <p className="text-[10px] font-semibold uppercase text-primary tracking-wide pr-6">{art.lawTitle}</p>
+                                                      <p className="text-xs font-semibold text-zinc-700">{art.label}</p>
+                                                      <p className="text-xs text-zinc-600 leading-relaxed">{art.texto}</p>
+                                                  </div>
+                                              ))}
+
+                                              <div className="pt-2 border-t border-zinc-100 space-y-1.5">
+                                                  <Input
+                                                      value={addArticleQuery}
+                                                      onChange={(e) => setAddArticleQuery(e.target.value)}
+                                                      placeholder="Buscar outro artigo pra adicionar..."
+                                                      className="h-8 text-xs"
+                                                  />
+                                                  {addArticleQuery.trim().length >= 3 && (
+                                                      addArticleResults.length === 0 ? (
+                                                          <p className="text-[11px] text-zinc-400 px-1">Nenhum artigo encontrado.</p>
+                                                      ) : (
+                                                          <div className="max-h-40 overflow-y-auto space-y-1">
+                                                              {addArticleResults.map((a) => (
+                                                                  <button
+                                                                      key={a.id}
+                                                                      type="button"
+                                                                      onClick={() => adicionarArtigoFundamentacao(a)}
+                                                                      className="w-full text-left flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded-lg hover:bg-zinc-100 transition-colors"
+                                                                  >
+                                                                      <span className="truncate"><strong>{a.label}</strong> — {a.lawTitle}</span>
+                                                                      <Plus className="h-3.5 w-3.5 shrink-0 text-primary" />
+                                                                  </button>
+                                                              ))}
+                                                          </div>
+                                                      )
+                                                  )}
                                               </div>
-                                          </PopoverContent>
-                                      </Popover>
-                                  )}
+                                          </div>
+                                      </PopoverContent>
+                                  </Popover>
                               </div>
                           )}
 
