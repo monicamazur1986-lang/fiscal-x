@@ -11,7 +11,8 @@ import {
   ClipboardList,
   MessageSquare,
   Library,
-  ShieldAlert
+  ShieldAlert,
+  Scale
 } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -25,6 +26,7 @@ const navItems = [
   { href: "/intimacoes", icon: Archive, label: "Documentos" },
   { href: "/agenda", icon: CalendarDays, label: "Agenda" },
   { href: "/roteiros", icon: ClipboardList, label: "Roteiros" },
+  { href: "/pas", icon: Scale, label: "PAS" },
   { href: "/legislacao", icon: Library, label: "Biblioteca" },
   { href: "/risco-sanitario", icon: ShieldAlert, label: "Risco Sanitário" },
 ]

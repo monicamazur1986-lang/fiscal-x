@@ -65,6 +65,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
             ...i,
             dataIntimacao: new Date(i.dataIntimacao),
             dataRecebimento: i.dataRecebimento ? new Date(i.dataRecebimento) : undefined,
+            dataRecebimentoTecnico: i.dataRecebimentoTecnico ? new Date(i.dataRecebimentoTecnico) : undefined,
         }));
         setIntimacoes(parsed);
       } catch (e) {
@@ -101,6 +102,14 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
             id: doc.id,
             dataIntimacao: data.dataIntimacao instanceof Timestamp ? data.dataIntimacao.toDate() : new Date(data.dataIntimacao),
             dataRecebimento: data.dataRecebimento instanceof Timestamp ? data.dataRecebimento.toDate() : data.dataRecebimento ? new Date(data.dataRecebimento) : undefined,
+            // Mesmo bug que dataRecebimento já tinha corrigido: sem esta
+            // conversão, um Timestamp cru do Firestore chegava até
+            // documento-oficial-body.tsx, e `new Date(timestampCru)` vira
+            // Invalid Date — o `format()` do date-fns então derruba a tela
+            // inteira com "RangeError: Invalid time value" (só aparecia em
+            // autuações com responsável técnico assinado, por isso passou
+            // despercebido até agora).
+            dataRecebimentoTecnico: data.dataRecebimentoTecnico instanceof Timestamp ? data.dataRecebimentoTecnico.toDate() : data.dataRecebimentoTecnico ? new Date(data.dataRecebimentoTecnico) : undefined,
             // Mesmo cuidado de use-inspecoes.ts: updatedAt é gravado como
             // Timestamp do Firestore (saveIntimacao mais abaixo), mas sem
             // essa conversão qualquer `new Date(item.updatedAt)` vira
@@ -210,6 +219,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
         ...docData,
         dataIntimacao: Timestamp.fromDate(parsedData.dataIntimacao),
         dataRecebimento: parsedData.dataRecebimento ? Timestamp.fromDate(parsedData.dataRecebimento) : null,
+        dataRecebimentoTecnico: parsedData.dataRecebimentoTecnico ? Timestamp.fromDate(parsedData.dataRecebimentoTecnico) : null,
         updatedAt: Timestamp.now()
       };
 
@@ -311,6 +321,23 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     }
   }, [db, configError]);
 
+  // Metadados que não fazem parte do formulário (agendaLembreteId, pasId) —
+  // mesmo padrão de toggleFavorito acima: merge direto, sem passar pelo
+  // intimacaoSchema (que descartaria esses campos por não serem editáveis).
+  const updateIntimacaoMeta = useCallback(async (id: string, partial: Partial<Pick<Intimacao, 'agendaLembreteId' | 'pasId'>>) => {
+    const stringId = String(id);
+
+    setIntimacoes(prev => {
+      const updated = prev.map(i => String(i.id) === stringId ? { ...i, ...partial } : i);
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+      return [...updated];
+    });
+
+    if (db && !configError) {
+      await setDoc(doc(db, "intimacoes", stringId), partial, { merge: true });
+    }
+  }, [db, configError]);
+
   return {
     intimacoes,
     saveIntimacao,
@@ -319,6 +346,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     permanentDelete,
     bulkMoveToFolder,
     toggleFavorito,
+    updateIntimacaoMeta,
     getIntimacaoById: (id: string) => intimacoes.find(i => String(i.id) === String(id)) || null,
     loading,
     isOnline,

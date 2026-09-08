@@ -23,8 +23,11 @@ import { format } from "date-fns"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 import { useIntimacoes } from "@/hooks/use-intimacoes"
+import { useInspecoes } from "@/hooks/use-inspecoes"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useAuth } from "@/hooks/use-auth"
+import { addBusinessDays } from "@/lib/prazo"
+import { criarLembretePrazo } from "@/lib/prazo-lembrete"
 import { auth as firebaseAuth } from "@/lib/firebase"
 import { intimacaoSchema, prazoTextoDoTipo, atoTextoDoTipo } from "@/lib/schema"
 import { Intimacao, Autoridade } from "@/lib/types"
@@ -124,7 +127,8 @@ function useLivePagination(containerRef: React.RefObject<HTMLDivElement>, header
 }
 
 function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<Intimacao>, intimacaoId?: string }) {
-    const { generateNewNumeroProcesso, saveIntimacao, loading: loadingIntimacoes } = useIntimacoes();
+    const { generateNewNumeroProcesso, saveIntimacao, updateIntimacaoMeta, loading: loadingIntimacoes } = useIntimacoes();
+    const { saveInspecao } = useInspecoes();
     const { config } = useAppConfig();
     const { profile } = useAuth();
     const router = useRouter();
@@ -455,6 +459,28 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                 toast({ title: "Documento Finalizado", description: "Use \"Baixar PDF\" ou \"Compartilhar\" para exportar o documento." });
             } else {
                 toast({ variant: "destructive", title: "Finalizado só neste aparelho", description: "Sem conexão com a nuvem — assim que a internet voltar, abra este documento de novo para confirmar a sincronização." });
+            }
+
+            // Cria o lembrete de prazo na Agenda (2 dias antes do vencimento) —
+            // handleFinalize só roda uma vez por documento (o formulário trava
+            // e o botão vira "Baixar PDF" depois disso), então não precisa
+            // proteger contra lembrete duplicado aqui.
+            const mainValues = getValues();
+            if (result.mainCloudSaved && mainValues.prazoDias && profile?.municipioId) {
+                try {
+                    const prazoData = addBusinessDays(mainValues.dataIntimacao, mainValues.prazoDias);
+                    const lembreteId = await criarLembretePrazo(saveInspecao, {
+                        titulo: `Prazo vence em breve — ${mainValues.autor || 'Autuação'} (${mainValues.tipoTermo || ''} nº ${mainValues.numeroProcesso})`,
+                        prazoISO: prazoData.toISOString(),
+                        fiscalId: profile.uid,
+                        fiscalNome: profile.displayName || 'Fiscal',
+                        municipioId: profile.municipioId,
+                    });
+                    await updateIntimacaoMeta(result.mainId, { agendaLembreteId: lembreteId });
+                } catch (e) {
+                    // Falha ao criar o lembrete não deve impedir a finalização do documento.
+                    console.warn('Falha ao criar lembrete de prazo na Agenda:', e);
+                }
             }
         } catch (e) {
             toast({ variant: "destructive", title: "Falha na Finalização" });

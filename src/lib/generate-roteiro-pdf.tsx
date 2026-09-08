@@ -21,7 +21,8 @@ export async function renderReportIntoPdf(pdf: any, sourceEl: HTMLElement, stagi
   const blocks = Array.from(sourceEl.querySelectorAll('[data-pdf-block]')) as HTMLElement[];
   if (!headerEl || blocks.length === 0) throw new Error('Estrutura do relatório não encontrada.');
 
-  const pxPerMm = sourceEl.offsetWidth / 210;
+  const sourceWidthPx = sourceEl.offsetWidth;
+  const pxPerMm = sourceWidthPx / 210;
   const pageHeightPx = 297 * pxPerMm;
   const headerHeightPx = headerEl.offsetHeight;
   const footerHeightPx = footerEl?.offsetHeight || 0;
@@ -59,11 +60,15 @@ export async function renderReportIntoPdf(pdf: any, sourceEl: HTMLElement, stagi
     staging.innerHTML = '';
     staging.appendChild(pageEl);
 
+    // windowWidth precisa bater exatamente com a largura usada para medir a
+    // altura dos blocos acima (pxPerMm/contentWindowPx) — um valor fixo
+    // (794) que não coincidisse com sourceEl.offsetWidth de verdade já foi
+    // uma causa real de conteúdo cortado nas bordas/rodapé da página.
     const canvas = await html2canvas(pageEl, {
       scale: 3.0,
       useCORS: true,
       backgroundColor: '#ffffff',
-      windowWidth: 794,
+      windowWidth: sourceWidthPx,
       logging: false,
     });
 

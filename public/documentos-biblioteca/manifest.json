@@ -1,5 +1,5 @@
 {
-  "version": "2.7.0",
+  "version": "2.9.0",
   "documents": [
     {
       "id": "codigo-sanitario-estadual-pr",
@@ -200,6 +200,26 @@
       "tema": "Estética, Beleza e Bem-estar",
       "descricao": "Norma técnica estadual que estabelece os requisitos sanitários para funcionamento de salões de beleza, barbearias e serviços de depilação no Paraná. É a base do roteiro de inspeção de Salão de Beleza.",
       "keywords": "resolucao sesa 700, salao de beleza, barbearia, depilacao, estetica, manicure, pedicure, licenca sanitaria"
+    },
+    {
+      "id": "rdc-36-2009-formol",
+      "titulo": "RDC nº 36/2009 — Proibição de Formol/Formaldeído no Comércio e em Salões de Beleza",
+      "path": "/documentos-biblioteca/rdc%20262009.pdf",
+      "esfera": "federal",
+      "categoria": "RDC",
+      "tema": "Estética, Beleza e Bem-estar",
+      "descricao": "Resolução da ANVISA que proíbe a exposição, venda e entrega ao consumo de formol ou formaldeído (solução a 37%) em drogarias, farmácias, supermercados e afins, e trata do uso da substância em produtos capilares de alisamento (escova progressiva) em salões de beleza.",
+      "keywords": "rdc 36, anvisa, formol, formaldeido, escova progressiva, salao de beleza, alisamento capilar, drogaria, farmacia, infracao sanitaria"
+    },
+    {
+      "id": "rdc-645-2022-substancias-restritas-cosmeticos",
+      "titulo": "RDC nº 645/2022 — Substâncias Restritas em Cosméticos (Chumbo, Formaldeído, Pirogalol)",
+      "path": "/documentos-biblioteca/RDC%206452022.pdf",
+      "esfera": "federal",
+      "categoria": "RDC",
+      "tema": "Estética, Beleza e Bem-estar",
+      "descricao": "Resolução da ANVISA que estabelece as condições de uso do acetato de chumbo, formaldeído, paraformaldeído e pirogalol em produtos de higiene pessoal, cosméticos e perfumes (como tinturas capilares), incorporando a Resolução GMC MERCOSUL nº 48/2010. Revoga a RDC nº 521/2021.",
+      "keywords": "rdc 645, anvisa, acetato de chumbo, formaldeido, paraformaldeido, pirogalol, tintura capilar, cosmeticos, substancias restritas, mercosul"
     }
   ]
 }

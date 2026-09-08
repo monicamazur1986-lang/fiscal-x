@@ -156,6 +156,53 @@ service cloud.firestore {
       );
     }
 
+    // Processo Administrativo Sanitário — mesmo isolamento por município de
+    // intimacoes/inspecoes: dono (fiscal que abriu) ou gestor do município,
+    // ou root. municipioId travado no update, como nas demais coleções.
+    match /pas/{id} {
+      allow read: if isAuthenticated() && (
+        isRoot() ||
+        (isAdmin() && resource.data.municipioId == getUserData().municipioId) ||
+        (resource.data.createdBy == request.auth.uid) ||
+        // Encaminhado explicitamente pra este usuário (PasEncaminharDialog) —
+        // sem isso, um fiscal que não é o autuante original não conseguia
+        // nem abrir o processo que o gestor mandou pra ele.
+        (resource.data.responsavelAtualUid == request.auth.uid)
+      );
+      allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
+      allow update: if isAuthenticated() && (
+        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()) && request.resource.data.municipioId == resource.data.municipioId)
+      );
+      // Exclusão de verdade (não é lixeira) — pra corrigir um PAS aberto por
+      // engano/teste. Mesmo dono-ou-gestor de sempre, não só admin.
+      allow delete: if isAuthenticated() && (
+        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()))
+      );
+
+      // Peças dos autos — herdam a permissão do processo pai. Create/read
+      // liberados a qualquer um do município (qualquer peça nova só entra
+      // com revisão/assinatura, controlado na UI); delete só serve pra
+      // limpar peças ao excluir o processo inteiro (excluirPas), nunca pra
+      // "corrigir" apagando uma peça isolada de um processo que continua.
+      match /pecas/{pecaId} {
+        allow read: if isAuthenticated() && (
+          isRoot() ||
+          (isAdmin() && get(/databases/$(database)/documents/pas/$(id)).data.municipioId == getUserData().municipioId) ||
+          (get(/databases/$(database)/documents/pas/$(id)).data.createdBy == request.auth.uid) ||
+          (get(/databases/$(database)/documents/pas/$(id)).data.responsavelAtualUid == request.auth.uid)
+        );
+        allow create: if isAuthenticated() && (
+          isRoot() || get(/databases/$(database)/documents/pas/$(id)).data.municipioId == getUserData().municipioId
+        );
+        allow delete: if isAuthenticated() && (
+          isRoot() || (
+            get(/databases/$(database)/documents/pas/$(id)).data.municipioId == getUserData().municipioId &&
+            (get(/databases/$(database)/documents/pas/$(id)).data.createdBy == request.auth.uid || isAdmin())
+          )
+        );
+      }
+    }
+
     match /chamados/{id} {
       allow read: if isAuthenticated() && (
         isRoot() ||

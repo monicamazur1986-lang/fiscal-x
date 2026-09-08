@@ -31,6 +31,7 @@ import {
   Calendar as CalendarIcon,
   MessageSquare,
   Scale,
+  Gavel,
   Zap,
   FolderPlus,
   Cloud,
@@ -73,6 +74,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { calculateDeadline } from "@/lib/prazo"
+import { cancelarLembretePrazo } from "@/lib/prazo-lembrete"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -132,6 +134,7 @@ export default function DocumentosPage() {
     bulkDelete: bulkDeleteRelatorios,
     permanentDelete: permanentDeleteRelatorios,
     toggleFavorito: toggleFavoritoRelatorio,
+    deleteInspecao,
     loading: loadingInsp,
   } = useInspecoes(isRoot ? { municipioIdOverride: selectedMunicipioForRoot || undefined } : undefined);
   const { folders, createFolder, loading: loadingFold } = useFolders('intimacoes');
@@ -415,9 +418,16 @@ export default function DocumentosPage() {
     }
     if (!window.confirm(`Mover ${selectedIds.length} itens para a lixeira?`)) return;
     try {
+      // Cancela o lembrete de prazo na Agenda de cada autuação movida pra
+      // lixeira — sem isso, o lembrete continuaria aparecendo por um
+      // documento que não existe mais pro fiscal.
+      const lembretesIds = intimacoes
+        .filter(i => intimacaoIds.includes(i.id) && i.agendaLembreteId)
+        .map(i => i.agendaLembreteId!);
       await Promise.all([
         intimacaoIds.length ? bulkDelete(intimacaoIds, true) : Promise.resolve(),
         relatorioIds.length ? bulkDeleteRelatorios(relatorioIds, true) : Promise.resolve(),
+        ...lembretesIds.map(id => cancelarLembretePrazo(deleteInspecao, id)),
       ]);
       toast({ title: "Itens movidos para lixeira" });
       setSelectedIds([]);
@@ -875,11 +885,18 @@ export default function DocumentosPage() {
                                     {!isRelatorio && (
                                       <DropdownMenuItem onClick={() => handleOpenAdjustment(item.id)} className="rounded text-xs font-medium h-9 px-3 cursor-pointer gap-2"><Scale className="h-3.5 w-3.5" /> Ajustar prazo</DropdownMenuItem>
                                     )}
+                                    {!isRelatorio && isFinal && intimacao?.tipoTermo === 'AUTO DE INFRAÇÃO' && !intimacao?.pasId && (
+                                      <DropdownMenuItem onClick={() => router.push(`/pas?abrir=${intimacao.id}`)} className="rounded text-xs font-medium h-9 px-3 cursor-pointer gap-2"><Gavel className="h-3.5 w-3.5" /> Abrir PAS</DropdownMenuItem>
+                                    )}
                                     <DropdownMenuItem
                                       onClick={async () => {
                                         try {
                                           if (isRelatorio) await bulkDeleteRelatorios([item.id], true);
-                                          else await bulkDelete([item.id], true);
+                                          else {
+                                            await bulkDelete([item.id], true);
+                                            const agendaLembreteId = item.intimacao?.agendaLembreteId;
+                                            if (agendaLembreteId) await cancelarLembretePrazo(deleteInspecao, agendaLembreteId);
+                                          }
                                           toast({ title: "Movido para lixeira" });
                                         } catch (e) {
                                           toast({ variant: "destructive", title: "Erro ao excluir" });

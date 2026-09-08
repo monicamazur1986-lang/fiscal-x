@@ -1,15 +1,18 @@
 import { addDays, isWeekend, startOfDay, differenceInDays, format } from "date-fns";
+import { isFeriadoNacional } from "./feriados-nacionais";
 
 /**
- * Soma dias úteis (pula sábado/domingo) a uma data — usado pra calcular o
- * vencimento do prazo de defesa de uma autuação. Não desconta feriados.
+ * Soma dias úteis (pula sábado/domingo e feriado nacional) a uma data — usado
+ * pra calcular o vencimento do prazo de defesa de uma autuação ou de um PAS.
+ * Feriados estaduais/municipais não entram (variam por município) — só os
+ * nacionais, que valem em qualquer lugar do país.
  */
 export function addBusinessDays(startDate: Date, days: number): Date {
   let date = new Date(startDate);
   let addedDays = 0;
   while (addedDays < days) {
     date = addDays(date, 1);
-    if (!isWeekend(date)) {
+    if (!isWeekend(date) && !isFeriadoNacional(date)) {
       addedDays++;
     }
   }

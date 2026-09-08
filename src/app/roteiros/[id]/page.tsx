@@ -63,7 +63,6 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from "@/components/ui/alert-dialog"
 import { compressImage, blobToDataUrl } from "@/lib/compress-image"
-import { captureCurrentLocation, mapsLinkFor } from "@/lib/geolocation"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { getDefaultIntroHtml, getDefaultConclusaoHtml, fillRoteiroTextoTokens, resolverIntroHtml, resolverConclusaoHtml } from "@/lib/roteiro-textos-padrao"
 import { sanitizeHtml } from "@/lib/sanitize-html"
@@ -96,16 +95,6 @@ type PhotoSize = 'P' | 'M' | 'G';
 interface PhotoEvidence {
   url: string;
   timestamp: string;
-  /** Endereço legível (geocodificação reversa da posição do aparelho no
-   * momento da foto) — quando a geolocalização falha ou é negada, cai no
-   * nome do estabelecimento (comportamento anterior). Ver
-   * src/lib/geolocation.ts. */
-  location: string;
-  /** Coordenadas brutas capturadas junto com `location`, quando disponíveis
-   * — habilitam o link "Ver no mapa" no relatório. Ausentes em fotos
-   * anexadas antes desta funcionalidade ou sem permissão de localização. */
-  latitude?: number;
-  longitude?: number;
   /** Tamanho de exibição escolhido pelo fiscal — ausente equivale a 'M'. */
   size?: PhotoSize;
 }
@@ -2079,6 +2068,14 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   const router = useRouter()
   const { saveInspecao, deleteInspecao, inspecoes, loading: loadingInspecoes } = useInspecoes()
   const reportRef = useRef<HTMLDivElement>(null)
+  const reportWrapperRef = useRef<HTMLDivElement>(null)
+  // Encolhe só a APARÊNCIA da folha A4 pra caber na tela do celular — nunca a
+  // largura real (offsetWidth), que é a base de todo o cálculo de paginação
+  // do PDF em generate-roteiro-pdf.tsx. `transform: scale` não altera
+  // offsetWidth/offsetHeight, então o PDF gerado continua idêntico
+  // independente do quanto a prévia está reduzida na tela.
+  const [reportPreviewScale, setReportPreviewScale] = useState(1)
+  const [reportPreviewHeight, setReportPreviewHeight] = useState<number | undefined>(undefined)
   const searchParams = useSearchParams()
 
   // Roteiro exclusivo de Prudentópolis — mesmo que alguém digite a URL direto,
@@ -2210,10 +2207,9 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // odontologia, por exemplo, tem 183 itens). Começa tudo fechado; o fiscal
   // abre a seção que quiser a qualquer momento, e o sistema também guia
   // sozinho: abre a primeira seção pendente ao entrar (ou ao trocar de
-  // inspeção) e, quando a seção aberta é concluída, fecha ela e abre a
-  // próxima pendente — sem travar a navegação manual (só não avança sozinho
-  // se houver mais de uma seção aberta ao mesmo tempo, sinal de que o fiscal
-  // está comparando seções de propósito).
+  // inspeção) e, sempre que uma seção aberta é concluída, fecha ela e abre a
+  // próxima pendente — vale pra cada seção aberta, mesmo com várias abertas
+  // ao mesmo tempo, sem travar a navegação manual.
   const [openSections, setOpenSections] = useState<string[]>([]);
   const expandirTodasSecoes = () => setOpenSections(checklist.secoes.map(s => s.id));
   const recolherTodasSecoes = () => setOpenSections([]);
@@ -2244,23 +2240,33 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, currentInspecaoId]);
 
-  // Quando a única seção aberta é concluída, fecha ela e abre sozinho a
+  // Sempre que uma seção aberta é concluída, fecha ela e abre sozinho a
   // próxima seção pendente — é o "sistema guiando" de uma seção pra outra.
+  // Roda pra CADA seção aberta (não só quando há uma única aberta) — se o
+  // fiscal tiver duas ou mais abertas ao mesmo tempo, cada uma que for
+  // concluída avança pra próxima por conta própria, sem esperar as outras.
   useEffect(() => {
-    if (openSections.length !== 1) return;
-    const secaoAtual = checklist.secoes.find(s => s.id === openSections[0]);
-    if (!secaoAtual) return;
-    const [respondidos, total] = progressoSecao(secaoAtual);
-    if (total === 0 || respondidos < total) return;
-    if (secoesAvancadasRef.current.has(secaoAtual.id)) return;
-    secoesAvancadasRef.current.add(secaoAtual.id);
-
-    const idxAtual = checklist.secoes.findIndex(s => s.id === secaoAtual.id);
-    const proxima = checklist.secoes.slice(idxAtual + 1).find(s => {
-      const [r, t] = progressoSecao(s);
-      return t > 0 && r < t;
+    const concluidasAgora = openSections.filter(secId => {
+      const secao = checklist.secoes.find(s => s.id === secId);
+      if (!secao) return false;
+      const [respondidos, total] = progressoSecao(secao);
+      return total > 0 && respondidos === total && !secoesAvancadasRef.current.has(secId);
     });
-    setOpenSections(proxima ? [proxima.id] : []);
+    if (concluidasAgora.length === 0) return;
+    concluidasAgora.forEach(secId => secoesAvancadasRef.current.add(secId));
+
+    setOpenSections(prev => {
+      const next = prev.filter(secId => !concluidasAgora.includes(secId));
+      concluidasAgora.forEach(secId => {
+        const idxAtual = checklist.secoes.findIndex(s => s.id === secId);
+        const proxima = checklist.secoes.slice(idxAtual + 1).find(s => {
+          const [r, t] = progressoSecao(s);
+          return t > 0 && r < t;
+        });
+        if (proxima && !next.includes(proxima.id)) next.push(proxima.id);
+      });
+      return next;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answers]);
 
@@ -2719,13 +2725,6 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     if (!file || !profile) return;
     setUploadingItem(itemId);
     try {
-      // Dispara a captura de geolocalização em paralelo com a compressão e o
-      // upload da imagem (em vez de depois, em sequência) — assim o registro
-      // da foto não fica mais lento à toa; o prazo próprio de
-      // captureCurrentLocation (8s) já evita travar o anexo se o GPS demorar
-      // ou o fiscal negar a permissão.
-      const locationPromise = captureCurrentLocation();
-
       const compressed = await compressImage(file);
       let url: string;
       try {
@@ -2748,15 +2747,9 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         // foto comprimida direto no documento, como já é feito com a assinatura.
         url = await blobToDataUrl(compressed);
       }
-      // Sem permissão de localização, sem sinal de GPS ou sem internet pra
-      // geocodificar: cai no texto padrão de sempre (nome do
-      // estabelecimento) — nunca bloqueia o anexo da foto por causa disso.
-      const capturedLocation = await locationPromise;
       const newPhoto: PhotoEvidence = {
         url,
         timestamp: format(new Date(), "dd/MM/yyyy HH:mm"),
-        location: capturedLocation?.address || idData.fantasia || "Local da Inspeção",
-        ...(capturedLocation ? { latitude: capturedLocation.latitude, longitude: capturedLocation.longitude } : {}),
       };
       setItemPhotos(prev => ({ ...prev, [itemId]: [...(prev[itemId] || []), newPhoto] }));
       toast({ title: "Foto Anexada" });
@@ -2836,30 +2829,28 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     }
   };
 
-  const nonConformities = useMemo(() => {
-    const all = checklist.secoes.flatMap(s => s.itens);
-    const filtered = all.filter(i => ehNaoConformidade(answers[i.id]));
-    // Itens manuais entram ao final do grupo de criticidade escolhido — depois
-    // dos itens do roteiro oficial, nunca misturados no meio deles.
-    const byCrit = (crit: Criticality) => [
-      ...filtered.filter(i => i.crit === crit),
-      ...customItems.filter(i => i.crit === crit),
-    ];
-    return { I: byCrit('I'), N: byCrit('N'), R: byCrit('R') };
-  }, [answers, checklist, customItems]);
+  // Ordem de gravidade usada só pra ordenar itens DENTRO de um mesmo grupo —
+  // o agrupamento em si agora é por seção/assunto do roteiro (pedido do
+  // usuário: "manicure (lista), esterilização (lista) e por diante"), não
+  // mais por criticidade primeiro.
+  const CRIT_ORDER: Record<Criticality, number> = { I: 0, N: 1, R: 2 };
 
-  // Rótulo da área/serviço a que cada item pertence (nome da seção do
-  // roteiro, sem a numeração própria dela) — usado só pra agrupar
-  // visualmente as não conformidades no relatório por assunto, sem alterar
-  // a separação por criticidade já existente.
-  const itemSectionLabel = useMemo(() => {
-    const map = new Map<string, string>();
+  // Uma não conformidade por grupo = uma seção do roteiro (na mesma ordem em
+  // que aparecem no checklist oficial). Itens manuais do fiscal formam um
+  // grupo à parte, sempre por último.
+  const nonConformitiesBySection = useMemo(() => {
+    const grupos: { label: string; itens: (ChecklistItem | CustomItem)[] }[] = [];
     checklist.secoes.forEach(sec => {
+      const itensNaoConformes = sec.itens.filter(i => ehNaoConformidade(answers[i.id]));
+      if (itensNaoConformes.length === 0) return;
       const label = sec.titulo.replace(/^\d+(\.\d+)*\.\s*/, '').trim();
-      sec.itens.forEach(item => map.set(item.id, label));
+      grupos.push({ label, itens: [...itensNaoConformes].sort((a, b) => CRIT_ORDER[a.crit] - CRIT_ORDER[b.crit]) });
     });
-    return map;
-  }, [checklist]);
+    if (customItems.length > 0) {
+      grupos.push({ label: 'ITENS ADICIONAIS DO FISCAL', itens: [...customItems].sort((a, b) => CRIT_ORDER[a.crit] - CRIT_ORDER[b.crit]) });
+    }
+    return grupos;
+  }, [answers, checklist, customItems]);
 
   const handleSaveCustomItem = () => {
     const text = newCustomText.trim();
@@ -2900,11 +2891,11 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // — sem vínculo com o número do item no roteiro (que reflete a estrutura
   // interna do checklist, não a ordem em que aparecem como inconformidade).
   const nonConformityNumber = useMemo(() => {
-    const ordered = (['I', 'N', 'R'] as Criticality[]).flatMap(crit => nonConformities[crit]);
     const map = new Map<string, number>();
-    ordered.forEach((item, idx) => map.set(item.id, idx + 1));
+    let n = 1;
+    nonConformitiesBySection.forEach(grupo => grupo.itens.forEach(item => map.set(item.id, n++)));
     return map;
-  }, [nonConformities]);
+  }, [nonConformitiesBySection]);
 
   // Sem brasão municipal configurado, mostra um espaço neutro (ícone
   // genérico) em vez de qualquer imagem específica — nunca a marca do
@@ -2945,6 +2936,38 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     ? (isDataUrl ? config.logoUrl! : `/api/proxy-image?url=${encodeURIComponent(config.logoUrl!)}`)
     : undefined;
 
+  // Recalcula a escala da prévia sempre que a tela do relatório abre, muda de
+  // tamanho (rotação do aparelho) ou o conteúdo da folha muda de altura
+  // (seções carregando, fotos etc.) — sem isso a folha A4 (210mm ≈ 794px)
+  // fica maior que a tela e força rolagem lateral no celular.
+  useEffect(() => {
+    if (view !== 'report') return;
+    const wrapperEl = reportWrapperRef.current;
+    const paperEl = reportRef.current;
+    if (!wrapperEl || !paperEl) return;
+
+    const recompute = () => {
+      const wrapperStyle = window.getComputedStyle(wrapperEl);
+      const paddingX = parseFloat(wrapperStyle.paddingLeft || '0') + parseFloat(wrapperStyle.paddingRight || '0');
+      const availableWidth = wrapperEl.clientWidth - paddingX;
+      const naturalWidth = paperEl.offsetWidth;
+      const naturalHeight = paperEl.offsetHeight;
+      const scale = naturalWidth > availableWidth ? availableWidth / naturalWidth : 1;
+      setReportPreviewScale(scale);
+      setReportPreviewHeight(naturalHeight * scale);
+    };
+
+    recompute();
+    const ro = new ResizeObserver(recompute);
+    ro.observe(wrapperEl);
+    ro.observe(paperEl);
+    window.addEventListener('resize', recompute);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', recompute);
+    };
+  }, [view]);
+
   if (view === 'report') {
     return (
       <div className="document-container font-serif pb-40">
@@ -2979,8 +3002,8 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             </div>
         </header>
 
-        <div className="document-paper-wrapper custom-scrollbar">
-          <div ref={reportRef} className="document-paper h-auto bg-white">
+        <div ref={reportWrapperRef} className="document-paper-wrapper custom-scrollbar" style={{ overflowX: reportPreviewScale < 1 ? 'hidden' : 'auto', height: reportPreviewHeight }}>
+          <div ref={reportRef} className="document-paper h-auto bg-white" style={{ transform: `scale(${reportPreviewScale})`, transformOrigin: 'top left' }}>
               <div data-pdf-header className="flex flex-row items-center justify-between gap-6 mb-1 pb-2 border-none">
                   <div className="w-[140px] h-[100px] md:w-[180px] md:h-[100px] flex items-center justify-start overflow-hidden">
                     {hasLogo ? (
@@ -3029,25 +3052,22 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   {/* No ROI não existem as seções 2 e 4, então as seguintes
                       sobem de número em vez de deixar buraco na sequência. */}
                   <div data-pdf-block className="sub-header-row">{isRoi ? 2 : 3}. NÃO CONFORMIDADES DETECTADAS</div>
-                  {Object.keys(nonConformities).some(k => nonConformities[k as Criticality].length > 0) ? (
-                      (['I', 'N', 'R'] as Criticality[]).map(crit => (
-                          nonConformities[crit].length > 0 && (
-                              <div key={crit} className="mt-4 first:mt-0 space-y-2">
-                                  {(() => {
-                                    let lastSectionLabel: string | null = null;
-                                    return nonConformities[crit].map((item, idx) => {
-                                      const sectionLabel = itemSectionLabel.get(item.id) || 'ITENS ADICIONAIS DO FISCAL';
-                                      const showSectionLabel = sectionLabel !== lastSectionLabel;
-                                      lastSectionLabel = sectionLabel;
-                                      const badge = (
-                                          <div className={cn("px-4 py-1.5 border-l-4 font-black text-[9.5pt] uppercase flex items-center gap-2 mb-2", crit === 'I' ? "bg-red-50 border-red-600 text-red-700" : crit === 'N' ? "bg-amber-50 border-amber-500 text-amber-700" : "bg-blue-50 border-blue-600 text-blue-700")}>CRITICIDADE: {crit === 'I' ? "IMPRESCINDÍVEL" : crit === 'N' ? "NECESSÁRIO" : "RECOMENDÁVEL"}</div>
-                                      );
-                                      const sectionHeader = showSectionLabel ? (
-                                          <p className="text-[9pt] font-black uppercase tracking-wider text-zinc-500 mt-3 mb-1.5 pb-1 border-b border-zinc-200">{sectionLabel}</p>
+                  {nonConformitiesBySection.length > 0 ? (
+                      nonConformitiesBySection.map((grupo) => (
+                          <div key={grupo.label} className="mt-4 first:mt-0 space-y-2">
+                              {grupo.itens.map((item, idx) => {
+                                      const critLabel = item.crit === 'I' ? "IMPRESCINDÍVEL" : item.crit === 'N' ? "NECESSÁRIO" : "RECOMENDÁVEL";
+                                      const critClasses = item.crit === 'I' ? "bg-red-50 text-red-700 border-red-200" : item.crit === 'N' ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-blue-50 text-blue-700 border-blue-200";
+                                      const sectionHeader = idx === 0 ? (
+                                          <p className="text-[9.5pt] font-black uppercase tracking-wider text-zinc-700 mt-3 mb-1.5 pb-1 border-b-2 border-zinc-300">{grupo.label}</p>
                                       ) : null;
                                       const itemBody = (
                                           <>
-                                              <div className="flex items-start gap-3 mb-2"><span className="font-black text-[8pt] text-zinc-900 bg-zinc-50 h-6 px-2 flex items-center justify-center rounded shrink-0 whitespace-nowrap">ITEM {nonConformityNumber.get(item.id)}</span><p className="text-[9.5pt] leading-relaxed text-zinc-800 font-bold flex-1 uppercase">{item.text}</p></div>
+                                              <div className="flex items-start gap-2 mb-2 flex-wrap">
+                                                <span className="font-black text-[8pt] text-zinc-900 bg-zinc-50 h-6 px-2 flex items-center justify-center rounded shrink-0 whitespace-nowrap">ITEM {nonConformityNumber.get(item.id)}</span>
+                                                <span className={cn("text-[7.5pt] font-black uppercase px-2 h-6 flex items-center rounded border shrink-0 whitespace-nowrap", critClasses)}>{critLabel}</span>
+                                                <p className="text-[9.5pt] leading-relaxed text-zinc-800 font-bold flex-1 uppercase basis-full sm:basis-auto">{item.text}</p>
+                                              </div>
                                               {observations[item.id] && (<div className="ml-8 mb-2 p-3 bg-zinc-50 border-l-2 border-zinc-300 rounded-r-lg"><p className="text-[7pt] font-black uppercase text-zinc-400 mb-0.5">Relato do Fiscal:</p><p className="text-[9.5pt] text-slate-600 leading-relaxed italic whitespace-pre-wrap font-sans">{observations[item.id]}</p></div>)}
                                               {itemPhotos[item.id] && itemPhotos[item.id].length > 0 && (
                                                 <div className="ml-8 mb-2 grid grid-cols-2 gap-2">
@@ -3071,13 +3091,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                                                           className={cn("block mx-auto w-full h-auto rounded-t-lg", PHOTO_SIZE_MAX_WIDTH[size])}
                                                         />
                                                         <p className="text-[6.5pt] text-zinc-400 font-bold uppercase px-2 py-1 border-t border-zinc-200">
-                                                          {photo.timestamp} — {photo.location}
-                                                          {photo.latitude !== undefined && photo.longitude !== undefined && (
-                                                            <>
-                                                              {' '}
-                                                              <a href={mapsLinkFor(photo.latitude, photo.longitude)} target="_blank" rel="noopener noreferrer" className="text-primary underline normal-case font-normal">(ver no mapa)</a>
-                                                            </>
-                                                          )}
+                                                          {photo.timestamp}
                                                         </p>
                                                       </div>
                                                     );
@@ -3086,13 +3100,11 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                                               )}
                                           </>
                                       );
-                                      // O rótulo "CRITICIDADE" (no primeiro item) e o subtítulo de área
-                                      // (sempre que muda de assunto) vão junto do item num único bloco —
-                                      // assim eles nunca ficam sozinhos no fim de uma página, separados dos
-                                      // itens que descrevem, quando a quebra de página cai ali.
-                                      return (idx === 0 || showSectionLabel) ? (
+                                      // O subtítulo de assunto (só no primeiro item do grupo) vai junto do
+                                      // item num único bloco — assim ele nunca fica sozinho no fim de uma
+                                      // página, separado dos itens que descreve, quando a quebra cai ali.
+                                      return (idx === 0) ? (
                                           <div key={item.id} data-pdf-block>
-                                              {idx === 0 && badge}
                                               {sectionHeader}
                                               <div className="pl-4 pb-4 border-b border-zinc-100">{itemBody}</div>
                                           </div>
@@ -3101,10 +3113,8 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                                               {itemBody}
                                           </div>
                                       );
-                                    });
-                                  })()}
-                              </div>
-                          )
+                              })}
+                          </div>
                       ))
                   ) : <div data-pdf-block className="py-12 text-center border-2 border-dashed border-zinc-100 rounded-2xl mx-2"><CheckCircle2 className="h-10 w-10 text-emerald-100 mx-auto mb-2" /><p className="font-black text-zinc-300 uppercase text-[10pt] tracking-widest italic">Nenhuma irregularidade detectada.</p></div>}
               </div>

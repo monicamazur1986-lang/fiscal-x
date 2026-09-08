@@ -244,6 +244,16 @@
       font-family: 'Times New Roman', Times, serif;
     }
 
+    /* Trava texto sem quebra (link colado, palavra longa num campo de texto
+       livre) dentro da largura da folha — sem isso ele ultrapassa os 210mm e
+       o html2canvas captura essa sobra por fora da página, aparecendo
+       "cortado" no PDF final. Não mexe em img/table — essas já têm seu
+       próprio controle de largura (ver PHOTO_SIZE_MAX_WIDTH). */
+    .document-paper, .document-paper * {
+      overflow-wrap: break-word;
+      word-break: break-word;
+    }
+
     .section-box {
       border: 1pt solid #94a3b8 !important;
       margin-bottom: -1pt;

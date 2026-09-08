@@ -55,6 +55,13 @@ export type Intimacao = {
   municipioId?: string;
   documentoOrigemId?: string;
   autoInfracaoVinculadaId?: string;
+  /** Id do PAS (Processo Administrativo Sanitário) já aberto a partir deste
+   * Auto de Infração — evita abrir um segundo PAS pro mesmo AI. */
+  pasId?: string | null;
+  /** Id da entrada de Agenda (Inspecao) criada como lembrete do prazo desta
+   * autuação — guardado pra poder cancelar o lembrete se o documento for
+   * excluído antes do vencimento (ver src/lib/prazo-lembrete.ts). */
+  agendaLembreteId?: string;
 };
 
 export type Folder = {
@@ -247,6 +254,109 @@ export type DocfacilDocumento = {
    * ação separada, só disponível de dentro da própria lixeira. */
   deleted?: boolean;
   deletedAt?: string;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+/**
+ * Processo Administrativo Sanitário — trilha guiada seguindo o Manual de
+ * Apoio Teórico-Prático da SESA-PR (PAS, Manual 012/2023). Nasce sempre a
+ * partir de um Auto de Infração já finalizado (`Intimacao` com
+ * `tipoTermo === 'AUTO DE INFRAÇÃO'`), referenciado por `autoInfracaoId`.
+ *
+ * `fase` cobre as 4 fases do manual (Instauração → Instrução → Julgamento →
+ * Arquivamento), mas por enquanto só Instauração e Instrução têm telas de
+ * ação — as demais ficam reservadas no tipo pra não exigir migração de dados
+ * quando forem construídas.
+ */
+export type PasFase =
+  | 'instauracao'
+  | 'instrucao'
+  | 'aguardando_julgamento' // fim do que já está implementado
+  | 'julgamento'
+  | 'recursal'
+  | 'arquivamento';
+
+export type PasTempestividade = 'tempestiva' | 'intempestiva';
+
+export type PasPecaTipo =
+  | 'despacho_inicial'
+  | 'despacho_instrucao'
+  | 'relatorio_instrucao'
+  | 'termo_juntada'
+  | 'termo_informacao'
+  | 'despacho_encerramento_instrucao';
+
+/** Uma peça dos autos — sempre numerada e cronológica, nunca reordenada nem
+ * editada depois de criada (autos de processo real não se "corrigem", se
+ * complementam com uma peça nova). */
+export type PasPeca = {
+  id: string;
+  numero: number;
+  tipo: PasPecaTipo;
+  titulo: string;
+  conteudoHtml: string;
+  /** Presente quando a peça é a "capa" de um documento externo juntado aos
+   * autos (prova, defesa, comprovante) — ver a regra de sempre juntar ANTES
+   * do documento a que se refere, no Cap.2 do Título III do manual. */
+  anexoUrl?: string;
+  /** Assinatura manuscrita (data URL) de quem lavrou a peça — capturada na
+   * revisão antes de gravar (ver PasPecaReviewDialog). Ausente só nas peças
+   * geradas automaticamente sem revisão (termo de juntada de prova avulsa)
+   * ou quando `assinadoForaDoSistema` é true. */
+  assinaturaUrl?: string;
+  /** true quando o gestor/fiscal optou por imprimir e assinar a peça no
+   * papel, fora do sistema, em vez de assinar digitalmente — o processo não
+   * pode ficar travado esperando uma assinatura digital que nunca vai vir.
+   * Nesse caso o PDF sai sem imagem de assinatura (só a linha e o nome), pra
+   * ser assinado à caneta depois de impresso. */
+  assinadoForaDoSistema?: boolean;
+  criadoPorUid: string;
+  criadoPorNome: string;
+  criadoEm: string;
+};
+
+export type Pas = {
+  id: string;
+  municipioId: string;
+  /** Reaproveita o numeroProcesso do Auto de Infração de origem — o PAS não
+   * tem numeração própria separada da autuação que o originou. */
+  numeroProcesso: string;
+  autoInfracaoId: string;
+  estabelecimento: {
+    fantasia: string;
+    cnpj?: string;
+    endereco?: string;
+  };
+  fase: PasFase;
+  autuanteUid: string;
+  autuanteNome: string;
+  /** Base do cálculo do prazo de defesa (ISO) — data de ciência do AI. */
+  dataCienciaAI: string;
+  /** addBusinessDays(dataCienciaAI, 15) — Art. 69, Lei 13.331/01. */
+  prazoDefesaData?: string;
+  defesa?: {
+    recebidaEm: string;
+    tempestividade: PasTempestividade;
+    anexoUrl: string;
+  } | null;
+  /** Id da entrada de Agenda (Inspecao) do lembrete do prazo de defesa —
+   * cancelado assim que a defesa (ou o Termo de Informação) é registrada. */
+  agendaLembreteId?: string;
+  /**
+   * Pra quem o processo foi encaminhado explicitamente — evita o processo
+   * ficar parado só porque nenhum gestor/fiscal do município percebeu que
+   * era a vez dele de agir. Não é uma trava de permissão (qualquer um do
+   * papel certo ainda pode agir) — é só um aviso claro de "encaminhado para
+   * X", com notificação. `null` explícito (não `undefined`) quando ninguém
+   * está designado, pra sempre poder limpar o campo no Firestore.
+   */
+  responsavelAtualUid?: string | null;
+  responsavelAtualNome?: string | null;
+  /** Lembrete/notificação criado ao encaminhar — cancelado quando alguém age. */
+  encaminhamentoLembreteId?: string | null;
   createdBy: string;
   createdByName?: string;
   createdAt: string;

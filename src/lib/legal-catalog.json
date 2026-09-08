@@ -1,1 +1,116 @@
-[]
+[
+  {
+    "id": "rdc-1002-2025-odontologia",
+    "titulo": "RDC nº 1.002/2025 — Boas Práticas em Serviços Odontológicos",
+    "esfera": "federal",
+    "categoria": "RDC"
+  },
+  {
+    "id": "rdc-216-2004-alimentacao",
+    "titulo": "RDC nº 216/2004 — Boas Práticas para Serviços de Alimentação",
+    "esfera": "federal",
+    "categoria": "RDC"
+  },
+  {
+    "id": "rdc-15-2014",
+    "titulo": "RDC nº 15/2014 — Boas Práticas em Serviços de Saúde",
+    "esfera": "federal",
+    "categoria": "RDC"
+  },
+  {
+    "id": "rdc-63-2011",
+    "titulo": "RDC nº 63/2011 — Boas Práticas para Serviços de Saúde",
+    "esfera": "federal",
+    "categoria": "RDC"
+  },
+  {
+    "id": "rdc-67-2007-manipulacao",
+    "titulo": "RDC nº 67/2007 — Boas Práticas de Manipulação de Alimentos",
+    "esfera": "federal",
+    "categoria": "RDC"
+  },
+  {
+    "id": "rdc-222-2018",
+    "titulo": "RDC nº 222/2018 — Boas Práticas em Serviços de Saúde",
+    "esfera": "federal",
+    "categoria": "RDC"
+  },
+  {
+    "id": "rdc-471-2021",
+    "titulo": "RDC nº 471/2021 — Boas Práticas e Segurança Sanitária",
+    "esfera": "federal",
+    "categoria": "RDC"
+  },
+  {
+    "id": "rdc-611-2022",
+    "titulo": "RDC nº 611/2022 — Requisitos Técnicos e Sanitários",
+    "esfera": "federal",
+    "categoria": "RDC"
+  },
+  {
+    "id": "portaria-344-1998",
+    "titulo": "Portaria nº 344/1998 — Medicamentos e Controle Especial",
+    "esfera": "federal",
+    "categoria": "Portaria"
+  },
+  {
+    "id": "portaria-1034-2020",
+    "titulo": "Portaria nº 1.034/2020 — Vigilância Sanitária e Serviços de Saúde",
+    "esfera": "federal",
+    "categoria": "Portaria"
+  },
+  {
+    "id": "resolucao-sesa-590-2014",
+    "titulo": "Resolução SESA nº 590/2014 — Higiene e Segurança em Estabelecimentos",
+    "esfera": "estadual",
+    "categoria": "Resolução"
+  },
+  {
+    "id": "rdc-46-2013-vape",
+    "titulo": "RDC nº 46/2013 — Produtos de Tabaco e Dispositivos Eletrônicos",
+    "esfera": "federal",
+    "categoria": "RDC"
+  },
+  {
+    "id": "lei-estadual-20362-2020-ilpi",
+    "titulo": "Lei Estadual nº 20.362/2020 — Responsável Técnico em Instituições de Longa Permanência para Idosos",
+    "esfera": "estadual",
+    "categoria": "Lei"
+  },
+  {
+    "id": "resolucao-sesa-004-2017-agroindustria-familiar",
+    "titulo": "Resolução SESA nº 004/2017 — Boas Práticas para Empreendimento Familiar Rural, MEI e Economia Solidária",
+    "esfera": "estadual",
+    "categoria": "Resolução"
+  },
+  {
+    "id": "resolucao-sesa-seab-003-2013-leite",
+    "titulo": "Resolução Conjunta SESA/SEAB nº 003/2013 — Comissões Regionais da Qualidade do Leite",
+    "esfera": "estadual",
+    "categoria": "Resolução"
+  },
+  {
+    "id": "resolucao-sesa-473-2016-vacinas-farmacia",
+    "titulo": "Resolução SESA nº 473/2016 — Vacinas em Farmácias Privadas",
+    "esfera": "estadual",
+    "categoria": "Resolução"
+  },
+  {
+    "id": "resolucao-sesa-700-2013-salao-beleza",
+    "titulo": "Resolução SESA nº 700/2013 — Salão de Beleza, Barbearia e Depilação",
+    "esfera": "estadual",
+    "categoria": "Resolução"
+  },
+  {
+    "id": "rdc-36-2009-formol",
+    "titulo": "RDC nº 36/2009 — Proibição de Formol/Formaldeído no Comércio e em Salões de Beleza",
+    "esfera": "federal",
+    "categoria": "RDC"
+  },
+  {
+    "id": "rdc-645-2022-substancias-restritas-cosmeticos",
+    "titulo": "RDC nº 645/2022 — Substâncias Restritas em Cosméticos (Chumbo, Formaldeído, Pirogalol)",
+    "esfera": "federal",
+    "categoria": "RDC"
+  }
+]

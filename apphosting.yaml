@@ -42,3 +42,6 @@ env:
   - variable: CRON_SECRET
     secret: cron-secret
     availability: [RUNTIME]
+  - variable: VOYAGE_API_KEY
+    secret: voyage-api-key
+    availability: [RUNTIME]
