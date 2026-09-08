@@ -216,6 +216,8 @@ REGRAS DE REDAÇÃO (OBJETIVIDADE E NORMA CULTA):
 - Frases diretas e objetivas: vá direto ao fato, sem rodeios, sem redundância e sem repetir a mesma ideia com palavras diferentes.
 - Tom impessoal e técnico, sempre em terceira pessoa — nunca use opiniões, adjetivos subjetivos ("gravíssimo", "lamentável") ou linguagem emocional; descreva apenas o que foi constatado, de forma verificável.
 - Prefira períodos curtos a médios. Um período muito longo, com várias orações encadeadas, prejudica a clareza — se necessário, divida a ideia em frases mais curtas dentro do próprio bloco único (sem quebra de linha).
+- Nunca use frases genéricas de "senso comum" que serviriam pra qualquer autuação, de qualquer ramo (ex.: "risco sanitário", "normas de saúde pública e biossegurança", "desacordo com a legislação vigente") — se o texto menciona risco, diga QUAL risco concreto aquele fato específico gera (contaminação, intoxicação, proliferação de vetores, ausência de rastreabilidade, exposição do consumidor a produto sem controle sanitário etc.), nunca a fórmula genérica.
+- Não repita nem parafraseie a redação do artigo citado dentro do relato — a citação (LEI, ARTIGO, INCISO) já remete ao texto legal; descreva o FATO e por que ele viola a norma, sem reproduzir palavra por palavra (ou quase) o que a lei já diz.
 
 REGRAS CRÍTICAS DE FUNDAMENTAÇÃO:
 1. BLOCO ÚNICO: Proibido usar quebras de linha ou parágrafos no campo draftIntimacao.
@@ -240,9 +242,8 @@ ESTRUTURA COMPLETA PARA AUTO DE INFRAÇÃO:
   - Relato é sobre propaganda/publicidade veiculada (rádio, TV, anúncio, outdoor): "Em ação de monitoramento de propaganda e publicidade, esta Autoridade Sanitária constatou que [FATO]..." — aqui o foco é a propaganda/veiculação em si, não "o estabelecimento".
   - Relato menciona retorno/reincidência de uma notificação anterior: "Em verificação de cumprimento de notificação sanitária anterior, esta Autoridade Sanitária constatou que [FATO]..."
   - Nenhum desses cenários bater: componha uma abertura equivalente e coerente com o contexto descrito, sem forçar a frase de inspeção padrão.
-- Risco: "A situação configura risco sanitário aos consumidores e está em desacordo com as normas de saúde pública e biossegurança."
-- Enquadramento: "Tal conduta caracteriza irregularidade sanitária e a inobservância das exigências legais, em violação à [CITAÇÃO ESPECÍFICA: LEI (ARTIGO, INCISO)]."
-- Fechamento: Conforme o tipo (Apreensão: processo administrativo; Interdição: interdição cautelar; Outros: notificação).
+- Risco e enquadramento: uma única frase, ligando o risco CONCRETO daquele fato (ver regra de redação acima — nunca a fórmula genérica "risco sanitário... biossegurança") à violação legal. O risco varia conforme o fato: falta de higienização pode significar risco de contaminação; produto sem registro/vencido, risco à saúde do consumidor; ausência de licença, funcionamento sem qualquer controle sanitário; e assim por diante — descreva o risco QUE AQUELE CASO gera, nunca sempre o mesmo texto. Só use duas frases se o caso realmente exigir (mais de uma irregularidade, por exemplo) — nunca por padrão.
+- Fechamento: uma frase curta, conforme o tipo (Apreensão: processo administrativo; Interdição: interdição cautelar; Outros: notificação) — sem repetir o que a fundamentação já disse.
 
 Preencha fundamentacaoSugerida com a citação formatada (ex: "LEI ESTADUAL Nº 13.331/2001 (ART. 63, INCISO XI)") e artigosUtilizados com os IDs exatos dos artigos do contexto que você efetivamente citou.`;
 

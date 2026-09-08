@@ -121,6 +121,88 @@ export function matchesPreference(art: { lawKey: string; municipioId?: string; i
   return false;
 }
 
+export interface ScoredHit<T> {
+  item: T;
+  score: number;
+}
+
+/**
+ * Junta os resultados de uma busca (base geral automática + leis específicas
+ * escolhidas pelo fiscal) numa lista final equilibrada. Usada tanto por
+ * `searchLegislacao` (abaixo) quanto por `searchLegislacaoSemantic`
+ * (legal-vector-search.ts) — antes cada uma duplicava sua própria versão do
+ * mesmo agrupar+cortar, com risco de uma ficar desatualizada em relação à
+ * outra (ver histórico de bugs no comentário de `matchesPreference`).
+ *
+ * Corrige um bug real: antes, TODA lei específica selecionada (qualquer uma
+ * que não seja uma das duas bases gerais) caía num único balaio, cortado
+ * pelo topo desse balaio inteiro — se o fiscal selecionasse Resolução + RDC
+ * juntas e a Resolução pontuasse mais alto pra aquela consulta, a RDC
+ * inteira sumia da fundamentação por não chegar perto da pontuação da
+ * Resolução, mesmo tendo sido escolhida também. Agora cada lei específica
+ * selecionada tem seu PRÓPRIO corte de relevância (relativo ao topo dela
+ * mesma) e uma quantidade mínima garantida de vagas no resultado final —
+ * mesma ideia que `GENERAL_SLOTS` já usa pra base geral, estendida a cada
+ * lei específica escolhida.
+ */
+export function pickBalancedHits<T>(
+  scored: ScoredHit<T>[],
+  opts: {
+    lawKeyOf: (item: T) => string;
+    generalLawKeys: Set<string>;
+    generalSlots: number;
+    specificLawKeys: string[];
+    minSlotsPerLaw: number;
+    relativeCutoff: number;
+    /** Só faz sentido pra métricas limitadas e comparáveis entre buscas
+     * (ex.: similaridade de cosseno, 0 a 1) — evita que a vaga garantida
+     * force a entrada de um trecho realmente sem relação só porque a lei
+     * foi selecionada e não tinha nada melhor pra oferecer. */
+    absoluteFloor?: number;
+    limit: number;
+  }
+): T[] {
+  const passesFloor = (h: ScoredHit<T>) => opts.absoluteFloor === undefined || h.score >= opts.absoluteFloor;
+  const sorted = [...scored].sort((a, b) => b.score - a.score);
+
+  const cutRelative = (list: ScoredHit<T>[]) => {
+    const top = list[0]?.score ?? 0;
+    return list.filter((h) => h.score >= top * opts.relativeCutoff && passesFloor(h));
+  };
+
+  const general = sorted.filter((h) => opts.generalLawKeys.has(opts.lawKeyOf(h.item)));
+  const generalHits = cutRelative(general).slice(0, opts.generalSlots);
+
+  const specific = sorted.filter((h) => !opts.generalLawKeys.has(opts.lawKeyOf(h.item)));
+
+  // Uma lista por lei específica REALMENTE selecionada — só assim cada uma
+  // compete pela própria pontuação, nunca contra o topo de outra lei
+  // escolhida junto. Lei selecionada sem nenhum resultado simplesmente não
+  // entra (nada pra garantir).
+  const perLaw = opts.specificLawKeys
+    .map((lawKey) => cutRelative(specific.filter((h) => opts.lawKeyOf(h.item) === lawKey)))
+    .filter((list) => list.length > 0);
+
+  // Reserva um mínimo de vagas de CADA lei antes de cortar pelo `limit`
+  // total — sem isso, o corte final (por pontuação absoluta) reproduziria o
+  // mesmo problema um nível acima, apagando uma lei inteira só por ela
+  // pontuar mais baixo que as outras leis selecionadas. Pode fazer o
+  // resultado passar um pouco do `limit` nominal quando muitas leis são
+  // selecionadas de uma vez — preferível a apagar uma lei escolhida de
+  // propósito pelo fiscal.
+  const protectedHits: ScoredHit<T>[] = [];
+  const leftover: ScoredHit<T>[] = [];
+  perLaw.forEach((list) => {
+    protectedHits.push(...list.slice(0, opts.minSlotsPerLaw));
+    leftover.push(...list.slice(opts.minSlotsPerLaw));
+  });
+
+  const remainingBudget = Math.max(0, opts.limit - generalHits.length - protectedHits.length);
+  const extra = [...leftover].sort((a, b) => b.score - a.score).slice(0, remainingBudget);
+
+  return [...generalHits, ...protectedHits, ...extra].map((h) => h.item);
+}
+
 // Lei sem `municipioId` = nível estadual/federal, vale pra qualquer fiscal.
 // Lei com `municipioId` só entra na busca se bater com o município de quem
 // está gerando o rascunho — mesmo isolamento por município já aplicado nos
@@ -144,33 +226,40 @@ export function searchLegislacao(
 
   const results = index.search(query);
 
-  const general: { art: IndexedArticle; score: number }[] = [];
-  const specific: { art: IndexedArticle; score: number }[] = [];
-
+  const scored: ScoredHit<IndexedArticle>[] = [];
   for (const r of results) {
     const art = allArticles.find(a => a.id === r.id);
     if (!art) continue;
     if (!matchesPreference(art, pref)) continue;
     if (!matchesMunicipio(art.municipioId, municipioId)) continue;
-    (GENERAL_LAW_KEYS.has(art.lawKey) ? general : specific).push({ art, score: r.score });
+    scored.push({ item: art, score: r.score });
   }
 
-  // Corta resultados fracamente relacionados dentro de cada grupo: só mantém
-  // o que estiver a pelo menos 50% da pontuação do melhor resultado DAQUELE
-  // grupo, evitando citar artigo errado. Vários incisos do Art. 63/Art. 18
+  // "todas" (Todo o banco de dados) precisa tratar CADA lei de biblioteca
+  // presente nos resultados como "selecionada" pra pickBalancedHits — sem
+  // isso, nenhuma delas tinha uma chave nomeada explicitamente em `pref` e a
+  // busca com "todas" passava a não garantir vaga nenhuma pra elas.
+  const specificLawKeys = pref.includes('todas')
+    ? Array.from(new Set(scored.map((h) => h.item.lawKey).filter((k) => !GENERAL_LAW_KEYS.has(k))))
+    : pref.filter((value) => value !== 'todas' && value !== 'municipal' && value !== 'estadual');
+
+  // Corta resultados fracamente relacionados dentro de cada lei: só mantém o
+  // que estiver a pelo menos 50% da pontuação do melhor resultado DAQUELA
+  // lei, evitando citar artigo errado. Vários incisos do Art. 63/Art. 18
   // repetem o mesmo texto-modelo genérico, por isso o corte precisa ser mais
-  // rígido do que num corpus pequeno. O corte é por grupo (não global) pra
-  // legislação de nicho não ser descartada só por pontuar abaixo do melhor
-  // resultado geral, e vice-versa.
-  const cut = (list: { art: IndexedArticle; score: number }[]) => {
-    const topScore = list[0]?.score ?? 0;
-    return list.filter(x => x.score >= topScore * 0.5);
-  };
+  // rígido do que num corpus pequeno. Ver pickBalancedHits pra por que o
+  // corte é por lei individual, não por um balaio combinado.
+  const hits = pickBalancedHits(scored, {
+    lawKeyOf: (art) => art.lawKey,
+    generalLawKeys: GENERAL_LAW_KEYS,
+    generalSlots: GENERAL_SLOTS,
+    specificLawKeys,
+    minSlotsPerLaw: 2,
+    relativeCutoff: 0.5,
+    limit,
+  });
 
-  const generalHits = cut(general).slice(0, GENERAL_SLOTS);
-  const specificHits = cut(specific);
-
-  return [...generalHits, ...specificHits].slice(0, limit).map(({ art }) => ({
+  return hits.map((art) => ({
     id: art.id,
     label: art.label,
     texto: art.texto,

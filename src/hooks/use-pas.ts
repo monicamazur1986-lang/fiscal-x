@@ -7,7 +7,6 @@ import {
   collection,
   doc,
   setDoc,
-  addDoc,
   deleteDoc,
   getDocs,
   onSnapshot,
@@ -19,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
+import { attemptFirestoreWrite } from '@/lib/firestore-offline';
 
 const LOCAL_STORAGE_KEY = 'fiscal_x_pas_v1';
 
@@ -82,13 +82,18 @@ export function usePas() {
       createdByName: profile.displayName || 'Fiscal',
       createdAt: new Date().toISOString(),
     };
-    const ref = await addDoc(collection(db, 'pas'), docData);
+    // doc(collection(...)) gera o id na hora, sem precisar de rede — offline,
+    // attemptFirestoreWrite evita que o await trave esperando o servidor
+    // confirmar (a gravação já fica na fila do próprio Firestore, ver
+    // src/lib/firestore-offline.ts), mas o id retornado é o mesmo de sempre.
+    const ref = doc(collection(db, 'pas'));
+    await attemptFirestoreWrite(setDoc(ref, docData));
     return ref.id;
   }, [user, profile, configError]);
 
   const atualizarPas = useCallback(async (id: string, data: Partial<Pas>) => {
     if (!db) return;
-    await setDoc(doc(db, 'pas', id), { ...data, updatedAt: new Date().toISOString() }, { merge: true });
+    await attemptFirestoreWrite(setDoc(doc(db, 'pas', id), { ...data, updatedAt: new Date().toISOString() }, { merge: true }));
   }, []);
 
   // Exclusão de verdade (não é lixeira) — pensada pra corrigir um PAS aberto
@@ -97,8 +102,8 @@ export function usePas() {
   const excluirPas = useCallback(async (id: string) => {
     if (!db) return;
     const pecasSnap = await getDocs(collection(db, 'pas', id, 'pecas'));
-    await Promise.all(pecasSnap.docs.map((d) => deleteDoc(d.ref)));
-    await deleteDoc(doc(db, 'pas', id));
+    await Promise.all(pecasSnap.docs.map((d) => attemptFirestoreWrite(deleteDoc(d.ref))));
+    await attemptFirestoreWrite(deleteDoc(doc(db, 'pas', id)));
   }, []);
 
   return { processos, loading, criarPas, atualizarPas, excluirPas };
@@ -156,8 +161,12 @@ export function usePasPecas(pasId: string | null) {
         criadoPorNome: profile.displayName || 'Fiscal',
         criadoEm: new Date().toISOString(),
       };
+      // doc(collection(...)) gera o id sem precisar de rede — mesmo raciocínio
+      // de criarPas acima, necessário aqui pra numeração sequencial não travar
+      // esperando confirmação do servidor offline.
+      const ref = doc(collection(db, 'pas', pasId, 'pecas'));
       // eslint-disable-next-line no-await-in-loop -- numeração sequencial precisa ser em ordem
-      const ref = await addDoc(collection(db, 'pas', pasId, 'pecas'), peca);
+      await attemptFirestoreWrite(setDoc(ref, peca));
       ids.push(ref.id);
     }
     return ids;

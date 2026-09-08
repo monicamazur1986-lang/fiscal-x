@@ -6,6 +6,7 @@ import { db } from '@/lib/firebase';
 import { collection, onSnapshot, doc, setDoc, query, where } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
+import { attemptFirestoreWrite } from '@/lib/firestore-offline';
 
 const LOCAL_STORAGE_KEY = 'fiscal_x_folders';
 
@@ -61,17 +62,17 @@ export function useFolders(area: 'intimacoes' | 'docfacil') {
       createdAt: new Date().toISOString(),
       deleted: false,
     };
-    await setDoc(doc(db, 'folders', targetId), novo);
+    await attemptFirestoreWrite(setDoc(doc(db, 'folders', targetId), novo));
   }, [db, municipioId, area, user]);
 
   const moveFolder = useCallback(async (id: string, targetParentId: string | null) => {
     if (!db) return;
-    await setDoc(doc(db, 'folders', id), { parentId: targetParentId || "" }, { merge: true });
+    await attemptFirestoreWrite(setDoc(doc(db, 'folders', id), { parentId: targetParentId || "" }, { merge: true }));
   }, [db]);
 
   const toggleTrash = useCallback(async (id: string, isDeleted: boolean) => {
     if (!db) return;
-    await setDoc(doc(db, 'folders', id), { deleted: isDeleted, deletedAt: isDeleted ? new Date().toISOString() : "" }, { merge: true });
+    await attemptFirestoreWrite(setDoc(doc(db, 'folders', id), { deleted: isDeleted, deletedAt: isDeleted ? new Date().toISOString() : "" }, { merge: true }));
   }, [db]);
 
   return { folders, createFolder, moveFolder, toggleTrash, loading };

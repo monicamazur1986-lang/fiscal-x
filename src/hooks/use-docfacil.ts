@@ -17,6 +17,7 @@ import {
 } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
+import { attemptFirestoreWrite } from '@/lib/firestore-offline';
 
 const MODELOS_KEY = 'fiscal_x_docfacil_modelos_v1';
 const DOCUMENTOS_KEY = 'fiscal_x_docfacil_documentos_v1';
@@ -99,6 +100,14 @@ export function useDocfacil() {
   // Contador atômico por chave (um pros códigos de modelo, um por tipo+ano
   // pros números de documento emitido) — mesmo mecanismo já usado pra
   // numeração de autuações em use-intimacoes.ts.
+  //
+  // Diferente dos setDoc/deleteDoc do resto do arquivo, uma runTransaction
+  // exige mesmo uma ida e volta ao servidor (é assim que ela garante que
+  // ninguém mais leu o mesmo contador ao mesmo tempo) — não dá pra resolver
+  // isso a partir do cache local, então não passa pelo attemptFirestoreWrite:
+  // criar um modelo/documento NOVO (que precisa de um número inédito) sem
+  // conexão nenhuma realmente não tem como, e o botão fica esperando
+  // reconectar em vez de fingir que salvou.
   const nextCounter = useCallback(async (key: string): Promise<number> => {
     if (!db || !municipioId) throw new Error('Sem conexão com a nuvem.');
     const counterRef = doc(db, 'municipios', municipioId, 'counters', key);
@@ -126,7 +135,7 @@ export function useDocfacil() {
         id,
         updatedAt: now,
       };
-      await setDoc(doc(db, 'docfacilModelos', id), updated, { merge: true });
+      await attemptFirestoreWrite(setDoc(doc(db, 'docfacilModelos', id), updated, { merge: true }));
       return updated;
     }
 
@@ -142,13 +151,13 @@ export function useDocfacil() {
       createdAt: now,
       updatedAt: now,
     };
-    await setDoc(doc(db, 'docfacilModelos', targetId), novo);
+    await attemptFirestoreWrite(setDoc(doc(db, 'docfacilModelos', targetId), novo));
     return novo;
   }, [db, municipioId, profile, modelos, nextCounter]);
 
   const excluirModelo = useCallback(async (id: string) => {
     if (!db) return;
-    await deleteDoc(doc(db, 'docfacilModelos', id));
+    await attemptFirestoreWrite(deleteDoc(doc(db, 'docfacilModelos', id)));
   }, [db]);
 
   // Antes, cada clique em "Visualizar Documento" criava um DocfacilDocumento
@@ -182,7 +191,7 @@ export function useDocfacil() {
         id,
         updatedAt: now,
       };
-      await setDoc(doc(db, 'docfacilDocumentos', id), updated, { merge: true });
+      await attemptFirestoreWrite(setDoc(doc(db, 'docfacilDocumentos', id), updated, { merge: true }));
       return updated;
     }
 
@@ -202,18 +211,18 @@ export function useDocfacil() {
       createdAt: now,
       updatedAt: now,
     };
-    await setDoc(doc(db, 'docfacilDocumentos', targetId), novo);
+    await attemptFirestoreWrite(setDoc(doc(db, 'docfacilDocumentos', targetId), novo));
     return novo;
   }, [db, municipioId, profile, documentos, nextCounter]);
 
   const excluirDocumento = useCallback(async (id: string) => {
     if (!db) return;
-    await deleteDoc(doc(db, 'docfacilDocumentos', id));
+    await attemptFirestoreWrite(deleteDoc(doc(db, 'docfacilDocumentos', id)));
   }, [db]);
 
   const moverDocumento = useCallback(async (id: string, folderId: string | null) => {
     if (!db) return;
-    await setDoc(doc(db, 'docfacilDocumentos', id), { folderId: folderId || "" }, { merge: true });
+    await attemptFirestoreWrite(setDoc(doc(db, 'docfacilDocumentos', id), { folderId: folderId || "" }, { merge: true }));
   }, [db]);
 
   // Mesma lógica de lixeira de Intimações: mover pra lixeira só marca
@@ -222,10 +231,10 @@ export function useDocfacil() {
   // própria lixeira.
   const moverParaLixeira = useCallback(async (id: string, toTrash: boolean) => {
     if (!db) return;
-    await setDoc(doc(db, 'docfacilDocumentos', id), {
+    await attemptFirestoreWrite(setDoc(doc(db, 'docfacilDocumentos', id), {
       deleted: toTrash,
       deletedAt: toTrash ? new Date().toISOString() : null,
-    }, { merge: true });
+    }, { merge: true }));
   }, [db]);
 
   return {

@@ -258,9 +258,15 @@ service cloud.firestore {
       allow update, delete: if isRoot() || (isAdmin() && resource.data.municipioId == getUserData().municipioId);
     }
 
+    // Cadastro de fiscais/autoridades pra assinar documentos — qualquer
+    // membro do município grava (não só admin): antes era guardado só no
+    // localStorage de cada aparelho, sem restrição nenhuma, e um fiscal
+    // comum precisa poder cadastrar um colega na hora, direto no formulário,
+    // sem depender do gestor.
     match /autoridades/{id} {
       allow read: if belongsToMyMunicipio(resource.data);
-      allow write: if isAdmin() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
+      allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
+      allow update, delete: if isAuthenticated() && (isRoot() || resource.data.municipioId == getUserData().municipioId);
     }
 
     match /inspecoes/{id} {

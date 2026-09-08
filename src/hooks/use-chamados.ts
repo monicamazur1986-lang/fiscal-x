@@ -17,6 +17,7 @@ import {
 } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
+import { attemptFirestoreWrite } from '@/lib/firestore-offline';
 
 const LOCAL_STORAGE_KEY = 'fiscal_x_chamados_v1';
 
@@ -103,7 +104,7 @@ export function useChamados(options?: { municipioIdOverride?: string }) {
     });
 
     if (db && !configError) {
-      await setDoc(doc(db, "chamados", targetId), docData);
+      await attemptFirestoreWrite(setDoc(doc(db, "chamados", targetId), docData));
     }
 
     return docData;
@@ -118,7 +119,7 @@ export function useChamados(options?: { municipioIdOverride?: string }) {
     });
 
     if (db && !configError) {
-      await updateDoc(doc(db, "chamados", id), { resposta, status: novoStatus, respondidoPor: profile?.displayName || '', updatedAt: now });
+      await attemptFirestoreWrite(updateDoc(doc(db, "chamados", id), { resposta, status: novoStatus, respondidoPor: profile?.displayName || '', updatedAt: now }));
     }
   }, [db, configError, profile]);
 
@@ -131,7 +132,7 @@ export function useChamados(options?: { municipioIdOverride?: string }) {
     });
 
     if (db && !configError) {
-      await updateDoc(doc(db, "chamados", id), { status, updatedAt: now });
+      await attemptFirestoreWrite(updateDoc(doc(db, "chamados", id), { status, updatedAt: now }));
     }
   }, [db, configError]);
 

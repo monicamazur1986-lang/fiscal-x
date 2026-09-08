@@ -465,8 +465,16 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             // handleFinalize só roda uma vez por documento (o formulário trava
             // e o botão vira "Baixar PDF" depois disso), então não precisa
             // proteger contra lembrete duplicado aqui.
+            //
+            // Não depende de mainCloudSaved: mesmo offline, a autuação já foi
+            // gravada na fila do próprio Firestore (attemptFirestoreWrite em
+            // use-intimacoes.ts) e vai sincronizar sozinha — o lembrete usa a
+            // mesma proteção (saveInspecao já lida com offline por conta
+            // própria, ver use-inspecoes.ts). Antes disso, finalizar offline
+            // fazia o lembrete de prazo nunca ser criado, silenciosamente,
+            // mesmo depois de a autuação sincronizar de verdade.
             const mainValues = getValues();
-            if (result.mainCloudSaved && mainValues.prazoDias && profile?.municipioId) {
+            if (mainValues.prazoDias && profile?.municipioId) {
                 try {
                     const prazoData = addBusinessDays(mainValues.dataIntimacao, mainValues.prazoDias);
                     const lembreteId = await criarLembretePrazo(saveInspecao, {

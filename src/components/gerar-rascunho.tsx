@@ -416,6 +416,17 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                       })}
                     </div>
                   </div>
+
+                  <div className="mt-2 pt-2 border-t border-zinc-200 sticky bottom-0 bg-white">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => setIsLegalMenuOpen(false)}
+                      className="w-full h-9 rounded-lg text-xs font-semibold"
+                    >
+                      Selecionar
+                    </Button>
+                  </div>
                 </PopoverContent>
               </Popover>
             </div>

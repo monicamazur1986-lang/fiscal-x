@@ -21,6 +21,7 @@ import {
 } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
+import { attemptFirestoreWrite } from '@/lib/firestore-offline';
 
 const LOCAL_STORAGE_KEY = 'fiscal_x_intimacoes_v4';
 
@@ -224,12 +225,18 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
       };
 
       try {
-        if (id) {
-          await setDoc(doc(db, "intimacoes", id), fbData, { merge: true });
-        } else {
-          await setDoc(doc(db, "intimacoes", targetId), { ...fbData, createdAt: now });
-        }
-        cloudSaved = true;
+        // attemptFirestoreWrite: com a persistência do Firestore ligada (ver
+        // src/lib/firebase.ts), a gravação já fica garantida na fila do
+        // próprio SDK assim que chamada — offline, `synced` volta `false`
+        // (não é erro, só "ainda sem confirmação") em vez de travar esperando
+        // o servidor, que só responde quando a conexão voltar.
+        const { synced } = await attemptFirestoreWrite(
+          id
+            ? setDoc(doc(db, "intimacoes", id), fbData, { merge: true })
+            : setDoc(doc(db, "intimacoes", targetId), { ...fbData, createdAt: now })
+        );
+        cloudSaved = synced;
+        if (!synced) cloudError = "Sem conexão com a nuvem — será sincronizado automaticamente.";
       } catch (e: any) {
         console.warn("Falha ao persistir intimacão no Firebase:", e);
         cloudError = e?.message || "Falha ao salvar na nuvem";
@@ -260,8 +267,12 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     // ninguém ficava sabendo que nada foi persistido no servidor. Agora
     // aguardamos e propagamos a falha pro chamador (que já trata isso).
     if (db && !configError) {
+      // attemptFirestoreWrite faz uma gravação offline resolver como
+      // "pendente" (não como rejeitada) — sem isso, mover pra lixeira sem
+      // sinal disparava um erro assustador ("X itens não foram salvos") por
+      // cada item, mesmo a gravação estando segura na fila do Firestore.
       const results = await Promise.allSettled(
-        stringIds.map(id => setDoc(doc(db, "intimacoes", id), { deleted: toTrash, deletedAt: now }, { merge: true }))
+        stringIds.map(id => attemptFirestoreWrite(setDoc(doc(db, "intimacoes", id), { deleted: toTrash, deletedAt: now }, { merge: true })))
       );
       const failed = results.filter(r => r.status === 'rejected').length;
       if (failed > 0) throw new Error(`${failed} de ${stringIds.length} item(ns) não foram salvos no servidor.`);
@@ -278,7 +289,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     });
 
     if (db && !configError) {
-      const results = await Promise.allSettled(stringIds.map(id => deleteDoc(doc(db, "intimacoes", id))));
+      const results = await Promise.allSettled(stringIds.map(id => attemptFirestoreWrite(deleteDoc(doc(db, "intimacoes", id)))));
       const failed = results.filter(r => r.status === 'rejected').length;
       if (failed > 0) throw new Error(`${failed} de ${stringIds.length} item(ns) não foram excluídos no servidor.`);
     }
@@ -300,7 +311,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
 
     if (db && !configError) {
       const results = await Promise.allSettled(
-        stringIds.map(id => setDoc(doc(db, "intimacoes", id), { folderId: folderValue, deleted: false }, { merge: true }))
+        stringIds.map(id => attemptFirestoreWrite(setDoc(doc(db, "intimacoes", id), { folderId: folderValue, deleted: false }, { merge: true })))
       );
       const failed = results.filter(r => r.status === 'rejected').length;
       if (failed > 0) throw new Error(`${failed} de ${stringIds.length} item(ns) não foram movidos no servidor.`);
@@ -317,7 +328,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     });
 
     if (db && !configError) {
-      await setDoc(doc(db, "intimacoes", stringId), { favorito }, { merge: true });
+      await attemptFirestoreWrite(setDoc(doc(db, "intimacoes", stringId), { favorito }, { merge: true }));
     }
   }, [db, configError]);
 
@@ -334,7 +345,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     });
 
     if (db && !configError) {
-      await setDoc(doc(db, "intimacoes", stringId), partial, { merge: true });
+      await attemptFirestoreWrite(setDoc(doc(db, "intimacoes", stringId), partial, { merge: true }));
     }
   }, [db, configError]);
 

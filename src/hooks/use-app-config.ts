@@ -6,6 +6,7 @@ import { db, auth } from '@/lib/firebase'; // Importe a instância 'db' diretame
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { useAuth, ROOT_ADMIN_EMAIL } from './use-auth';
 import { normalizeId } from '@/lib/utils';
+import { attemptFirestoreWrite } from '@/lib/firestore-offline';
 
 export interface MunicipalityConfig {
   logoUrl?: string; // Brasão Municipal (Documentos A4)
@@ -128,7 +129,7 @@ export function useAppConfig(options?: { municipioIdOverride?: string }) {
 
     if (db) {
       const mid = normalizeId(effectiveMunicipioId);
-      await setDoc(doc(db, "municipios", mid, "config", "brand"), data, { merge: true });
+      await attemptFirestoreWrite(setDoc(doc(db, "municipios", mid, "config", "brand"), data, { merge: true }));
     }
   }, [db, effectiveMunicipioId, config, profile]);
 
@@ -139,7 +140,7 @@ export function useAppConfig(options?: { municipioIdOverride?: string }) {
     // Root write attempt
     if (db && (profile?.role === 'root' || profile?.email?.toLowerCase() === ROOT_ADMIN_EMAIL)) {
       try {
-        await setDoc(doc(db, "configuracoes", "global"), { appLogoUrl: url }, { merge: true });
+        await attemptFirestoreWrite(setDoc(doc(db, "configuracoes", "global"), { appLogoUrl: url }, { merge: true }));
       } catch (e) {
         console.error("Firestore Error saving global logo:", e);
         throw e;
@@ -153,7 +154,7 @@ export function useAppConfig(options?: { municipioIdOverride?: string }) {
     if (!db || !(profile?.role === 'root' || profile?.email?.toLowerCase() === ROOT_ADMIN_EMAIL)) {
       throw new Error('Somente o root pode alterar o prazo de acesso de teste.');
     }
-    await setDoc(doc(db, "configuracoes", "global"), { betaAccessDurationDays: days }, { merge: true });
+    await attemptFirestoreWrite(setDoc(doc(db, "configuracoes", "global"), { betaAccessDurationDays: days }, { merge: true }));
     setBetaAccessDurationDays(days);
   }, [db, profile]);
 

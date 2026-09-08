@@ -2,7 +2,7 @@
 
 import {
   LogOut, Users,
-  UserCircle, Sparkles, Settings, Inbox, ArrowLeft, Image as ImageIcon, MessageSquare, Loader2
+  UserCircle, Sparkles, Settings, Inbox, ArrowLeft, Image as ImageIcon, MessageSquare, Loader2, WifiOff
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -23,6 +23,7 @@ import { ProfileEditDialog } from "./profile-edit-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { requestChecklistExit } from "@/hooks/use-checklist-exit-guard"
+import { useOnlineStatus } from "@/hooks/use-online-status"
 import { QuickAccessFab } from "@/components/quick-access-fab"
 import { auth } from "@/lib/firebase"
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "firebase/auth"
@@ -133,6 +134,7 @@ export function AppHeader() {
   const router = useRouter()
   const { user, profile, logout } = useAuth()
   const { pendingUsersCount, pendingChamadosCount } = usePendingAlerts()
+  const isOnline = useOnlineStatus()
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [isPasswordOpen, setIsPasswordOpen] = useState(false)
   // ?embed=1 é usado pelo QuickAccessFab pra abrir uma rota inteira dentro de
@@ -178,6 +180,12 @@ export function AppHeader() {
     <>
       <QuickAccessFab />
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        {!isOnline && (
+          <div className="w-full bg-amber-500 text-white text-[10px] font-black uppercase tracking-wide text-center py-1.5 px-4 flex items-center justify-center gap-1.5">
+            <WifiOff className="h-3 w-3 shrink-0" />
+            Sem conexão — o que você fizer aqui é salvo e sincroniza sozinho quando a internet voltar
+          </div>
+        )}
         <div className="container flex h-14 items-center justify-between">
           <div className="flex items-center gap-1">
             {pathname !== "/dashboard" && (

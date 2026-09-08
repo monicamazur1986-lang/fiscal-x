@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { LegalArticle, LawPreferenceSelection } from './legal-search';
-import { normalizeLawPreferenceSelection, matchesPreference, matchesMunicipio, GENERAL_LAW_KEYS, GENERAL_SLOTS } from './legal-search';
+import type { LegalArticle, LawPreferenceSelection, ScoredHit } from './legal-search';
+import { normalizeLawPreferenceSelection, matchesPreference, matchesMunicipio, GENERAL_LAW_KEYS, GENERAL_SLOTS, pickBalancedHits } from './legal-search';
 
 /**
  * Busca semântica (vetorial) de artigos de lei — substitui a busca por
@@ -108,27 +108,39 @@ export async function searchLegislacaoSemantic(
 
   const queryVector = await embedQuery(query);
 
-  const scored = embeddings.chunks
+  const scored: ScoredHit<EmbeddedChunk>[] = embeddings.chunks
     .filter((c) => matchesPreference(c, pref))
     .filter((c) => matchesMunicipio(c.municipioId, municipioId))
-    .map((c) => ({ chunk: c, score: cosineSimilarity(queryVector, c.vector) }))
-    .sort((a, b) => b.score - a.score);
+    .map((c) => ({ item: c, score: cosineSimilarity(queryVector, c.vector) }));
 
-  const general = scored.filter((s) => GENERAL_LAW_KEYS.has(s.chunk.lawKey));
-  const specific = scored.filter((s) => !GENERAL_LAW_KEYS.has(s.chunk.lawKey));
+  // "todas" (Todo o banco de dados) precisa tratar CADA lei de biblioteca
+  // presente nos resultados como "selecionada" pra pickBalancedHits — sem
+  // isso, nenhuma delas tinha uma chave nomeada explicitamente em `pref` e a
+  // busca com "todas" passava a não garantir vaga nenhuma pra elas.
+  const specificLawKeys = pref.includes('todas')
+    ? Array.from(new Set(scored.map((h) => h.item.lawKey).filter((k) => !GENERAL_LAW_KEYS.has(k))))
+    : pref.filter((value) => value !== 'todas' && value !== 'municipal' && value !== 'estadual');
 
   // Mesmo corte por similaridade relativa que a busca por palavra-chave usa
-  // (>= 50% da pontuação do melhor resultado do próprio grupo), adaptado pra
-  // similaridade de cosseno em vez de score de texto.
-  const cut = (list: typeof scored) => {
-    const top = list[0]?.score ?? 0;
-    return list.filter((s) => s.score >= top * 0.85);
-  };
+  // (ver pickBalancedHits em legal-search.ts pra por que o corte é por lei
+  // individual, não por um balaio combinado com as demais leis
+  // selecionadas), com um piso absoluto adicional: diferente do score de
+  // texto do MiniSearch, similaridade de cosseno é uma métrica limitada
+  // (0 a 1) e comparável entre buscas — abaixo de 0.3 o trecho não tem
+  // relação nenhuma com a consulta, mesmo sendo o "melhor" de uma lei sem
+  // nada bom pra oferecer.
+  const hits = pickBalancedHits(scored, {
+    lawKeyOf: (chunk) => chunk.lawKey,
+    generalLawKeys: GENERAL_LAW_KEYS,
+    generalSlots: GENERAL_SLOTS,
+    specificLawKeys,
+    minSlotsPerLaw: 2,
+    relativeCutoff: 0.85,
+    absoluteFloor: 0.3,
+    limit,
+  });
 
-  const generalHits = cut(general).slice(0, GENERAL_SLOTS);
-  const specificHits = cut(specific);
-
-  return [...generalHits, ...specificHits].slice(0, limit).map(({ chunk }) => ({
+  return hits.map((chunk) => ({
     id: chunk.id,
     label: chunk.label,
     texto: chunk.texto,

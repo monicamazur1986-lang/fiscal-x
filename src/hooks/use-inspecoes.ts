@@ -22,7 +22,13 @@ import { normalizeId } from '@/lib/utils';
 const LOCAL_STORAGE_KEY = 'fiscal_x_inspecoes';
 const PENDING_SYNC_KEY = 'fiscal_x_inspecoes_pending_sync';
 
-type PendingWrite = { id: string; fbData: any };
+// Guarda `docData` (datas em string ISO, seguro pra JSON), nunca o `fbData`
+// já convertido em Timestamp do Firestore — um Timestamp vira um objeto comum
+// `{seconds, nanoseconds}` ao passar por JSON.stringify/parse (localStorage),
+// e reenviar esse objeto puro pro Firestore grava um mapa qualquer no lugar
+// de uma data de verdade. Timestamp é reconstruído fresco em
+// buildFirestorePayload logo antes de cada envio, nunca guardado congelado.
+type PendingWrite = { id: string; docData: any };
 
 function loadPendingWrites(): Record<string, PendingWrite> {
   try {
@@ -34,6 +40,35 @@ function loadPendingWrites(): Record<string, PendingWrite> {
 
 function savePendingWrites(pending: Record<string, PendingWrite>) {
   localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(pending));
+}
+
+function buildFirestorePayload(docData: any) {
+  return {
+    ...docData,
+    data: Timestamp.fromDate(new Date(docData.data)),
+    updatedAt: Timestamp.fromDate(new Date(docData.updatedAt)),
+  };
+}
+
+// `data`/`updatedAt` já corrompidos no Firestore (gravados como
+// {seconds, nanoseconds} cru, pelo bug acima, antes da correção) não podem
+// travar a tela pra sempre — reconstrói a data real a partir desses mesmos
+// campos em vez de deixar virar Invalid Date.
+function tsOrCorruptedToDate(value: any): Date {
+  if (value instanceof Timestamp) return value.toDate();
+  if (value && typeof value === 'object' && typeof value.seconds === 'number') {
+    return new Date(value.seconds * 1000 + Math.round((value.nanoseconds || 0) / 1e6));
+  }
+  return new Date(value);
+}
+
+function tsOrCorruptedToIso(value: any): any {
+  if (!value) return value;
+  if (value instanceof Timestamp) return value.toDate().toISOString();
+  if (typeof value === 'object' && typeof value.seconds === 'number') {
+    return tsOrCorruptedToDate(value).toISOString();
+  }
+  return value;
 }
 
 export function useInspecoes(options?: { municipioIdOverride?: string }) {
@@ -53,7 +88,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
 
     for (const id of ids) {
       try {
-        await setDoc(doc(db, "inspecoes", id), pending[id].fbData, { merge: true });
+        await setDoc(doc(db, "inspecoes", id), buildFirestorePayload(pending[id].docData), { merge: true });
         delete pendingWritesRef.current[id];
       } catch (e) {
         // Continua offline/com erro — mantém na fila pra tentar de novo depois.
@@ -141,7 +176,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
           return {
             ...data,
             id: doc.id,
-            data: data.data instanceof Timestamp ? data.data.toDate() : new Date(data.data),
+            data: tsOrCorruptedToDate(data.data),
             // updatedAt é gravado como Timestamp do Firestore (ver saveInspecao
             // abaixo), mas o tipo Inspecao.updatedAt é string (ISO) — sem essa
             // conversão, ficava um Timestamp cru no objeto, e qualquer
@@ -150,7 +185,11 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
             // time value" assim que a lista tinha pelo menos um item — por
             // isso nunca acontecia pro root (ele nunca chega a carregar
             // inspeções reais nesta tela sem escolher um município antes).
-            updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+            // tsOrCorruptedToIso/Date também cobre documentos já gravados com
+            // o bug antigo da fila de reenvio (Timestamp virando objeto cru
+            // {seconds, nanoseconds} no localStorage) — sem isso, um
+            // documento antigo corrompido travava a tela pra sempre.
+            updatedAt: tsOrCorruptedToIso(data.updatedAt),
           } as Inspecao;
         });
 
@@ -166,12 +205,12 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
               ...pendingIds
                 .filter(id => !items.some(i => i.id === id))
                 .map(id => {
-                  const raw = pending[id].fbData;
+                  const raw = pending[id].docData;
                   return {
                     ...raw,
                     id,
-                    data: raw.data instanceof Timestamp ? raw.data.toDate() : new Date(raw.data),
-                    updatedAt: raw.updatedAt instanceof Timestamp ? raw.updatedAt.toDate().toISOString() : raw.updatedAt,
+                    data: tsOrCorruptedToDate(raw.data),
+                    updatedAt: tsOrCorruptedToIso(raw.updatedAt),
                   } as Inspecao;
                 }),
             ];
@@ -231,11 +270,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
     });
 
     // 2. ATUALIZA NUVEM (FIREBASE COMO FONTE PRINCIPAL)
-    const fbData = {
-      ...docData,
-      data: Timestamp.fromDate(inspectionDate),
-      updatedAt: Timestamp.now()
-    };
+    const fbData = buildFirestorePayload(docData);
 
     let synced = false;
     if (db && !configError && navigator.onLine) {
@@ -250,7 +285,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
     if (!synced) {
       // Guarda pra reenviar assim que a conexão voltar — sem isso, o
       // agendamento ficaria só neste aparelho e sumiria no próximo snapshot.
-      pendingWritesRef.current[targetId] = { id: targetId, fbData };
+      pendingWritesRef.current[targetId] = { id: targetId, docData };
       savePendingWrites(pendingWritesRef.current);
       setPendingSyncIds(Object.keys(pendingWritesRef.current));
     } else if (pendingWritesRef.current[targetId]) {
