@@ -2672,7 +2672,20 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
 
   const handleCnpjLookup = async () => {
     const val = idData.cnpj.replace(/\D/g, "");
-    if (val.length !== 14) return;
+    if (val.length !== 14) {
+      // Campo aceita "CNPJ / CPF", mas a consulta automática só existe pra
+      // CNPJ (a BrasilAPI não tem uma base pública de CPF) — sem este aviso,
+      // digitar um CPF (11 dígitos) ou colar um número com caractere sobrando
+      // fazia o clique na lupa não fazer nada visível, parecendo travado.
+      toast({
+        variant: "destructive",
+        title: val.length === 11 ? "Busca automática só para CNPJ" : "CNPJ incompleto",
+        description: val.length === 11
+          ? "Para CPF (autônomo/MEI), preencha os dados do estabelecimento manualmente."
+          : "Confira se o CNPJ tem os 14 dígitos.",
+      });
+      return;
+    }
     setIsSearchingCnpj(true);
     try {
       // A rota /api/cnpj exige token (senão qualquer um na internet usaria o
@@ -2958,7 +2971,26 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     };
 
     recompute();
-    const ro = new ResizeObserver(recompute);
+
+    // Só reage a mudança de LARGURA do wrapper (rotação do aparelho, sidebar
+    // recolhendo) e a qualquer mudança de conteúdo do paperEl — nunca à
+    // mudança de ALTURA do próprio wrapper, que é a própria coisa que este
+    // efeito define logo acima (`setReportPreviewHeight`). Sem esse filtro,
+    // o ResizeObserver notifica a própria mudança que ele causou, entrando
+    // num ciclo observer → setState → nova notificação sem nunca convergir,
+    // travando a tela do relatório.
+    let lastWrapperWidth = wrapperEl.clientWidth;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target === wrapperEl) {
+          const width = wrapperEl.clientWidth;
+          if (width === lastWrapperWidth) continue;
+          lastWrapperWidth = width;
+        }
+        recompute();
+        break;
+      }
+    });
     ro.observe(wrapperEl);
     ro.observe(paperEl);
     window.addEventListener('resize', recompute);
