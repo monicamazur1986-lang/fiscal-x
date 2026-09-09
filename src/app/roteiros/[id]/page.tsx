@@ -2140,6 +2140,51 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   const [answers, setAnswers] = useState<Record<string, RespostaItem>>({})
   const [observations, setObservations] = useState<Record<string, string>>({})
   const [showObsInput, setShowObsInput] = useState<Record<string, boolean>>({})
+  // Ditado por voz da Observação/Relato de Irregularidade — mesmo padrão já
+  // usado no Fiscal AI (gerar-rascunho.tsx/assistente-ia-form-dialog.tsx),
+  // adaptado pra várias observações (uma por item do checklist) em vez de um
+  // campo só: guarda QUAL item está sendo ditado (não um boolean simples),
+  // já que só pode haver um microfone ativo por vez.
+  const [recordingItemId, setRecordingItemId] = useState<string | null>(null)
+  const recordingItemIdRef = useRef<string | null>(null)
+  const recognitionRef = useRef<any>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) return;
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = 'pt-BR';
+    recognition.onresult = (event: any) => {
+      let finalTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
+      }
+      const targetId = recordingItemIdRef.current;
+      if (finalTranscript && targetId) {
+        setObservations(prev => ({ ...prev, [targetId]: (prev[targetId] ? prev[targetId] + ' ' : '') + finalTranscript }));
+      }
+    };
+    recognition.onerror = () => { setRecordingItemId(null); recordingItemIdRef.current = null; };
+    recognition.onend = () => { setRecordingItemId(null); recordingItemIdRef.current = null; };
+    recognitionRef.current = recognition;
+    return () => { recognition.stop(); };
+  }, []);
+
+  const toggleRecordingObservacao = (itemId: string) => {
+    if (!recognitionRef.current) return;
+    if (recordingItemIdRef.current === itemId) {
+      recognitionRef.current.stop();
+      return;
+    }
+    // Já ditando outro item: para o anterior antes de começar o novo (o
+    // navegador só permite um reconhecimento de voz ativo por vez).
+    if (recordingItemIdRef.current) recognitionRef.current.stop();
+    recordingItemIdRef.current = itemId;
+    setRecordingItemId(itemId);
+    recognitionRef.current.start();
+  };
   const [itemPhotos, setItemPhotos] = useState<Record<string, PhotoEvidence[]>>({})
   const [customItems, setCustomItems] = useState<CustomItem[]>([])
   const [newCustomText, setNewCustomText] = useState("")
@@ -2225,6 +2270,25 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // avançadas sozinhas (evita reabrir a próxima toda vez que `answers`
   // muda) — zerado sempre que troca de roteiro ou de inspeção.
   const secoesAvancadasRef = useRef<Set<string>>(new Set());
+
+  // Referência ao card de cada seção, só pra rolar a tela até a próxima
+  // assim que ela abre sozinha (ver useEffect abaixo) — sem isso, fechar uma
+  // seção grande encolhia a página e a posição de rolagem continuava a
+  // mesma em pixels, "pulando" pra qualquer trecho que sobrasse naquele
+  // ponto (às vezes o fim do roteiro) em vez de mostrar a próxima pergunta.
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const prevOpenSectionsRef = useRef<string[]>([]);
+  useEffect(() => {
+    const secIdRecemAberta = openSections.find(secId => !prevOpenSectionsRef.current.includes(secId));
+    prevOpenSectionsRef.current = openSections;
+    if (!secIdRecemAberta) return;
+    // Espera a animação de recolher/abrir do Accordion terminar antes de
+    // rolar — calcular a posição durante a animação rola pro lugar errado.
+    const timer = setTimeout(() => {
+      sectionRefs.current[secIdRecemAberta]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [openSections]);
 
   // Abre a primeira seção pendente ao entrar no roteiro ou ao trocar de
   // inspeção (rascunho carregado, ou "Nova inspeção") — não roda a cada
@@ -3524,7 +3588,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
               {checklist.secoes.map((secao) => {
                 const [respondidos, totalItens] = progressoSecao(secao);
                 return (
-                <AccordionItem key={secao.id} value={secao.id} className="border border-[#E4DFD1] rounded-xl px-5 bg-white">
+                <AccordionItem key={secao.id} value={secao.id} ref={(el) => { sectionRefs.current[secao.id] = el; }} className="border border-[#E4DFD1] rounded-xl px-5 bg-white">
                   <AccordionTrigger className="hover:no-underline py-4">
                     <div className="flex items-center gap-3 flex-1 text-left">
                       <h3 className="text-sm font-black text-[#262420] border-l-4 border-primary pl-4 uppercase">{secao.titulo}</h3>
@@ -3633,7 +3697,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                             })}
                           </div>
                         )}
-                        {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => { setObservations(prev => ({ ...prev, [item.id]: e.target.value })); }} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><Button onClick={() => handleSaveObservation(item.id)} disabled={savingObsItem === item.id} size="sm" className="h-9 px-5 rounded-xl bg-primary text-white font-black text-[10px] uppercase gap-2">{savingObsItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Salvar</Button></div>)}
+                        {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => { setObservations(prev => ({ ...prev, [item.id]: e.target.value })); }} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><div className="flex items-center gap-2"><Button type="button" onClick={() => toggleRecordingObservacao(item.id)} variant="outline" size="sm" className={cn("h-9 px-4 rounded-xl font-black text-[10px] uppercase gap-2", recordingItemId === item.id ? "bg-red-500 text-white border-red-500 animate-pulse hover:bg-red-500 hover:text-white" : "text-[#6B6659] border-[#E4DFD1]")}>{recordingItemId === item.id ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {recordingItemId === item.id ? "Parar" : "Ditar por voz"}</Button><Button onClick={() => handleSaveObservation(item.id)} disabled={savingObsItem === item.id} size="sm" className="h-9 px-5 rounded-xl bg-primary text-white font-black text-[10px] uppercase gap-2">{savingObsItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Salvar</Button></div></div>)}
                       </div>
                       )
                     ))}
@@ -3724,7 +3788,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                           })}
                         </div>
                       )}
-                      {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => setObservations(prev => ({ ...prev, [item.id]: e.target.value }))} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><Button onClick={() => handleSaveObservation(item.id)} disabled={savingObsItem === item.id} size="sm" className="h-9 px-5 rounded-xl bg-primary text-white font-black text-[10px] uppercase gap-2">{savingObsItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Salvar</Button></div>)}
+                      {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => setObservations(prev => ({ ...prev, [item.id]: e.target.value }))} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><div className="flex items-center gap-2"><Button type="button" onClick={() => toggleRecordingObservacao(item.id)} variant="outline" size="sm" className={cn("h-9 px-4 rounded-xl font-black text-[10px] uppercase gap-2", recordingItemId === item.id ? "bg-red-500 text-white border-red-500 animate-pulse hover:bg-red-500 hover:text-white" : "text-[#6B6659] border-[#E4DFD1]")}>{recordingItemId === item.id ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {recordingItemId === item.id ? "Parar" : "Ditar por voz"}</Button><Button onClick={() => handleSaveObservation(item.id)} disabled={savingObsItem === item.id} size="sm" className="h-9 px-5 rounded-xl bg-primary text-white font-black text-[10px] uppercase gap-2">{savingObsItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Salvar</Button></div></div>)}
                     </div>
                   ))}
                 </div>

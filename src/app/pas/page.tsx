@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Suspense } from "react"
-import { Scale, Plus, Loader2, Inbox, ChevronRight, Timer } from "lucide-react"
+import { Scale, Plus, Loader2, Inbox, ChevronRight, Timer, Building2 } from "lucide-react"
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
@@ -15,14 +15,22 @@ import { useToast } from "@/hooks/use-toast"
 import { calculateDeadline } from "@/lib/prazo"
 import { PAS_FASE_LABEL, PAS_FASE_COR } from "@/lib/pas-textos-padrao"
 import { cn } from "@/lib/utils"
+import municipiosPR from "@/lib/municipios-pr.json"
 
 function PasPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { profile } = useAuth();
-  const { processos, loading, criarPas } = usePas();
-  const { intimacoes, updateIntimacaoMeta } = useIntimacoes();
+  const isRoot = profile?.role === 'root';
+  // Root não pertence a um município (perfil nasce com municipioId:
+  // 'geral') — precisa escolher qual visualizar, senão a consulta do PAS
+  // (filtrada por município) sempre voltava vazia mesmo com acesso liberado
+  // nas regras do Firestore.
+  const [selectedMunicipio, setSelectedMunicipio] = useState("");
+  const municipioOverride = isRoot ? { municipioIdOverride: selectedMunicipio || undefined } : undefined;
+  const { processos, loading, criarPas, needsMunicipioSelection } = usePas(municipioOverride);
+  const { intimacoes, updateIntimacaoMeta } = useIntimacoes(municipioOverride);
 
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -78,19 +86,43 @@ function PasPageInner() {
         title="PAS"
         subtitle="Processo Administrativo Sanitário"
         actions={
-          <Button size="sm" onClick={() => setIsPickerOpen(true)} className="h-9 rounded-md gap-1.5 text-xs font-medium bg-[#0E4A44] hover:bg-[#0B3A35]">
-            <Plus className="h-4 w-4" /> Abrir PAS
-          </Button>
+          <div className="flex items-center gap-2">
+            {isRoot && (
+              <div className="flex items-center gap-2 bg-white border border-[#E4DFD1] rounded-xl px-3 h-9">
+                <Building2 className="h-3.5 w-3.5 text-[#A39D8C]" />
+                <select value={selectedMunicipio} onChange={(e) => setSelectedMunicipio(e.target.value)} className="text-[11px] font-bold uppercase outline-none bg-transparent">
+                  <option value="">Selecionar Município</option>
+                  {municipiosPR.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            )}
+            {/* Root só acompanha os processos (visão de suporte/auditoria) —
+                abrir um PAS novo grava sob o município do próprio perfil
+                (nunca o município selecionado aqui), então fica reservado
+                pra fiscal/gestor de verdade, donos do processo. */}
+            {!isRoot && (
+              <Button size="sm" onClick={() => setIsPickerOpen(true)} className="h-9 rounded-md gap-1.5 text-xs font-medium bg-[#0E4A44] hover:bg-[#0B3A35]">
+                <Plus className="h-4 w-4" /> Abrir PAS
+              </Button>
+            )}
+          </div>
         }
       />
 
       <div className="max-w-4xl mx-auto w-full p-4 sm:p-8 space-y-4 pb-40">
-        {loading ? (
+        {isRoot && needsMunicipioSelection ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-20 text-center border border-dashed border-[#E4DFD1] rounded-lg bg-white">
+            <Building2 className="h-8 w-8 text-[#A39D8C]" />
+            <p className="text-sm text-[#6B6659]">Selecione um município acima pra visualizar os processos administrativos sanitários dele.</p>
+          </div>
+        ) : loading ? (
           <div className="flex items-center justify-center py-20 text-[#A39D8C]"><Loader2 className="h-5 w-5 animate-spin" /></div>
         ) : processos.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 py-20 text-center border border-dashed border-[#E4DFD1] rounded-lg bg-white">
             <Inbox className="h-8 w-8 text-[#A39D8C]" />
-            <p className="text-sm text-[#6B6659]">Nenhum PAS aberto ainda. Toque em "Abrir PAS" pra iniciar um a partir de um Auto de Infração já finalizado.</p>
+            <p className="text-sm text-[#6B6659]">
+              {isRoot ? "Nenhum PAS aberto neste município." : 'Nenhum PAS aberto ainda. Toque em "Abrir PAS" pra iniciar um a partir de um Auto de Infração já finalizado.'}
+            </p>
           </div>
         ) : (
           <div className="space-y-2">

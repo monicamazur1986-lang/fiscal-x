@@ -23,14 +23,28 @@ import { attemptFirestoreWrite } from '@/lib/firestore-offline';
 const LOCAL_STORAGE_KEY = 'fiscal_x_pas_v1';
 
 /** Lista de processos do município — mesmo recorte de use-intimacoes.ts:
- * gestor (admin/root) vê todos do município, fiscal comum só os próprios. */
-export function usePas() {
+ * gestor (admin/root) vê todos do município, fiscal comum só os próprios.
+ * Root não tem município próprio (perfil nasce com municipioId: 'geral'),
+ * então precisa escolher qual município visualizar — sem isso, a consulta
+ * filtrava por "geral" e a lista ficava sempre vazia pro root, mesmo com o
+ * PAS liberado nas regras do Firestore. */
+export function usePas(options?: { municipioIdOverride?: string }) {
   const { user, profile, configError } = useAuth();
   const [processos, setProcessos] = useState<Pas[]>([]);
   const [loading, setLoading] = useState(true);
+  const [needsMunicipioSelection, setNeedsMunicipioSelection] = useState(false);
 
   useEffect(() => {
     if (!user || !profile?.municipioId) { setLoading(false); return; }
+
+    // Root navega entre municípios clientes; sem seleção, não há o que carregar.
+    if (profile.role === 'root' && !options?.municipioIdOverride) {
+      setProcessos([]);
+      setNeedsMunicipioSelection(true);
+      setLoading(false);
+      return;
+    }
+    setNeedsMunicipioSelection(false);
 
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (saved) {
@@ -39,7 +53,7 @@ export function usePas() {
 
     if (!db || configError) { setLoading(false); return; }
 
-    const mid = normalizeId(profile.municipioId);
+    const mid = profile.role === 'root' ? normalizeId(options!.municipioIdOverride!) : normalizeId(profile.municipioId);
     const isGestor = profile.role === 'admin' || profile.role === 'root';
     // Fiscal comum vê os próprios processos E os que foram encaminhados pra
     // ele explicitamente (ver PasEncaminharDialog) — sem o "or", um processo
@@ -66,7 +80,7 @@ export function usePas() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [user, profile, configError]);
+  }, [user, profile, configError, options?.municipioIdOverride]);
 
   /** Cria o PAS já na fase de instauração — a peça de despacho inicial é
    * gravada à parte, por quem chamar, via usePasPecas(id).adicionarPeca. */
@@ -106,7 +120,7 @@ export function usePas() {
     await attemptFirestoreWrite(deleteDoc(doc(db, 'pas', id)));
   }, []);
 
-  return { processos, loading, criarPas, atualizarPas, excluirPas };
+  return { processos, loading, criarPas, atualizarPas, excluirPas, needsMunicipioSelection };
 }
 
 /** Peças (autos) de um processo específico — subcoleção `pas/{pasId}/pecas`,
