@@ -2299,6 +2299,25 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // Encaixe da folha A4 na tela — ver use-escala-folha.ts. Só liga quando a
   // prévia do relatório está aberta.
   const escalaFolha = useEscalaFolha({ ativo: view === 'report' })
+
+  /**
+   * A FOLHA DO RELATÓRIO TEM DOIS DONOS.
+   *
+   * `reportRef` é lido pela geração do PDF; `escalaFolha.paperRef` é medido
+   * para calcular quanto a folha precisa encolher para caber na tela. Ao
+   * migrar esta tela para o hook, só o wrapper passou a usar a referência
+   * nova — a folha continuou apenas com `reportRef`, e `paperRef` ficou nulo.
+   *
+   * O efeito do hook começa com `if (!wrapperEl || !paperEl) return`, então
+   * ele desistia antes de medir: a escala ficava travada em 1, o
+   * ResizeObserver nunca era ligado, e o relatório abria em tamanho real,
+   * cortado na borda da tela. Nenhum ajuste de CSS ou de medição aparecia,
+   * porque o cálculo simplesmente não rodava.
+   */
+  const definirFolhaDoRelatorio = useCallback((el: HTMLDivElement | null) => {
+    (reportRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    (escalaFolha.paperRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+  }, [escalaFolha.paperRef]);
   const [isSearchingCnpj, setIsSearchingCnpj] = useState(false)
   const [fiscais, setFiscais] = useState<Autoridade[]>([])
   const [signingFiscalIndex, setSigningFiscalIndex] = useState<number | null>(null)
@@ -3214,7 +3233,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         </header>
 
         <div ref={escalaFolha.wrapperRef} className="document-paper-wrapper custom-scrollbar" style={escalaFolha.estiloWrapper}>
-          <div ref={reportRef} className="document-paper h-auto bg-white" style={escalaFolha.estiloFolha}>
+          <div ref={definirFolhaDoRelatorio} className="document-paper h-auto bg-white" style={escalaFolha.estiloFolha}>
               <div data-pdf-header className="flex flex-row items-center justify-between gap-6 mb-1 pb-2 border-none">
                   <div className="w-[140px] h-[100px] md:w-[180px] md:h-[100px] flex items-center justify-start overflow-hidden">
                     {hasLogo ? (

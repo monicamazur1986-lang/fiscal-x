@@ -70,7 +70,20 @@ export function useEscalaFolha(options?: { ativo?: boolean; deps?: unknown[] }) 
     if (!ativo) return;
     const wrapperEl = wrapperRef.current;
     const paperEl = paperRef.current;
-    if (!wrapperEl || !paperEl) return;
+    if (!wrapperEl || !paperEl) {
+      // Desistir em silêncio aqui custou três tentativas de correção: quem
+      // esquece de ligar um dos refs na folha vê o documento abrir em tamanho
+      // real, cortado, sem nenhum sinal de que o cálculo nem chegou a rodar.
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(
+          '[useEscalaFolha] wrapperRef e paperRef precisam estar ligados aos elementos ' +
+            '(o contêiner e a folha .document-paper). Sem os dois, a folha não encolhe ' +
+            'e o documento abre cortado.',
+          { wrapper: !!wrapperEl, folha: !!paperEl }
+        );
+      }
+      return;
+    }
 
     recalcular();
     // A primeira medição pode pegar a folha ainda sem conteúdo (fontes e
