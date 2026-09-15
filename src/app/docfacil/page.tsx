@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react"
 import Link from "next/link"
-import { FileText, Plus, Search, Loader2, Send, Pencil, Folder, FolderPlus, MoreVertical, Inbox, Trash2, Zap, RotateCcw, Copy, ShieldCheck } from "lucide-react"
+import { FileText, Plus, Search, Loader2, Send, Pencil, Folder, FolderPlus, MoreVertical, Inbox, Trash2, RotateCcw, Copy, ShieldCheck } from "lucide-react"
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -171,6 +171,11 @@ export default function DocfacilPage() {
 
       <div className="max-w-7xl mx-auto w-full p-4 sm:p-8 space-y-10 pb-40">
         <div className="space-y-3">
+          {/* Com poucos modelos, buscar e filtrar custa mais atenção do que
+              economiza: são três linhas na tela para escolher entre três
+              itens que já estão todos visíveis. A partir de sete, a busca
+              volta a valer. */}
+          {modelos.length > 6 && (
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A39D8C]" />
@@ -188,6 +193,7 @@ export default function DocfacilPage() {
               ))}
             </div>
           </div>
+          )}
 
           {loading ? (
             <div className="py-24 flex flex-col items-center justify-center gap-3">
@@ -214,7 +220,7 @@ export default function DocfacilPage() {
                       className="absolute inset-0 z-0"
                     />
                     <div className="min-w-0 flex-1 flex items-center gap-3">
-                      <span className="text-xs text-[#A39D8C] tabular-nums shrink-0">Nº {String(m.codigo).padStart(3, "0")}</span>
+
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="font-serif text-[15px] text-[#262420] truncate">{m.descricao}</p>
@@ -224,9 +230,20 @@ export default function DocfacilPage() {
                             </Badge>
                           )}
                         </div>
-                        <p className="text-xs text-[#A39D8C] mt-0.5">
-                          {TIPO_LABEL[m.tipo]}{m.tags.length > 0 ? ` · ${m.tags.map((t) => `#${t}`).join(" ")}` : ""}
-                        </p>
+                        {/* Só as tags que acrescentam: "#oficio" repete o
+                            tipo ao lado e "#padrao" repete o selo acima. */}
+                        {(() => {
+                          const tipoNormalizado = TIPO_LABEL[m.tipo].toLowerCase();
+                          const tagsUteis = m.tags.filter((t) => {
+                            const tag = t.toLowerCase();
+                            return tag !== tipoNormalizado && tag !== 'padrao' && tag !== 'padrão';
+                          });
+                          return (
+                            <p className="text-xs text-[#A39D8C] mt-0.5">
+                              {TIPO_LABEL[m.tipo]}{tagsUteis.length > 0 ? ` · ${tagsUteis.map((t) => `#${t}`).join(' ')}` : ''}
+                            </p>
+                          );
+                        })()}
                       </div>
                     </div>
                     <div className="relative z-10 flex items-center gap-1 shrink-0">
@@ -266,25 +283,18 @@ export default function DocfacilPage() {
 
         <div className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Documentos Emitidos</h2>
+          {documentos.length === 0 && folders.length === 0 ? (
+            <div className="bg-white border border-[#E4DFD1] rounded-lg py-14 flex flex-col items-center justify-center gap-2 text-center px-6">
+              <Inbox className="h-8 w-8 text-[#D8D2C0]" />
+              <p className="text-sm text-[#6B6659]">Nenhum documento emitido ainda</p>
+              <p className="text-xs text-[#A39D8C] max-w-xs">
+                Escolha um modelo acima e toque em "Iniciar Redação". O que você emitir aparece aqui,
+                e as pastas ficam disponíveis assim que houver o que organizar.
+              </p>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <aside className="lg:col-span-3 space-y-1">
-              {modelos.length > 0 && (
-                <div className="mb-4 pb-4 border-b border-[#F1EEE4] space-y-1">
-                  <span className="flex items-center gap-1.5 px-3 text-xs font-semibold uppercase tracking-wide text-[#9C7A3C] mb-1">
-                    <Zap className="h-3.5 w-3.5" /> Atalhos Rápidos
-                  </span>
-                  {modelos.map((m) => (
-                    <Link
-                      key={m.id}
-                      href={gerarHref(m.id)}
-                      className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-xs font-medium text-[#6B6659] hover:bg-white hover:text-[#0E4A44] transition-colors truncate"
-                    >
-                      <Send className="h-3.5 w-3.5 shrink-0 text-[#9C7A3C]" />
-                      <span className="truncate">{m.descricao}</span>
-                    </Link>
-                  ))}
-                </div>
-              )}
 
               <button
                 onClick={() => setActiveFolderId("all")}
@@ -402,6 +412,7 @@ export default function DocfacilPage() {
               </div>
             </main>
           </div>
+          )}
         </div>
       </div>
 
