@@ -3117,9 +3117,9 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   if (view === 'report') {
     return (
       <div className="document-container font-serif pb-40">
-        <header className="flex flex-wrap items-center justify-between no-print mb-10 gap-4 w-full max-w-[210mm] px-4">
+        <header className="flex flex-wrap items-center justify-between no-print mb-10 gap-3 w-full max-w-[210mm] px-4">
             <Button onClick={() => setView('checklist')} variant="outline" className="rounded-xl h-11 font-black uppercase text-[10px] bg-white shadow-sm"><ArrowLeft className="h-4 w-4 mr-2" /> Voltar à Edição</Button>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               {inspecaoStatus !== 'concluido' && (
                 <Button onClick={handlePolishAllObservations} disabled={isPolishingBatch || !hasUnreviewedObservations} variant="outline" className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-violet-50 text-violet-600 border-violet-100 shadow-sm hover:bg-violet-100">{isPolishingBatch ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />} Revisar Observações com IA</Button>
               )}
@@ -3330,7 +3330,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   }
 
   return (
-    <div className="max-w-6xl mx-auto w-full p-4 md:p-8 space-y-6 md:space-y-8 pb-32 sm:pb-40 font-sans">
+    <div className="max-w-6xl mx-auto w-full px-3 py-4 md:p-8 space-y-6 md:space-y-8 pb-32 sm:pb-40 font-sans">
       <header className="flex flex-wrap items-center justify-between gap-4 bg-white p-5 md:p-6 rounded-2xl border border-[#E4DFD1] shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)] no-print">
         <div className="flex items-center gap-4">
           <div className="p-4 rounded-xl bg-[#E4EEEC] text-[#0E4A44]"><ClipboardList className="h-6 w-6" /></div>
@@ -3638,14 +3638,14 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
               {/* Rótulo sem citar a SESA: este cabeçalho vale pra qualquer
                   roteiro, e nem todos são estaduais (farmácia é lei federal,
                   os ROI são da ANVISA). */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3">
                 {/* Ação principal da tela: é aqui que a vistoria de fato
                     acontece. Ganha o mesmo peso visual do botão primário, em
                     vez de parecer só mais um cabeçalho de seção. */}
                 <button
                   type="button"
                   onClick={iniciarInspecao}
-                  className="group flex-1 min-w-0 rounded-2xl px-5 py-4 text-white text-left shadow-[0_10px_24px_-12px_rgba(38,36,32,0.45)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-14px_rgba(38,36,32,0.5)] active:scale-[0.99]"
+                  className="group w-full sm:flex-1 sm:min-w-[260px] rounded-2xl px-5 py-4 text-white text-left shadow-[0_10px_24px_-12px_rgba(38,36,32,0.45)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-14px_rgba(38,36,32,0.5)] active:scale-[0.99]"
                   style={{ background: `linear-gradient(135deg, #1F7A5C 0%, ${darkenHex('#1F7A5C', 28)} 100%)` }}
                 >
                   <div className="flex items-center gap-4">
@@ -3667,7 +3667,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                       : <ChevronRight className="h-6 w-6 text-white/60 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:text-white" />}
                   </div>
                 </button>
-                <div className="flex items-center gap-2 no-print">
+                <div className="flex items-center justify-end gap-2 no-print">
                   <button type="button" onClick={expandirTodasSecoes} className="px-3 py-2 rounded-lg text-[11px] font-bold text-[#6B6659] hover:bg-[#F1EEE4] transition-colors">Expandir tudo</button>
                   <button type="button" onClick={recolherTodasSecoes} className="px-3 py-2 rounded-lg text-[11px] font-bold text-[#6B6659] hover:bg-[#F1EEE4] transition-colors">Recolher tudo</button>
                 </div>
@@ -3733,7 +3733,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                       <div
                         key={item.id}
                         className={cn(
-                          "p-5 sm:p-6 rounded-xl border space-y-5 transition-colors duration-200 border-l-[3px]",
+                          "px-4 py-5 sm:p-6 rounded-xl border space-y-5 transition-colors duration-200 border-l-[3px]",
                           answers[item.id] !== undefined
                             ? "bg-white border-[#E4DFD1] border-l-[#1F7A5C]"
                             : "bg-[#FAF8F3] border-[#E4DFD1] border-l-[#E4DFD1]"
@@ -3832,7 +3832,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                             })}
                           </div>
                         )}
-                        {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => { setObservations(prev => ({ ...prev, [item.id]: e.target.value })); }} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><div className="flex items-center gap-2"><Button type="button" onClick={() => toggleRecordingObservacao(item.id)} variant="outline" size="sm" className={cn("h-9 px-4 rounded-xl font-black text-[10px] uppercase gap-2", recordingItemId === item.id ? "bg-red-500 text-white border-red-500 animate-pulse hover:bg-red-500 hover:text-white" : "text-[#6B6659] border-[#E4DFD1]")}>{recordingItemId === item.id ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {recordingItemId === item.id ? "Parar" : "Ditar por voz"}</Button><Button onClick={() => handleSaveObservation(item.id)} disabled={savingObsItem === item.id} size="sm" className="h-9 px-5 rounded-xl bg-primary text-white font-black text-[10px] uppercase gap-2">{savingObsItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Salvar</Button></div></div>)}
+                        {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => { setObservations(prev => ({ ...prev, [item.id]: e.target.value })); }} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><div className="flex flex-wrap items-center gap-2"><Button type="button" onClick={() => toggleRecordingObservacao(item.id)} variant="outline" size="sm" className={cn("h-9 flex-1 min-w-[130px] px-3 rounded-xl font-black text-[10px] uppercase gap-2", recordingItemId === item.id ? "bg-red-500 text-white border-red-500 animate-pulse hover:bg-red-500 hover:text-white" : "text-[#6B6659] border-[#E4DFD1]")}>{recordingItemId === item.id ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {recordingItemId === item.id ? "Parar" : "Ditar por voz"}</Button><Button onClick={() => handleSaveObservation(item.id)} disabled={savingObsItem === item.id} size="sm" className="h-9 flex-1 min-w-[130px] px-3 rounded-xl bg-primary text-white font-black text-[10px] uppercase gap-2">{savingObsItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Salvar</Button></div></div>)}
                       </div>
                       )
                     ))}
@@ -3929,7 +3929,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                           })}
                         </div>
                       )}
-                      {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => setObservations(prev => ({ ...prev, [item.id]: e.target.value }))} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><div className="flex items-center gap-2"><Button type="button" onClick={() => toggleRecordingObservacao(item.id)} variant="outline" size="sm" className={cn("h-9 px-4 rounded-xl font-black text-[10px] uppercase gap-2", recordingItemId === item.id ? "bg-red-500 text-white border-red-500 animate-pulse hover:bg-red-500 hover:text-white" : "text-[#6B6659] border-[#E4DFD1]")}>{recordingItemId === item.id ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {recordingItemId === item.id ? "Parar" : "Ditar por voz"}</Button><Button onClick={() => handleSaveObservation(item.id)} disabled={savingObsItem === item.id} size="sm" className="h-9 px-5 rounded-xl bg-primary text-white font-black text-[10px] uppercase gap-2">{savingObsItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Salvar</Button></div></div>)}
+                      {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => setObservations(prev => ({ ...prev, [item.id]: e.target.value }))} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><div className="flex flex-wrap items-center gap-2"><Button type="button" onClick={() => toggleRecordingObservacao(item.id)} variant="outline" size="sm" className={cn("h-9 flex-1 min-w-[130px] px-3 rounded-xl font-black text-[10px] uppercase gap-2", recordingItemId === item.id ? "bg-red-500 text-white border-red-500 animate-pulse hover:bg-red-500 hover:text-white" : "text-[#6B6659] border-[#E4DFD1]")}>{recordingItemId === item.id ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {recordingItemId === item.id ? "Parar" : "Ditar por voz"}</Button><Button onClick={() => handleSaveObservation(item.id)} disabled={savingObsItem === item.id} size="sm" className="h-9 flex-1 min-w-[130px] px-3 rounded-xl bg-primary text-white font-black text-[10px] uppercase gap-2">{savingObsItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Salvar</Button></div></div>)}
                     </div>
                   ))}
                 </div>
