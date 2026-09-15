@@ -1207,7 +1207,11 @@
     "titulo": "Alimentos e Boas Práticas",
     "descricao": "Manipulação, Fabricação e Comercialização de Produtos Alimentícios",
     "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Alimentos",
-    "biblioteca": { "esfera": "federal", "categoria": "RDC", "tema": "Alimentos e Bebidas" },
+    "biblioteca": {
+      "esfera": "federal",
+      "categoria": "RDC",
+      "tema": "Alimentos e Bebidas"
+    },
     "artigos": [
       {
         "id": "rdc-216-04",
@@ -1227,7 +1231,11 @@
     "titulo": "Serviços de Odontologia",
     "descricao": "Clínicas, Consultórios e Processamento de Materiais",
     "linkOficial": "https://www.saude.pr.gov.br/Pagina/Vigilancia-Sanitaria-Servicos-de-Saude",
-    "biblioteca": { "esfera": "federal", "categoria": "RDC", "tema": "Serviços de Saúde (Assistência)" },
+    "biblioteca": {
+      "esfera": "federal",
+      "categoria": "RDC",
+      "tema": "Serviços de Saúde (Assistência)"
+    },
     "artigos": [
       {
         "id": "sesa-442-12",
@@ -1313,7 +1321,11 @@
   "FARMACIA": {
     "titulo": "RDC ANVISA nº 44/2009",
     "descricao": "Boas Práticas Farmacêuticas para Farmácias e Drogarias",
-    "biblioteca": { "esfera": "federal", "categoria": "RDC", "tema": "Farmácias e Medicamentos" },
+    "biblioteca": {
+      "esfera": "federal",
+      "categoria": "RDC",
+      "tema": "Farmácias e Medicamentos"
+    },
     "artigos": [
       {
         "id": "rdc-44-09-art2",
@@ -1430,6 +1442,43 @@
         "label": "Art. 4º da RDC ANVISA nº 46/2013",
         "texto": "A comercialização e a divulgação de produtos de tabaco e dispositivos eletrônicos devem obedecer às normas sanitárias e de proteção à saúde pública.",
         "keywords": "comercialização divulgação vape cigarro eletrônico restrição sanitária"
+      }
+    ]
+  },
+  "LEI_MUNICIPAL_3430_2010_PATO_BRANCO": {
+    "titulo": "Lei Municipal nº 3.430/2010 (Pato Branco)",
+    "descricao": "Anteparo higiênico protetor e álcool gel em estabelecimentos de auto-serviço (buffet)",
+    "municipioId": "pato-branco",
+    "artigos": [
+      {
+        "id": "pb-3430-1",
+        "label": "Art. 1º",
+        "texto": "Aos restaurantes e demais estabelecimentos que comercializam alimentos pelo sistema auto-serviço (buffet) fica obrigatória a instalação de anteparo higiênico protetor em balcões expositores térmicos ou refrigerados de armazenamento de alimentos.",
+        "keywords": "anteparo higienico protetor salivar quebra vento buffet auto-servico self service balcao expositor termico refrigerado restaurante"
+      },
+      {
+        "id": "pb-3430-2",
+        "label": "Art. 2º",
+        "texto": "Os estabelecimentos referidos no artigo antecedente deverão afixar, próximo aos balcões expositores térmicos ou refrigerados de armazenamento de alimentos, saboneteiras de álcool gel.",
+        "keywords": "saboneteira alcool gel higienizacao maos buffet balcao expositor"
+      },
+      {
+        "id": "pb-3430-3",
+        "label": "Art. 3º",
+        "texto": "A fiscalização do cumprimento desta Lei será realizada pela Vigilância Sanitária, em vistorias periódicas ao estabelecimento.",
+        "keywords": "fiscalizacao vigilancia sanitaria vistoria periodica"
+      },
+      {
+        "id": "pb-3430-5",
+        "label": "Art. 5º",
+        "texto": "O primeiro Auto de Infração lavrado em desfavor do infrator terá caráter educativo, como forma de notificação, devendo estar acompanhado de orientações quanto ao disposto nesta Lei e no respectivo Decreto regulamentador. Parágrafo único: conforme o caso, será dado prazo ao infrator, nunca superior a 30 (trinta) dias, para a adequação do estabelecimento.",
+        "keywords": "primeiro auto de infracao carater educativo notificacao prazo 30 dias adequacao orientacao"
+      },
+      {
+        "id": "pb-3430-6",
+        "label": "Art. 6º",
+        "texto": "Constatada a reincidência, a autoridade competente lavrará novo Auto de Infração, com aplicação de multa em valor determinado no Decreto regulamentador. O infrator poderá recorrer da multa no prazo de 30 (trinta) dias contados da data do Auto de Infração, no órgão competente para a fiscalização. Persistindo a infração após a aplicação das multas, estas serão aplicadas em dobro, triplo, quádruplo e assim consecutivamente, garantidos a ampla defesa e o contraditório.",
+        "keywords": "reincidencia multa recurso 30 dias dobro triplo ampla defesa contraditorio"
       }
     ]
   }

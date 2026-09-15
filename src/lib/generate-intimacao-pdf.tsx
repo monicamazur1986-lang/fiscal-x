@@ -21,6 +21,40 @@ import { DocumentoOficialBody, type IntimacaoFormValues } from '@/components/doc
  * a prévia de quebra de página na tela (useDocPageBreaks, intimacao-form.tsx)
  * — sem isso, as duas podiam divergir sobre onde o documento realmente quebra.
  */
+/**
+ * Espaço que a numeração de página ocupa no pé da folha ("Página 1 de 2").
+ * Ela é montada só na hora de desenhar, mas precisa ser descontada ANTES de
+ * decidir as quebras — senão cada página recebe conteúdo demais pela altura
+ * dessa linha.
+ */
+const ALTURA_NUMERO_PAGINA_PT = 18;
+const PT_PARA_MM = 25.4 / 72;
+
+/**
+ * Altura que sobra dentro da folha A4 para cabeçalho, conteúdo e rodapé.
+ *
+ * O detalhe que estava faltando: `.document-paper` tem 20mm de margem em
+ * cima e embaixo (padding do papel). A conta antiga usava os 297mm cheios e
+ * distribuía 40mm que não existem — cerca de 150px de conteúdo a mais por
+ * página. O resultado aparecia no PDF como página maior que A4 (o gerador
+ * detecta o estouro e cria uma folha sob medida, mais alta), então o
+ * documento saía com páginas de tamanhos diferentes.
+ *
+ * A margem é lida do CSS, e não fixada em 20mm, para acompanhar qualquer
+ * mudança em globals.css sem quebrar a paginação de novo.
+ */
+export function alturaUtilDaFolha(paperEl: HTMLElement): { pxPerMm: number; alturaUtilPx: number } {
+  const pxPerMm = paperEl.offsetWidth / 210;
+  const estilo = window.getComputedStyle(paperEl);
+  const margemVerticalPx =
+    parseFloat(estilo.paddingTop || '0') + parseFloat(estilo.paddingBottom || '0');
+  const numeroPaginaPx = ALTURA_NUMERO_PAGINA_PT * PT_PARA_MM * pxPerMm;
+  return {
+    pxPerMm,
+    alturaUtilPx: Math.max(297 * pxPerMm - margemVerticalPx - numeroPaginaPx, 1),
+  };
+}
+
 export function computePageGroups(
   children: HTMLElement[],
   firstPageWindowPx: number,
@@ -101,7 +135,7 @@ export async function renderDocumentIntoPdf(
   const bodyContainer = sourceForm?.querySelector('tbody > tr > td') as HTMLElement;
   if (!sourceForm || !sourceHeader || !bodyContainer) throw new Error('Estrutura do documento não encontrada.');
 
-  const pxPerMm = sourceEl.offsetWidth / 210;
+  const { pxPerMm, alturaUtilPx } = alturaUtilDaFolha(sourceEl);
   const pageHeightPx = 297 * pxPerMm;
   const headerHeightPx = sourceHeader.offsetHeight;
   const footerHeightPx = sourceFooter?.offsetHeight || 0;
@@ -121,8 +155,8 @@ export async function renderDocumentIntoPdf(
     sourceContinuationHeader.classList.add('hidden');
   }
 
-  const firstPageWindowPx = Math.max(pageHeightPx - headerHeightPx - footerHeightPx, 1);
-  const continuationWindowPx = Math.max(pageHeightPx - continuationHeaderHeightPx - footerHeightPx, 1);
+  const firstPageWindowPx = Math.max(alturaUtilPx - headerHeightPx - footerHeightPx, 1);
+  const continuationWindowPx = Math.max(alturaUtilPx - continuationHeaderHeightPx - footerHeightPx, 1);
 
   // Exclui os cabeçalhos de página "só tela" (LivePageHeader, documento-oficial-body.tsx)
   // — eles existem só pra prévia ao vivo do preenchimento e não devem contar
@@ -138,9 +172,18 @@ export async function renderDocumentIntoPdf(
     pageEl.style.transform = 'none';
     pageEl.style.margin = '0';
     pageEl.style.boxShadow = 'none';
+    // Altura A4 como MÍNIMO (não como teto): a folha curta fica do tamanho
+    // certo, com o rodapé no pé, e a folha que ainda assim estourar continua
+    // crescendo para a saída sob medida mais abaixo — nunca cortando texto.
     pageEl.style.height = 'auto';
+    pageEl.style.minHeight = `${pageHeightPx}px`;
+    pageEl.style.display = 'flex';
+    pageEl.style.flexDirection = 'column';
 
     const pageForm = document.createElement('form');
+    pageForm.style.flex = '1';
+    pageForm.style.display = 'flex';
+    pageForm.style.flexDirection = 'column';
     if (i === 0 || !sourceContinuationHeader) {
       const headerClone = sourceHeader.cloneNode(true) as HTMLElement;
       applyFixedLogoSize(headerClone, mainLogoRect);
@@ -151,7 +194,10 @@ export async function renderDocumentIntoPdf(
       applyFixedLogoSize(continuationClone, continuationLogoRect);
       pageForm.appendChild(continuationClone);
     }
-    pages[i].forEach(child => pageForm.appendChild(child.cloneNode(true)));
+    const corpoEl = document.createElement('div');
+    corpoEl.style.flex = '1';
+    pages[i].forEach(child => corpoEl.appendChild(child.cloneNode(true)));
+    pageForm.appendChild(corpoEl);
     if (sourceFooter) pageForm.appendChild(sourceFooter.cloneNode(true));
 
     // Numeração de página — sempre presente, mesmo sem rodapé configurado

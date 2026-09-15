@@ -10,7 +10,8 @@ import { ai, z } from '@/ai/genkit';
 import { z as z4 } from 'zod/v4';
 import { claude, isClaudeReady, CLAUDE_MODEL } from '@/ai/claude';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
-import { searchLegislacao } from '@/lib/legal-search';
+
+import { buscarEnquadramento, buscarNormasTecnicas, artigosPorId, listarArtigosDeInfracao } from '@/lib/enquadramento-sanitario';
 import { isSemanticSearchReady, searchLegislacaoSemantic } from '@/lib/legal-vector-search';
 import { checkAndConsumeAiQuota, MONTHLY_AI_LIMIT } from '@/ai/usage-limit';
 import { buscarMelhorExemplo, resolverMunicipioId } from '@/lib/draft-examples-search';
@@ -52,9 +53,30 @@ const GenerateIntimacaoDraftInputSchema = z.object({
   lawPreference: LawPreferenceSchema.optional(),
   useCloudAI: z.boolean().default(false),
   uid: z.string().optional().default(''),
-  nonce: z.string().optional()
+  nonce: z.string().optional(),
+  /**
+   * Incisos escolhidos À MÃO pelo fiscal (ids como 'est-63-III'). Quando vêm
+   * preenchidos, a busca automática de enquadramento é ignorada e valem
+   * exatamente estes — é a saída para quando a sugestão automática erra, e
+   * quem responde pelo auto é o fiscal, não o sistema.
+   */
+  enquadramentoManual: z.array(z.string()).optional().default([]),
+  /**
+   * 'gerar' = redigir o documento a partir do relato.
+   * 'reestruturar' = o fiscal já escolheu o enquadramento e quer só o texto
+   * enxuto ligando a conduta ao inciso, sem repetir o relato inteiro.
+   */
+  modo: z.enum(['gerar', 'reestruturar']).optional().default('gerar'),
 });
-export type GenerateIntimacaoDraftInput = z.infer<typeof GenerateIntimacaoDraftInputSchema>;
+// z.input (e não z.infer): os campos com .default() são OPCIONAIS para quem
+// chama — só passam a existir depois que o schema valida. Com z.infer, toda
+// tela que já chamava o fluxo quebraria ao adicionarmos um campo novo com
+// valor padrão.
+export type GenerateIntimacaoDraftInput = z.input<typeof GenerateIntimacaoDraftInputSchema>;
+
+/** Entrada já validada pelo schema (com os .default() aplicados) — é o que o
+ *  corpo do fluxo e os motores recebem, diferente do que as telas enviam. */
+type EntradaValidada = z.infer<typeof GenerateIntimacaoDraftInputSchema>;
 
 // Artigo que a busca (RAG local, restrita à base legal selecionada)
 // encontrou como correspondente ao relato — devolvido com o texto integral
@@ -103,7 +125,7 @@ function inferOrigem(descLower: string): Origem {
  * MOTOR DE INTELIGÊNCIA NATIVA (OFFLINE)
  * Realiza busca granular e valida se há dados suficientes para lavratura.
  */
-function generateLocalHeuristicDraft(input: GenerateIntimacaoDraftInput, municipioId?: string | null): GenerateIntimacaoDraftOutput {
+function generateLocalHeuristicDraft(input: EntradaValidada, municipioId?: string | null): GenerateIntimacaoDraftOutput {
   const rawDesc = input.caseDescription.trim();
   const type = input.reportType;
 
@@ -126,13 +148,21 @@ function generateLocalHeuristicDraft(input: GenerateIntimacaoDraftInput, municip
   // acento. `descLower` (com acento) continua sendo o que entra no texto
   // final do documento — não pode virar "nao"/"esta" no rascunho gerado.
   const descNormalized = normalizeText(rawDesc);
-  const matchedArticles = searchLegislacao(rawDesc, { pref, municipioId: municipioId || undefined });
 
-  // Se não encontrar nada no banco, interrompe para evitar nulidade
-  if (matchedArticles.length === 0) {
+  // Mesma separação de papéis do motor na nuvem (ver enquadramento-sanitario):
+  // o enquadramento sai do artigo de infração; a norma técnica selecionada
+  // entra depois, como reforço. Antes os dois vinham de uma busca só, e o
+  // artigo mais parecido em palavras virava o enquadramento.
+  const enquadramentos = buscarEnquadramento(rawDesc, { pref, municipioId: municipioId || undefined, limit: 3 });
+  const normasTecnicas = buscarNormasTecnicas(rawDesc, { pref, municipioId: municipioId || undefined, limit: 2 });
+  const matchedArticles = [...enquadramentos, ...normasTecnicas];
+
+  // Sem artigo de infração correspondente, não há o que lavrar: enquadrar
+  // numa norma técnica qualquer geraria auto nulo.
+  if (enquadramentos.length === 0) {
     return {
       draftIntimacao: "",
-      error: "ENQUADRAMENTO NÃO LOCALIZADO: Os termos digitados não correspondem a nenhuma infração salva no banco de dados. Especifique melhor o fato (ex: 'alvará', 'temperatura', 'limpeza')."
+      error: "ENQUADRAMENTO NÃO LOCALIZADO: o relato não corresponde a nenhuma conduta prevista no artigo de infrações. Detalhe melhor o fato (o que é o objeto e qual o problema: produto sem registro, falta de licença, ausência de responsável técnico...) ou escolha o artigo manualmente."
     };
   }
 
@@ -219,9 +249,18 @@ REGRAS DE REDAÇÃO (OBJETIVIDADE E NORMA CULTA):
 - Nunca use frases genéricas de "senso comum" que serviriam pra qualquer autuação, de qualquer ramo (ex.: "risco sanitário", "normas de saúde pública e biossegurança", "desacordo com a legislação vigente") — se o texto menciona risco, diga QUAL risco concreto aquele fato específico gera (contaminação, intoxicação, proliferação de vetores, ausência de rastreabilidade, exposição do consumidor a produto sem controle sanitário etc.), nunca a fórmula genérica.
 - Não repita nem parafraseie a redação do artigo citado dentro do relato — a citação (LEI, ARTIGO, INCISO) já remete ao texto legal; descreva o FATO e por que ele viola a norma, sem reproduzir palavra por palavra (ou quase) o que a lei já diz.
 
+ANTES DE ENQUADRAR, ANALISE O RELATO (esta é a etapa mais importante):
+a) Qual é o OBJETO do relato? (medicamento, alimento, estabelecimento, propaganda, resíduo, água, produto de higiene, serviço de saúde...)
+b) Qual é exatamente o PROBLEMA constatado? (falta de licença, falta de responsável técnico, produto vencido, produto sem registro, produto proibido, venda sem receita, condição higiênica, rotulagem irregular, obstrução à fiscalização...)
+c) Só então escolha, na lista ARTIGOS DE INFRAÇÃO, o inciso cuja CONDUTA DESCRITA corresponde a esse par objeto+problema.
+Exemplo do raciocínio correto: relato sobre estabelecimento de saúde sem responsável técnico -> a conduta é "fazer funcionar sem assistência de responsável técnico" -> Art. 63, inciso III. Não é o inciso que apenas menciona a mesma palavra em outro contexto.
+
 REGRAS CRÍTICAS DE FUNDAMENTAÇÃO:
 1. BLOCO ÚNICO: Proibido usar quebras de linha ou parágrafos no campo draftIntimacao.
 2. RIGOR LEGAL ABSOLUTO: Você deve apontar com exatidão a lei, o artigo e o inciso. Use EXCLUSIVAMENTE a legislação fornecida no contexto abaixo — nunca invente ou presuma artigos fora dele.
+2.1. O ENQUADRAMENTO SAI SEMPRE DA LISTA "ARTIGOS DE INFRAÇÃO". É o artigo de infração que define a conduta punível e a penalidade. Uma RDC, resolução SESA ou norma setorial NUNCA é o enquadramento — ela é a exigência técnica descumprida, citada depois do enquadramento, como reforço ("...em desacordo com [norma técnica]").
+2.2. Se nenhum inciso da lista de infração corresponder de fato à conduta relatada, NÃO force o mais parecido: retorne draftIntimacao vazio e use o campo error pedindo que o fiscal detalhe melhor o fato ou escolha o artigo manualmente. Enquadramento errado gera nulidade do auto — é sempre melhor não enquadrar do que enquadrar mal.
+2.3. INCISO CORINGA (Art. 63, XLIV da Lei Estadual 13.331/2001 e Art. 18, CXVI da Lei Municipal 2.276/2017 — "transgredir qualquer norma legal ou regulamentar destinada à promoção, proteção e recuperação da saúde"). Ele fecha o código e alcança qualquer descumprimento de norma sanitária, e por isso vem SEMPRE no fim da lista. Use-o SOMENTE quando nenhum inciso específico descrever a conduta relatada — e, nesse caso, cite junto a norma técnica concreta que foi violada, porque é ela que dá conteúdo ao coringa ("...transgredindo o disposto em [norma técnica]"). Se existir inciso específico, ele prevalece: autuar no genérico havendo o específico enfraquece o auto, pois permite à defesa alegar que a administração não identificou a conduta.
 3. PROIBIDO GENERALIZAR: Nunca use "Normas Gerais" ou "Legislação Vigente". Escreva: NOME DA LEI (ARTIGO X, INCISO Y).
 4. VÍNCULO FATO-NORMA: No texto, explique por que o fato viola o artigo (ex: "...o que contraria o Art. X da Lei Y, uma vez que proíbe o comércio de produtos sem registro").
 5. VALIDAÇÃO: Se o relato for vago demais para ser enquadrado na legislação fornecida, retorne draftIntimacao como string vazia e preencha o campo error solicitando mais detalhes.
@@ -285,18 +324,42 @@ export const generateIntimacaoDraftFlow = ai.defineFlow(
       // isso configurado (ou se a chamada falhar), cai pra busca por
       // palavra-chave de sempre; o motor local (offline) continua usando só
       // a busca por palavra-chave, de propósito, pra não depender de rede.
-      let selectedArticles = isSemanticSearchReady()
-        ? await searchLegislacaoSemantic(input.caseDescription, { pref, limit: 10, municipioId: municipioId || undefined }).catch(() => [])
-        : [];
-      if (selectedArticles.length === 0) {
-        selectedArticles = searchLegislacao(input.caseDescription, { pref, limit: 10, municipioId: municipioId || undefined });
-      }
+      // Duas buscas com papéis distintos, em vez de uma lista só ranqueada por
+      // semelhança de palavras. Ver enquadramento-sanitario.ts: a infração é
+      // sempre um inciso de artigo de infração (Art. 63 estadual / Art. 18
+      // municipal); a norma técnica selecionada é a regra material violada, e
+      // entra como reforço. Misturadas num ranking único, um relato sobre
+      // medicamento era enquadrado em norma de salão de beleza só porque as
+      // palavras batiam melhor.
+      // Escolha manual manda: se o fiscal apontou o inciso, a busca automática
+      // nem roda. Foi ele quem leu o caso.
+      const manuais = artigosPorId(input.enquadramentoManual || [], { municipioId: municipioId || undefined });
+      const enquadramentos = manuais.length > 0 ? manuais : buscarEnquadramento(input.caseDescription, {
+        pref,
+        municipioId: municipioId || undefined,
+        limit: 6,
+      });
+      const normasTecnicas = buscarNormasTecnicas(input.caseDescription, {
+        pref,
+        municipioId: municipioId || undefined,
+        limit: 4,
+      });
 
+      const selectedArticles = [...enquadramentos, ...normasTecnicas];
       if (selectedArticles.length === 0) {
         return generateLocalHeuristicDraft(input, municipioId);
       }
 
-      const finalContext = selectedArticles.map(a => `ID: ${a.id} | LEI: ${a.lawTitle} | ARTIGO/INCISO: ${a.label} | TEXTO LEGAL: ${a.texto}${a.pena ? ` | PENA APLICÁVEL: ${a.pena}` : ''}`).join('\n');
+      const formatar = (a: typeof selectedArticles[number]) =>
+        `ID: ${a.id} | LEI: ${a.lawTitle} | ARTIGO/INCISO: ${a.label} | TEXTO LEGAL: ${a.texto}${a.pena ? ` | PENA APLICÁVEL: ${a.pena}` : ''}`;
+
+      const finalContext = [
+        'ARTIGOS DE INFRAÇÃO (escolha AQUI o enquadramento — a conduta punível):',
+        enquadramentos.length > 0 ? enquadramentos.map(formatar).join('\n') : '(nenhum candidato encontrado)',
+        '',
+        'NORMAS TÉCNICAS (regra material descumprida — citar como reforço, NUNCA como enquadramento):',
+        normasTecnicas.length > 0 ? normasTecnicas.map(formatar).join('\n') : '(nenhuma selecionada pelo fiscal)',
+      ].join('\n');
 
       // Aprendizado a partir do uso: busca o rascunho anterior mais parecido
       // que o próprio fiscal já exportou (aprovou) antes, pra usar como
@@ -307,6 +370,24 @@ export const generateIntimacaoDraftFlow = ai.defineFlow(
         ? `\n\nEXEMPLO DE RASCUNHO ANTERIOR JÁ APROVADO PELO FISCAL (use só como referência de estilo, tom e nível de detalhe — NUNCA copie fatos, nomes ou números deste exemplo; gere um texto novo, específico pro caso atual):\n"${melhorExemplo.draftGerado}"`
         : '';
 
+      /**
+       * MODO REESTRUTURAR — o fiscal já escolheu o inciso; aqui o assistente
+       * só amarra a conduta ao enquadramento, em texto curto.
+       *
+       * Existe porque, quando o fiscal corrige o enquadramento à mão, o que ele
+       * quer não é um documento novo: é a frase certa. Reaproveitar o prompt de
+       * geração devolvia o texto longo de sempre, repetindo o relato inteiro —
+       * exatamente o que não se quer numa correção pontual.
+       */
+      const instrucaoModo = input.modo === 'reestruturar'
+        ? `\n\nMODO: REESTRUTURAR (NÃO é geração de documento completo).
+O fiscal JÁ escolheu o enquadramento — use exatamente os artigos listados em ARTIGOS DE INFRAÇÃO, sem questionar nem substituir.
+Produza em draftIntimacao UMA ÚNICA FRASE curta, ligando a conduta relatada ao inciso escolhido.
+Formato desejado: "[conduta constatada, em 6 a 15 palavras], o que caracteriza infração sanitária prevista no [ARTIGO, INCISO] da [LEI]."
+Proibido: repetir o relato inteiro, reproduzir a redação do inciso, abrir com "Durante inspeção...", acrescentar frase de risco, de fechamento ou de medida.
+Exemplo do tamanho e do tom esperados: "Manter em estoque medicamento com prazo de validade expirado, o que caracteriza infração sanitária prevista no Art. 63, inciso XIII, da Lei Estadual nº 13.331/2001."`
+        : '';
+
       const response = await claude.messages.parse({
         model: CLAUDE_MODEL,
         max_tokens: 2048,
@@ -314,7 +395,7 @@ export const generateIntimacaoDraftFlow = ai.defineFlow(
         messages: [
           {
             role: 'user',
-            content: `CONTEXTO LEGAL DISPONÍVEL:\n${finalContext}\n\nNOTAS DO FISCAL: "${input.caseDescription}"\nTIPO: ${input.reportType}${exemploBlock}`,
+            content: `CONTEXTO LEGAL DISPONÍVEL:\n${finalContext}\n\nNOTAS DO FISCAL: "${input.caseDescription}"\nTIPO: ${input.reportType}${instrucaoModo}${input.modo === 'reestruturar' ? '' : exemploBlock}`,
           },
         ],
         output_config: { format: zodOutputFormat(ClaudeDraftOutputSchema) },
@@ -359,8 +440,12 @@ export const generateIntimacaoDraftFlow = ai.defineFlow(
 export async function generateIntimacaoDraft(
   input: GenerateIntimacaoDraftInput
 ): Promise<GenerateIntimacaoDraftOutput> {
-  return generateIntimacaoDraftFlow({ 
-    ...input, 
-    nonce: Math.random().toString(36).substring(7) 
-  });
+  // Os .default() do schema são aplicados aqui, na fronteira: o fluxo recebe a
+  // entrada completa, e quem chama continua podendo omitir o que tem padrão.
+  return generateIntimacaoDraftFlow(
+    GenerateIntimacaoDraftInputSchema.parse({
+      ...input,
+      nonce: Math.random().toString(36).substring(7),
+    })
+  );
 }

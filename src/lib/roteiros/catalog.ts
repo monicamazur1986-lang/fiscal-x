@@ -1,7 +1,23 @@
+/**
+ * Grupo pelo qual o roteiro aparece no menu de Roteiros de Inspeção.
+ *
+ * Existe porque `categoria` não separa nada na prática — 10 dos 17 roteiros
+ * são "Saúde", o que deixava a tela como uma lista corrida. ROI da ANVISA e
+ * roteiro municipal não precisam de `grupo`: saem de `tipo` e `municipioId`.
+ */
+export type GrupoRoteiro =
+  | 'alimentos'
+  | 'medicamentos'
+  | 'servicos-saude'
+  | 'estetica'
+  | 'agua';
+
 export type RoteiroCatalogItem = {
   id: string;
   titulo: string;
   categoria: string;
+  /** Ausente em ROI e em roteiro municipal, que têm grupo próprio. */
+  grupo?: GrupoRoteiro;
   iconName: 'tooth' | 'utensils' | 'pill' | 'syringe' | 'radiation' | 'scan' | 'stethoscope' | 'building' | 'ambulance' | 'activity';
   base: string;
   itens: number;
@@ -13,6 +29,7 @@ export type RoteiroCatalogItem = {
 export const roteirosCatalog: RoteiroCatalogItem[] = [
   {
     id: 'odontologia',
+    grupo: 'servicos-saude',
     titulo: 'Roteiro de Inspeção de Odontologia',
     categoria: 'Saúde',
     iconName: 'tooth',
@@ -39,6 +56,7 @@ export const roteirosCatalog: RoteiroCatalogItem[] = [
   },
   {
     id: 'alimentacao',
+    grupo: 'alimentos',
     titulo: 'Roteiro de Inspeção de Serviços de Alimentação',
     categoria: 'Saúde',
     iconName: 'utensils',
@@ -47,6 +65,7 @@ export const roteirosCatalog: RoteiroCatalogItem[] = [
   },
   {
     id: 'farmacia',
+    grupo: 'medicamentos',
     titulo: 'Roteiro de Auto-Inspeção de Farmácias e Drogarias',
     categoria: 'Saúde',
     iconName: 'pill',
@@ -55,6 +74,7 @@ export const roteirosCatalog: RoteiroCatalogItem[] = [
   },
   {
     id: 'farmacia-resolucao-sesa-590-2014',
+    grupo: 'medicamentos',
     titulo: 'Norma Técnica de Farmácias e Drogarias — Resolução SESA nº 590/2014',
     categoria: 'Saúde',
     iconName: 'pill',
@@ -64,6 +84,7 @@ export const roteirosCatalog: RoteiroCatalogItem[] = [
   },
   {
     id: 'guia-clinica-estetica',
+    grupo: 'estetica',
     titulo: 'Guia de Inspeção para Clínica de Estética',
     categoria: 'Saúde',
     iconName: 'syringe',
@@ -73,6 +94,7 @@ export const roteirosCatalog: RoteiroCatalogItem[] = [
   },
   {
     id: 'guia-clinicas-de-saude',
+    grupo: 'servicos-saude',
     titulo: 'Guia de Inspeção para Clínicas de Saúde',
     categoria: 'Saúde',
     iconName: 'building',
@@ -82,6 +104,7 @@ export const roteirosCatalog: RoteiroCatalogItem[] = [
   },
   {
     id: 'guia-supermercado',
+    grupo: 'alimentos',
     titulo: 'Guia de Inspeção para Supermercado',
     categoria: 'Saúde',
     iconName: 'utensils',
@@ -91,6 +114,7 @@ export const roteirosCatalog: RoteiroCatalogItem[] = [
   },
   {
     id: 'resolucao-sesa-126-07',
+    grupo: 'estetica',
     titulo: 'Roteiro de Inspeção de Tatuagem, Piercing e Congêneres',
     categoria: 'Saúde',
     iconName: 'building',
@@ -100,6 +124,7 @@ export const roteirosCatalog: RoteiroCatalogItem[] = [
   },
   {
     id: 'salao-beleza-barbearia-depilacao',
+    grupo: 'estetica',
     titulo: 'Roteiro de Inspeção de Salão de Beleza, Barbearia e Depilação',
     categoria: 'Saúde',
     iconName: 'building',
@@ -109,6 +134,7 @@ export const roteirosCatalog: RoteiroCatalogItem[] = [
   },
   {
     id: 'roteiro-saa-subterraneo',
+    grupo: 'agua',
     titulo: 'Roteiro de Inspeção de SAA Subterrâneo',
     categoria: 'Saúde',
     iconName: 'building',

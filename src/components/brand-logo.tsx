@@ -31,15 +31,31 @@ export function SentinelaMascot({ className, width = 280, height = 280, simplifi
   }, [systemLogo, simplified]);
 
   const containerStyle = { width: `${width}px`, height: `${height}px` };
-  const containerClasses = cn("relative flex items-center justify-center select-none bg-transparent overflow-hidden rounded-[2rem] shadow-[0_15px_40px_-20px_rgba(0,0,0,0.35)] border border-white/70", className);
+  // A marca é um selo REDONDO desenhado sobre fundo branco quadrado. Com o
+  // recorte antigo (`rounded-[2rem]`, quase um quadrado) sobravam quatro cantos
+  // brancos em volta do selo, e a borda branca que desenhávamos por fora
+  // competia com os anéis azul e verde que a própria arte já tem. Recortando
+  // em círculo, o limite do container coincide com o limite do desenho.
+  const containerClasses = cn(
+    "relative flex items-center justify-center select-none bg-transparent overflow-hidden rounded-full shadow-[0_15px_40px_-20px_rgba(0,0,0,0.35)]",
+    className
+  );
 
   // Evita Hydration Mismatch
   if (!mounted) {
     return <div className={containerClasses} style={containerStyle} />;
   }
 
-  // Tenta carregar o Logotipo Customizado (ROOT)
-  if (!imgError && systemLogo && systemLogo.length > 10 && !simplified) {
+  // Logotipo carregado pelo root (Identidade do Sistema) tem precedência SEMPRE
+  // — inclusive nos espaços pequenos.
+  //
+  // Antes a condição trazia `&& !simplified`, então o cabeçalho, a barra
+  // lateral e o login no celular ignoravam o logo novo e desenhavam o
+  // app-icon-512.png estático. Trocar a marca no sistema mudava só a tela de
+  // login no desktop, e em todo o resto continuava a arte antiga — daí a
+  // impressão de que "a alteração não reflete". `simplified` volta a ser o que
+  // o nome diz: escolhe qual ARQUIVO PADRÃO usar quando não há logo próprio.
+  if (!imgError && systemLogo && systemLogo.length > 10) {
     return (
       <div className={containerClasses} style={containerStyle}>
         <img 

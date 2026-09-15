@@ -1,7 +1,6 @@
 import {
   FileText,
   Sparkles,
-  Archive,
   ClipboardList,
   CalendarDays,
   Library,
@@ -19,6 +18,10 @@ export interface DashboardMenuItem {
   description: string;
   icon: LucideIcon;
   color: string;
+  /** Módulo já acessível, mas ainda em construção — o item continua clicável
+   * e ganha um selo "em desenvolvimento" no menu, pra ninguém tratar o que
+   * sai dele como produto acabado. */
+  emDesenvolvimento?: boolean;
 }
 
 // Cartões coloridos (mantendo a distinção visual rápida entre os itens), com
@@ -27,12 +30,11 @@ export interface DashboardMenuItem {
 // sistema. Cada cor vira um gradiente sutil de dois tons (ver darkenHex
 // abaixo) em vez de um preenchimento chapado.
 export const DASHBOARD_MENU_ITEMS: DashboardMenuItem[] = [
-  { href: "/intimacoes/nova", label: "Nova Autuação", description: "Termo de intimação ou auto de infração", icon: FileText, color: "#1F7A5C" },
+  { href: "/intimacoes", label: "Autuações", description: "Lavrar, retomar rascunho ou consultar autuações emitidas", icon: FileText, color: "#1F7A5C" },
   { href: "/rascunho", label: "Fiscal AI", description: "Gerar rascunho ou tirar dúvidas com inteligência artificial", icon: Sparkles, color: "#9C7A3C" },
   { href: "/agenda", label: "Agenda", description: "Compromissos e inspeções do dia", icon: CalendarDays, color: "#3D5A73" },
-  { href: "/intimacoes", label: "Documentos", description: "Autuações emitidas e rascunhos", icon: Archive, color: "#524E45" },
   { href: "/roteiros", label: "Roteiros", description: "Checklists técnicos de inspeção", icon: ClipboardList, color: "#6B4C80" },
-  { href: "/pas", label: "PAS", description: "Processo Administrativo Sanitário", icon: Scale, color: "#7A2E3B" },
+  { href: "/pas", label: "PAS", description: "Processo Administrativo Sanitário", icon: Scale, color: "#7A2E3B", emDesenvolvimento: true },
   { href: "/biblioteca", label: "Biblioteca", description: "Legislação e normas aplicáveis", icon: Library, color: "#8A4B5C" },
   { href: "/consulta-anvisa", label: "Consulta ANVISA", description: "Registros e processos sanitários", icon: Landmark, color: "#2F6668" },
   { href: "/risco-sanitario", label: "Risco Sanitário", description: "Classificação de risco por CNPJ/CNAE", icon: ShieldAlert, color: "#1F6B5C" },

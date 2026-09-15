@@ -10,6 +10,7 @@ import { AuthGuard } from '@/components/auth-guard';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AgendamentoAlarmListener } from '@/components/agendamento-alarm-listener';
 import { PwaInstallListener } from '@/components/pwa-install-listener';
+import { AvisoAtualizacao } from '@/components/aviso-atualizacao';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 const sourceSerif = Source_Serif_4({ subsets: ['latin'], variable: '--font-serif' });
@@ -85,6 +86,7 @@ export default function RootLayout({
               <Toaster />
               <AgendamentoAlarmListener />
               <PwaInstallListener />
+              <AvisoAtualizacao />
             </AuthGuard>
           </AuthProvider>
         </ThemeProvider>

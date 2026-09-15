@@ -27,6 +27,7 @@ import { useInspecoes } from "@/hooks/use-inspecoes"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useAuth } from "@/hooks/use-auth"
 import { addBusinessDays } from "@/lib/prazo"
+import { FolhaEscalada } from "@/components/folha-escalada"
 import { criarLembretePrazo } from "@/lib/prazo-lembrete"
 import { auth as firebaseAuth } from "@/lib/firebase"
 import { intimacaoSchema, prazoTextoDoTipo, atoTextoDoTipo } from "@/lib/schema"
@@ -37,7 +38,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "./ui/dialog"
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from "./ui/alert-dialog"
 import { DocumentoOficialBody, type IntimacaoFormValues, type SignatureTargetType } from "./documento-oficial-body"
-import { renderDocumentIntoPdf, computePageGroups } from "@/lib/generate-intimacao-pdf"
+import { renderDocumentIntoPdf, computePageGroups, alturaUtilDaFolha } from "@/lib/generate-intimacao-pdf"
 
 const TIPOS_QUE_GERAM_AUTO_INFRACAO = ["TERMO DE APREENSÃO", "TERMO DE INTERDIÇÃO"];
 // Muitos fiscais começam a autuação direto pelo Auto de Infração (em vez de
@@ -72,8 +73,6 @@ function useLivePagination(containerRef: React.RefObject<HTMLDivElement>, header
     const el = containerRef.current;
     if (!el) return;
 
-    const A4_WIDTH_MM = 210;
-    const A4_HEIGHT_MM = 297;
 
     const recalculate = () => {
       const sourceForm = el.querySelector('form') as HTMLElement | null;
@@ -81,14 +80,16 @@ function useLivePagination(containerRef: React.RefObject<HTMLDivElement>, header
       const footer = sourceForm?.querySelector('footer') as HTMLElement | null;
       if (!bodyContainer) { setLivePageBreaks(prev => prev.length ? [] : prev); return; }
 
-      const pxPerMm = el.offsetWidth / A4_WIDTH_MM;
-      const pageHeightPx = A4_HEIGHT_MM * pxPerMm;
+      // Mesma medida da geração do PDF (desconta as margens do papel e a
+      // linha de numeração) — se divergir, a prévia mostra a quebra num
+      // lugar e o PDF sai com ela em outro.
+      const { pxPerMm, alturaUtilPx } = alturaUtilDaFolha(el);
       const headerHeightPx = headerRef.current?.offsetHeight || 0;
       const footerHeightPx = footer?.offsetHeight || 0;
       const liveHeaderHeightPx = LIVE_HEADER_HEIGHT_PT * PT_TO_MM * pxPerMm;
 
-      const firstPageWindowPx = Math.max(pageHeightPx - headerHeightPx - footerHeightPx, 1);
-      const continuationWindowPx = Math.max(pageHeightPx - liveHeaderHeightPx - footerHeightPx, 1);
+      const firstPageWindowPx = Math.max(alturaUtilPx - headerHeightPx - footerHeightPx, 1);
+      const continuationWindowPx = Math.max(alturaUtilPx - liveHeaderHeightPx - footerHeightPx, 1);
 
       // Exclui os LivePageHeader já inseridos numa rodada anterior — sem
       // isso, a medição contaria a própria decoração como conteúdo e
@@ -190,14 +191,14 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             // Termos sem prazo (interdição, apreensão…) já abrem com o texto do
             // ato no campo de objeto — quem entra pelo card do tipo nunca passa
             // por handleTipoTermoChange, e o documento abriria em branco.
-            teor: defaultValues?.teor || atoTextoDoTipo(defaultValues?.tipoTermo || "TERMO DE INTIMAÇÃO"),
+            teor: defaultValues?.teor || atoTextoDoTipo(defaultValues?.tipoTermo || "TERMO DE INTIMAÇÃO", config.autuacaoTextos, profile?.municipioId),
             legislacaoBase: defaultValues?.legislacaoBase || "",
             recusouAssinar: defaultValues?.recusouAssinar || false,
             // O texto tem que nascer conforme o tipo: quem chega pelo card de
             // "Termo de Intimação" já entra com o tipo definido e nunca dispara
             // handleTipoTermoChange, então antes o documento abria com o texto
             // de defesa prévia do auto de infração.
-            prazo: defaultValues?.prazo || prazoTextoDoTipo(defaultValues?.tipoTermo || "TERMO DE INTIMAÇÃO"),
+            prazo: defaultValues?.prazo || prazoTextoDoTipo(defaultValues?.tipoTermo || "TERMO DE INTIMAÇÃO", config.autuacaoTextos, profile?.municipioId),
             dataIntimacao: defaultValues?.dataIntimacao || new Date(),
             dataRecebimento: defaultValues?.dataRecebimento ? new Date(defaultValues.dataRecebimento) : undefined,
             dataDocumento: defaultValues?.dataDocumento || format(new Date(), "dd/MM/yyyy"),
@@ -235,11 +236,13 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    // Encolhe o documento A4 (794px) automaticamente quando não cabe na
-    // largura disponível (telas estreitas) — sem controle manual: numa tela
-    // larga o zoom já fica travado em 100% de qualquer forma (nunca precisa
-    // encolher além do tamanho real), então uma opção pra "forçar o ajuste"
-    // não tinha efeito prático nenhum ali, só confundia.
+    // A folha A4 (794px) não cabe em tela estreita. Quem resolve o encaixe é
+    // o <FolhaEscalada>, que mede o espaço, reduz a folha E encolhe a caixa
+    // que ela ocupa — antes daqui saía só um `transform: scale()`, que deixa
+    // largura fantasma de 794px e obrigava o fiscal a arrastar a tela de lado.
+    //
+    // Este booleano continua existindo só para a paginação: com a folha
+    // reduzida, os pontos de quebra precisam ser recalculados.
     const fitToScreen = windowWidth - 32 < 794;
 
     const livePageBreaksMain = useLivePagination(mainDocumentRef, mainHeaderRef, fitToScreen);
@@ -260,8 +263,8 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
     // src/lib/autuacao-estrutura.ts. Só preenche o objeto se ainda estiver
     // vazio, pra nunca apagar o que o fiscal escreveu.
     const handleTipoTermoChange = (value: string) => {
-        if (!prazoEditadoManualmenteRef.current) setValue('prazo', prazoTextoDoTipo(value));
-        const textoDoAto = atoTextoDoTipo(value);
+        if (!prazoEditadoManualmenteRef.current) setValue('prazo', prazoTextoDoTipo(value, config.autuacaoTextos, profile?.municipioId));
+        const textoDoAto = atoTextoDoTipo(value, config.autuacaoTextos, profile?.municipioId);
         const objetoAtual = (getValues('teor') || '').replace(/<br\s*\/?>/gi, '').trim();
         if (textoDoAto && !objetoAtual) setValue('teor', textoDoAto);
     };
@@ -275,10 +278,10 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
         const novoNumero = await generateNewNumeroProcesso();
         const main = getValues();
         const base = intimacaoSchema.parse({});
-        const prazoAnexo = prazoTextoDoTipo(tipoAnexo);
+        const prazoAnexo = prazoTextoDoTipo(tipoAnexo, config.autuacaoTextos, profile?.municipioId);
         // O anexo nasce com o texto do ato já preenchido quando é um termo sem
         // prazo (interdição/apreensão gerados a partir do Auto de Infração).
-        const objetoAnexo = atoTextoDoTipo(tipoAnexo);
+        const objetoAnexo = atoTextoDoTipo(tipoAnexo, config.autuacaoTextos, profile?.municipioId);
         anexoMethods.reset({
             ...base,
             tipoTermo: tipoAnexo,
@@ -514,8 +517,8 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             dataIntimacao: now,
             dataDocumento: format(now, 'dd/MM/yyyy'),
             horaDocumento: format(now, 'HH:mm'),
-            prazo: prazoTextoDoTipo('TERMO DE INTIMAÇÃO'),
-            teor: atoTextoDoTipo('TERMO DE INTIMAÇÃO'),
+            prazo: prazoTextoDoTipo('TERMO DE INTIMAÇÃO', config.autuacaoTextos, profile?.municipioId),
+            teor: atoTextoDoTipo('TERMO DE INTIMAÇÃO', config.autuacaoTextos, profile?.municipioId),
             autoridades: autoridadesAtuais,
         });
 
@@ -530,8 +533,8 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                 dataIntimacao: now,
                 dataDocumento: format(now, 'dd/MM/yyyy'),
                 horaDocumento: format(now, 'HH:mm'),
-                prazo: prazoTextoDoTipo('AUTO DE INFRAÇÃO'),
-                teor: atoTextoDoTipo('AUTO DE INFRAÇÃO'),
+                prazo: prazoTextoDoTipo('AUTO DE INFRAÇÃO', config.autuacaoTextos, profile?.municipioId),
+                teor: atoTextoDoTipo('AUTO DE INFRAÇÃO', config.autuacaoTextos, profile?.municipioId),
                 autoridades: autoridadesAnexoAtual,
             });
         }
@@ -649,8 +652,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
         } finally { setIsSearchingCnpj(false); }
     };
 
-    const scaleFactor = fitToScreen ? Math.min((windowWidth - 32) / 794, 1) : 1;
-    const paperStyle = fitToScreen ? { transform: `scale(${scaleFactor})`, margin: '0 auto', transformOrigin: 'top center' } : {};
+
     // Preview e geração de PDF usam o mesmo truque de renderização (campos
     // viram texto estático, controles de edição somem) — ver isReadOnlyRender.
     const isReadOnlyRender = isGeneratingPdf || isPreviewMode;
@@ -661,10 +663,10 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
         <FormProvider {...methods}>
             <div className="document-container font-serif pb-60">
                 <div className="document-paper-wrapper custom-scrollbar">
-                    <div
+                    <FolhaEscalada
                       ref={mainDocumentRef}
-                      className="document-paper h-auto bg-white transition-transform duration-300"
-                      style={paperStyle}
+                      ativo={!isGeneratingPdf}
+                      deps={[tipoTermoAtual, hasAnexo, livePageBreaksMain]}
                     >
                         <DocumentoOficialBody
                             control={control}
@@ -687,7 +689,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                             isSearchingCnpj={isSearchingCnpj}
                             livePageBreaks={livePageBreaksMain}
                         />
-                    </div>
+                    </FolhaEscalada>
 
                     {mostraCardAutoInfracao && (
                         <div className="no-print max-w-[210mm] mx-auto my-8 p-6 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -733,10 +735,10 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
 
                     {hasAnexo && (
                         <FormProvider {...anexoMethods}>
-                            <div
+                            <FolhaEscalada
                               ref={anexoDocumentRef}
-                              className="document-paper h-auto bg-white transition-transform duration-300"
-                              style={paperStyle}
+                              ativo={!isGeneratingPdf}
+                              deps={[tipoAnexoAtual, livePageBreaksAnexo]}
                             >
                                 <DocumentoOficialBody
                                     control={anexoMethods.control}
@@ -756,7 +758,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                     showCnpjLookup={false}
                                     livePageBreaks={livePageBreaksAnexo}
                                 />
-                            </div>
+                            </FolhaEscalada>
                         </FormProvider>
                     )}
                 </div>

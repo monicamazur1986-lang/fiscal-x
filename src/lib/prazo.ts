@@ -44,3 +44,17 @@ export function calculateDeadline(doc: { status?: string; dataIntimacao?: any; p
     status: remaining < 0 ? 'vencido' : remaining <= 3 ? 'alerta' : 'normal'
   };
 }
+
+/**
+ * Soma prazo processual respeitando a contagem da esfera aplicável.
+ *
+ * Existe porque a regra não é a mesma em todo lugar: o rito estadual conta em
+ * dias úteis (Art. 88, §2º, da Lei Estadual nº 20.656/2021), enquanto o código
+ * sanitário de Prudentópolis fala apenas em "dias" (Arts. 30, VI, e 38 da Lei
+ * nº 2.276/2017) — e sem a qualificação, contam-se corridos. Contar útil onde a
+ * lei diz corrido estende o prazo de ofício e vicia a certidão de decurso; o
+ * inverso encurta um prazo de defesa, que é pior ainda.
+ */
+export function addPrazo(startDate: Date, days: number, contagem: 'corridos' | 'uteis'): Date {
+  return contagem === 'uteis' ? addBusinessDays(startDate, days) : addDays(new Date(startDate), days);
+}

@@ -267,14 +267,13 @@ export type DocfacilDocumento = {
  * `tipoTermo === 'AUTO DE INFRAÇÃO'`), referenciado por `autoInfracaoId`.
  *
  * `fase` cobre as 4 fases do manual (Instauração → Instrução → Julgamento →
- * Arquivamento), mas por enquanto só Instauração e Instrução têm telas de
- * ação — as demais ficam reservadas no tipo pra não exigir migração de dados
- * quando forem construídas.
+ * Arquivamento). A fase Recursal em si (processar um recurso de verdade)
+ * ainda não tem tela própria — só a transição pra ela, ao emitir o TIP.
  */
 export type PasFase =
   | 'instauracao'
   | 'instrucao'
-  | 'aguardando_julgamento' // fim do que já está implementado
+  | 'aguardando_julgamento'
   | 'julgamento'
   | 'recursal'
   | 'arquivamento';
@@ -287,11 +286,18 @@ export type PasPecaTipo =
   | 'relatorio_instrucao'
   | 'termo_juntada'
   | 'termo_informacao'
-  | 'despacho_encerramento_instrucao';
+  | 'despacho_encerramento_instrucao'
+  | 'julgamento_primeira_instancia'
+  | 'despacho_encaminhamento_tip'
+  | 'termo_imposicao_penalidade'
+  | 'termo_retificacao';
 
 /** Uma peça dos autos — sempre numerada e cronológica, nunca reordenada nem
  * editada depois de criada (autos de processo real não se "corrigem", se
- * complementam com uma peça nova). */
+ * complementam com uma peça nova — ver `termo_retificacao` e `refPecaId`
+ * abaixo, conforme Título III, Cap.2, §1.1–1.2 do manual: vício sanável vira
+ * um NOVO ato que ratifica/reforma/converte o original, sem nunca apagar ou
+ * editar o que já foi lavrado). */
 export type PasPeca = {
   id: string;
   numero: number;
@@ -313,6 +319,11 @@ export type PasPeca = {
    * Nesse caso o PDF sai sem imagem de assinatura (só a linha e o nome), pra
    * ser assinado à caneta depois de impresso. */
   assinadoForaDoSistema?: boolean;
+  /** Só em peças do tipo `termo_retificacao` — número e id da peça que está
+   * sendo corrigida. A peça original nunca é alterada; isso só serve pra
+   * marcar visualmente "retificada pela peça nº X" na trilha. */
+  refPecaId?: string;
+  refPecaNumero?: number;
   criadoPorUid: string;
   criadoPorNome: string;
   criadoEm: string;

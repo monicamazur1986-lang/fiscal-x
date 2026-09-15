@@ -35,6 +35,21 @@ export const PAS_DICAS = {
     texto:
       'Só encaminhe para julgamento depois de garantir que o prazo de defesa já se esgotou (não se antecipa o encerramento, mesmo que o autuado sinalize que não vai se manifestar) e que existe, nos autos, ou a defesa juntada ou um Termo de Informação registrando sua ausência.',
   },
+  julgamento: {
+    titulo: 'Fundamentação obrigatória, mesmo à revelia',
+    texto:
+      'O julgamento sempre exige avaliar a admissibilidade da defesa (tempestiva, intempestiva ou ausente/à revelia) e apresentar fundamentação de fato e de direito — mesmo quando o autuado não se manifestou. Decisão sem motivação suficiente é nula (Art. 50 da Lei Federal nº 9.784/99 c/c Art. 67 da Lei Estadual nº 20.656/2021). Você pode ir escrevendo a fundamentação a qualquer momento; só a emissão de verdade exige que o relatório técnico e a defesa (ou o Termo de Informação) já estejam completos.',
+  },
+  tip: {
+    titulo: 'TIP: ciência da decisão e prazo recursal',
+    texto:
+      'O Termo de Imposição de Penalidade é o instrumento que dá ciência ao autuado da decisão proferida — é a partir dele que corre o prazo de recurso, de 10 (dez) dias úteis (Art. 73 da Lei Estadual nº 13.331/2001), diferente dos 15 dias úteis da defesa inicial (Art. 69 da mesma lei).',
+  },
+  retificacao: {
+    titulo: 'Corrigir sem apagar',
+    texto:
+      'Uma peça já lavrada nunca é editada ou apagada — o processo real corrige por convalidação: um novo ato que ratifica (supre o que faltou), reforma (remove só a parte inválida) ou converte (substitui o trecho errado) o ato anterior, sempre mantido ao lado dele nos autos, de forma transparente (Título III, Cap.2 do manual). O Termo de Retificação segue esse mesmo princípio.',
+  },
 } as const;
 
 export type PasDicaChave = keyof typeof PAS_DICAS;

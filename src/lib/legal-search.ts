@@ -46,6 +46,9 @@ interface IndexedArticle extends LegalArticle {
 export const GENERAL_LAW_KEYS = new Set(['LEI_MUNICIPAL_2276_2017', 'LEI_ESTADUAL_13331_2001']);
 export const GENERAL_SLOTS = 3;
 
+/** Acervo completo já normalizado — usado pela busca e, via listarTodosArtigos(),
+ *  pela escolha manual de enquadramento (que precisa da lista inteira, e não de
+ *  um resultado de busca). */
 const allArticles: IndexedArticle[] = [];
 Object.entries(legislacaoData).forEach(([lawKey, law]: [string, any]) => {
   law.artigos.forEach((art: any) => {
@@ -299,6 +302,26 @@ export function getBaseLawOptions(municipioId?: string | null): LawOption[] {
   return options;
 }
 
+/** Municípios com código sanitário próprio na base — o enquadramento deles sai
+ *  da lei municipal, não da estadual. */
+const MUNICIPIOS_COM_CODIGO_PROPRIO = new Set(['prudentopolis']);
+
+export function temCodigoSanitarioProprio(municipioId?: string | null): boolean {
+  return !!municipioId && MUNICIPIOS_COM_CODIGO_PROPRIO.has(municipioId);
+}
+
+/**
+ * Base legal que já vem marcada ao abrir a tela.
+ *
+ * Município com código sanitário próprio autua pela lei DELE: é a norma local
+ * que rege a atividade e define a penalidade que a própria vigilância aplica.
+ * Deixar 'estadual' como padrão fixo fazia o fiscal de Prudentópolis ter de
+ * trocar a base em toda autuação — e, esquecendo, enquadrar pela lei errada.
+ */
+export function getDefaultLawPreference(municipioId?: string | null): LawPreference[] {
+  return temCodigoSanitarioProprio(municipioId) ? ['municipal'] : ['estadual'];
+}
+
 /**
  * Leis "de biblioteca" (RDC/resolução setorial) — sempre opcionais, nunca
  * entram sozinhas com a seleção padrão. Ver `isBiblioteca` acima.
@@ -372,4 +395,9 @@ export function toggleLawPreference(prev: LawPreference[], value: LawPreference)
   if (next.length === 0) return ['estadual'];
   if (next.includes('todas')) return next.filter((item) => item !== 'todas');
   return next;
+}
+
+/** Todos os artigos da base, na ordem em que aparecem nas leis. */
+export function listarTodosArtigos(): LegalArticle[] {
+  return allArticles.map(({ searchText, ...art }) => art);
 }

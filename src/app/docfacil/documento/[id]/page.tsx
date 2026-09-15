@@ -1,6 +1,7 @@
 "use client"
 
 import { use, useRef, useState } from "react"
+import { FolhaEscalada } from "@/components/folha-escalada"
 import { Download, Loader2 } from "lucide-react"
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
 import { Button } from "@/components/ui/button"
@@ -64,7 +65,7 @@ export default function VisualizarDocumentoPage({ params }: { params: Promise<{ 
       />
       <div className="document-container font-serif pb-40">
         <div className="document-paper-wrapper custom-scrollbar">
-          <div ref={reportRef} className="document-paper h-auto bg-white">
+          <FolhaEscalada ref={reportRef}>
             <div className="mb-1 pb-2 border-none">
               <OfficialLetterhead />
               <p className="text-[14pt] font-black uppercase italic tracking-tighter mt-2 border-y border-zinc-200 py-1 text-center">{TIPO_LABEL[documento.tipo]} Nº {documento.numero}</p>
@@ -76,7 +77,7 @@ export default function VisualizarDocumentoPage({ params }: { params: Promise<{ 
             </div>
 
             <div className="text-[11pt] leading-relaxed" dangerouslySetInnerHTML={{ __html: sanitizeHtml(documento.conteudo) }} />
-          </div>
+          </FolhaEscalada>
         </div>
       </div>
     </div>

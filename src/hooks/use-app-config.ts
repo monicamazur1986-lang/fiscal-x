@@ -7,6 +7,7 @@ import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { useAuth, ROOT_ADMIN_EMAIL } from './use-auth';
 import { normalizeId } from '@/lib/utils';
 import { attemptFirestoreWrite } from '@/lib/firestore-offline';
+import { salvarItemLocal } from '@/lib/cache-colecao-local';
 
 export interface MunicipalityConfig {
   logoUrl?: string; // Brasão Municipal (Documentos A4)
@@ -23,6 +24,12 @@ export interface MunicipalityConfig {
    * Identidade Municipal; na falta de entrada aqui, usa o padrão fixo do
    * código (ver src/lib/roteiro-textos-padrao.ts). */
   roteiroTextos?: Record<string, { introducaoHtml?: string; conclusaoHtml?: string }>;
+  /** Textos do ATO e do PRAZO de cada tipo de termo (apreensão, interdição,
+   * inutilização, intimação), por município. Existe para município com código
+   * sanitário próprio: o padrão do código cita a lei estadual, e citar o artigo
+   * estadual onde vale o municipal é fundamentação errada. Ver AutuacaoTextos
+   * em src/lib/schema.ts; vazio aqui = usa o padrão estadual. */
+  autuacaoTextos?: import("@/lib/schema").AutuacaoTextos;
 }
 
 const LOCAL_CONFIG_KEY = 'fiscal_x_muni_config_v6';
@@ -64,7 +71,7 @@ export function useAppConfig(options?: { municipioIdOverride?: string }) {
       if (snap.exists()) {
         const data = snap.data() as MunicipalityConfig;
         setConfig(prev => ({ ...prev, ...data }));
-        localStorage.setItem(LOCAL_CONFIG_KEY, JSON.stringify(data));
+        salvarItemLocal(LOCAL_CONFIG_KEY, JSON.stringify(data));
       }
       setLoading(false);
     }, (err) => {
@@ -85,7 +92,7 @@ export function useAppConfig(options?: { municipioIdOverride?: string }) {
         const data = snap.data();
         const url = data.appLogoUrl || "";
         setSystemLogo(url);
-        localStorage.setItem(SYSTEM_CONFIG_KEY, url);
+        salvarItemLocal(SYSTEM_CONFIG_KEY, url);
         setBetaAccessDurationDays(typeof data.betaAccessDurationDays === 'number' ? data.betaAccessDurationDays : null);
       }
     });
@@ -104,7 +111,7 @@ export function useAppConfig(options?: { municipioIdOverride?: string }) {
 
     const newConfig = { ...config, ...data };
     setConfig(newConfig);
-    localStorage.setItem(LOCAL_CONFIG_KEY, JSON.stringify(newConfig));
+    salvarItemLocal(LOCAL_CONFIG_KEY, JSON.stringify(newConfig));
 
     // Um fiscal sem gestor cadastrado no município (liberado a ajustar a
     // Identidade Municipal — ver useMunicipioTemGestor) não consegue gravar
@@ -135,7 +142,7 @@ export function useAppConfig(options?: { municipioIdOverride?: string }) {
 
   const updateSystemLogo = useCallback(async (url: string) => {
     setSystemLogo(url);
-    localStorage.setItem(SYSTEM_CONFIG_KEY, url);
+    salvarItemLocal(SYSTEM_CONFIG_KEY, url);
     
     // Root write attempt
     if (db && (profile?.role === 'root' || profile?.email?.toLowerCase() === ROOT_ADMIN_EMAIL)) {

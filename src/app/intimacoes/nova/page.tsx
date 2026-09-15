@@ -4,125 +4,132 @@ import { IntimacaoForm } from "@/components/intimacao-form";
 import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Intimacao } from "@/lib/types";
-import { ScrollText, Gavel, Lock, Unlock, PackageX, Trash2, Ban, Scale, ChevronRight, Loader2 } from "lucide-react";
+import { ScrollText, Gavel, Lock, Unlock, PackageX, Trash2, Ban, Scale, ChevronRight, Loader2, ArrowLeft } from "lucide-react";
+import Link from "next/link";
+import { darkenHex } from "@/lib/dashboard-menu-items";
 
-// Mesmas opções de "termoOptions" (documento-oficial-body.tsx), com a
-// orientação de quando usar cada uma — a mesma escolha que hoje só existe
-// como um <select> dentro do próprio documento, agora explicada antes de
-// abrir a página em branco. Agrupadas por fase do processo (em vez de uma
-// lista plana de 8 itens, cada um com uma cor diferente) para reduzir a
-// poluição visual: uma cor por grupo, não uma por item.
-const GRUPOS_AUTUACAO = [
+// Mesmas opções de "termoOptions" (documento-oficial-body.tsx), agora como um
+// rol simples: o Auto de Infração primeiro (é o ponto de partida mais comum) e
+// os Termos depois, em ordem alfabética.
+//
+// Antes vinham agrupados por fase do processo, com título de grupo e a
+// explicação de cada tipo sempre visível — oito itens, quatro cabeçalhos e oito
+// parágrafos numa tela só, informação demais pra uma escolha que é basicamente
+// "qual documento eu vou lavrar". A fase não sumiu: virou a cor do ícone
+// (verde = abertura, latão = interdição, terracota = apreensão/inutilização,
+// azul = encerramento), e a explicação aparece ao passar o mouse ou encostar,
+// como nos demais menus do sistema.
+const TIPOS_AUTUACAO = [
   {
-    titulo: "Abertura do processo",
+    value: "AUTO DE INFRAÇÃO",
+    label: "Auto de Infração",
+    description: "Registra a irregularidade e abre prazo de defesa. Ponto de partida mais comum.",
+    icon: Gavel,
     accent: "#0E4A44",
-    tipos: [
-      {
-        value: "AUTO DE INFRAÇÃO",
-        label: "Auto de Infração",
-        description: "Registra a irregularidade e abre prazo de defesa. Ponto de partida mais comum.",
-        icon: Gavel,
-      },
-      {
-        value: "TERMO DE INTIMAÇÃO",
-        label: "Termo de Intimação",
-        description: "Notifica formalmente uma exigência, sem caracterizar infração ainda.",
-        icon: ScrollText,
-      },
-    ],
   },
   {
-    titulo: "Interdição",
-    accent: "#9C7A3C",
-    tipos: [
-      {
-        value: "TERMO DE INTERDIÇÃO",
-        label: "Termo de Interdição",
-        description: "Suspende o funcionamento até a regularização.",
-        icon: Lock,
-      },
-      {
-        value: "TERMO DE DESINTERDIÇÃO",
-        label: "Termo de Desinterdição",
-        description: "Encerra a interdição e libera o reinício das atividades.",
-        icon: Unlock,
-      },
-    ],
-  },
-  {
-    titulo: "Apreensão e inutilização",
+    value: "TERMO DE APREENSÃO",
+    label: "Termo de Apreensão",
+    description: "Recolhe produtos irregulares. Defesa corre no Auto vinculado.",
+    icon: PackageX,
     accent: "#A15437",
-    tipos: [
-      {
-        value: "TERMO DE APREENSÃO",
-        label: "Termo de Apreensão",
-        description: "Recolhe produtos irregulares. Defesa corre no Auto vinculado.",
-        icon: PackageX,
-      },
-      {
-        value: "TERMO DE APREENSÃO E INUTILIZAÇÃO",
-        label: "Termo de Apreensão e Inutilização",
-        description: "Recolhe e já inutiliza produtos impróprios, num só documento.",
-        icon: Trash2,
-      },
-      {
-        value: "TERMO DE INUTILIZAÇÃO",
-        label: "Termo de Inutilização",
-        description: "Formaliza a inutilização de produtos impróprios.",
-        icon: Ban,
-      },
-    ],
   },
   {
-    titulo: "Encerramento",
+    value: "TERMO DE APREENSÃO E INUTILIZAÇÃO",
+    label: "Termo de Apreensão e Inutilização",
+    description: "Recolhe e já inutiliza produtos impróprios, num só documento.",
+    icon: Trash2,
+    accent: "#A15437",
+  },
+  {
+    value: "TERMO DE DESINTERDIÇÃO",
+    label: "Termo de Desinterdição",
+    description: "Encerra a interdição e libera o reinício das atividades.",
+    icon: Unlock,
+    accent: "#9C7A3C",
+  },
+  {
+    value: "TERMO DE IMPOSIÇÃO DE PENALIDADE",
+    label: "Termo de Imposição de Penalidade",
+    description: "Aplica a penalidade ao final do processo. Abre prazo de recurso.",
+    icon: Scale,
     accent: "#3D5A73",
-    tipos: [
-      {
-        value: "TERMO DE IMPOSIÇÃO DE PENALIDADE",
-        label: "Termo de Imposição de Penalidade",
-        description: "Aplica a penalidade ao final do processo. Abre prazo de recurso.",
-        icon: Scale,
-      },
-    ],
+  },
+  {
+    value: "TERMO DE INTERDIÇÃO",
+    label: "Termo de Interdição",
+    description: "Suspende o funcionamento até a regularização.",
+    icon: Lock,
+    accent: "#9C7A3C",
+  },
+  {
+    value: "TERMO DE INTIMAÇÃO",
+    label: "Termo de Intimação",
+    description: "Notifica formalmente uma exigência, sem caracterizar infração ainda.",
+    icon: ScrollText,
+    accent: "#0E4A44",
+  },
+  {
+    value: "TERMO DE INUTILIZAÇÃO",
+    label: "Termo de Inutilização",
+    description: "Formaliza a inutilização de produtos impróprios.",
+    icon: Ban,
+    accent: "#A15437",
   },
 ] as const;
+
 
 function EscolherTipoAutuacao() {
   const router = useRouter();
 
   return (
     <div className="min-h-screen bg-[#F5F2EA] p-4 sm:p-8">
-      <div className="max-w-3xl mx-auto w-full space-y-10 py-8">
+      <div className="max-w-xl mx-auto w-full space-y-6 py-8">
+        {/* Volta pro menu de Autuações. Sem isto, a única saída era o "Início"
+            do cabeçalho global, que leva pra dashboard — perdendo o caminho
+            que a pessoa estava percorrendo. */}
+        <Link
+          href="/intimacoes"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-[#6B6659] hover:text-[#0E4A44] transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" /> Voltar
+        </Link>
+
         <div className="space-y-1.5 text-center">
           <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#9C7A3C]">Nova Autuação</p>
           <h1 className="font-serif text-2xl sm:text-3xl text-[#262420]">Qual documento você vai lavrar?</h1>
-          <p className="text-sm text-[#6B6659] max-w-lg mx-auto">Escolha o tipo — o documento já abre com o texto e o prazo certos para ele.</p>
         </div>
 
-        <div className="space-y-7">
-          {GRUPOS_AUTUACAO.map((grupo) => (
-            <div key={grupo.titulo} className="space-y-2.5">
-              <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: grupo.accent }}>{grupo.titulo}</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {grupo.tipos.map((tipo) => (
-                  <button
-                    key={tipo.value}
-                    type="button"
-                    onClick={() => router.push(`/intimacoes/nova?tipo=${encodeURIComponent(tipo.value)}`)}
-                    className="group flex items-center gap-3 text-left bg-white border border-[#E4DFD1] rounded-lg p-3.5 shadow-sm hover:border-[#0E4A44]/30 hover:shadow-md transition-all"
-                  >
-                    <div className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${grupo.accent}14`, color: grupo.accent }}>
-                      <tipo.icon className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-serif text-[15px] text-[#262420] leading-tight">{tipo.label}</p>
-                      <p className="text-xs text-[#8A8474] leading-snug line-clamp-1">{tipo.description}</p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-[#C4BEAC] shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:text-[#0E4A44]" />
-                  </button>
-                ))}
+        <div className="space-y-2">
+          {TIPOS_AUTUACAO.map((tipo) => (
+            <button
+              key={tipo.value}
+              type="button"
+              onClick={() => router.push(`/intimacoes/nova?tipo=${encodeURIComponent(tipo.value)}`)}
+              style={{
+                // Mesma técnica do menu de Roteiros: a cor da fase do processo
+                // vira o tom de fundo, em versão bem clara.
+                ['--tom' as any]: `${tipo.accent}12`,
+                ['--tom-hover' as any]: `${tipo.accent}22`,
+                ['--tom-icone' as any]: `${tipo.accent}29`,
+                ['--tom-borda' as any]: `${tipo.accent}33`,
+                ['--tom-texto' as any]: darkenHex(tipo.accent, 34),
+              }}
+              className="group w-full flex items-center gap-3.5 rounded-xl border border-[var(--tom-borda)] bg-[var(--tom)] px-4 py-3.5 text-left transition-all duration-200 hover:bg-[var(--tom-hover)] hover:shadow-[0_6px_18px_-10px_rgba(38,36,32,0.35)] active:scale-[0.99]"
+            >
+              <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0 bg-[var(--tom-icone)] text-[var(--tom-texto)]">
+                <tipo.icon className="h-5 w-5" />
               </div>
-            </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-serif font-bold text-[17px] leading-snug text-[var(--tom-texto)]">{tipo.label}</p>
+                {/* Mesma regra dos outros menus: o nome fica sempre visível e a
+                    explicação só aparece ao passar o mouse ou encostar na tela. */}
+                <p className="text-xs text-[#6B6659] leading-snug line-clamp-1 mt-0.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-active:opacity-100 group-focus-visible:opacity-100">
+                  {tipo.description}
+                </p>
+              </div>
+              <ChevronRight className="h-5 w-5 shrink-0 text-[var(--tom-texto)] opacity-40 transition-all group-hover:translate-x-0.5 group-hover:opacity-100" />
+            </button>
           ))}
         </div>
       </div>

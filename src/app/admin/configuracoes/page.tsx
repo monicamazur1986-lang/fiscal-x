@@ -19,7 +19,8 @@ import {
   Scale,
   Landmark,
   FileText,
-  ClipboardList
+  ClipboardList,
+  Gavel
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -28,7 +29,7 @@ import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { RichTextEditor } from "@/components/rich-text-editor"
-import { DEFAULT_PRAZO_TEXT } from "@/lib/schema"
+import { DEFAULT_PRAZO_TEXT, TIPOS_COM_TEXTO_EDITAVEL, textosPadraoDoTipo } from "@/lib/schema"
 import { normalizeId } from "@/lib/utils"
 import municipiosPR from "@/lib/municipios-pr.json"
 import { ROTEIRO_TEXTO_OPTIONS, getDefaultIntroHtml, getDefaultConclusaoHtml } from "@/lib/roteiro-textos-padrao"
@@ -49,9 +50,15 @@ export default function IdentidadeMunicipalPage() {
   const { toast } = useToast()
   const router = useRouter()
   const [selectedRoteiroId, setSelectedRoteiroId] = useState(ROTEIRO_TEXTO_OPTIONS[0].id)
+  // Textos do ato/prazo por tipo de termo — para município com código sanitário
+  // próprio, que não pode citar o artigo estadual (ver AutuacaoTextos).
+  const [selectedTipoTermo, setSelectedTipoTermo] = useState<string>(TIPOS_COM_TEXTO_EDITAVEL[0])
+  const [autuacaoAtoHtml, setAutuacaoAtoHtml] = useState("")
+  const [autuacaoPrazoHtml, setAutuacaoPrazoHtml] = useState("")
   const [roteiroIntroHtml, setRoteiroIntroHtml] = useState("")
   const [roteiroConclusaoHtml, setRoteiroConclusaoHtml] = useState("")
   const [savingRoteiroTextos, setSavingRoteiroTextos] = useState(false)
+  const [savingAutuacaoTextos, setSavingAutuacaoTextos] = useState(false)
 
   const effectiveMunicipioId = isRoot ? selectedMunicipio : profile?.municipioId
   const effectiveMunicipioNome = isRoot ? selectedMunicipio : profile?.municipioNome
@@ -86,6 +93,14 @@ export default function IdentidadeMunicipalPage() {
     setRoteiroIntroHtml(config.roteiroTextos?.[selectedRoteiroId]?.introducaoHtml || getDefaultIntroHtml(selectedRoteiroId));
     setRoteiroConclusaoHtml(config.roteiroTextos?.[selectedRoteiroId]?.conclusaoHtml || getDefaultConclusaoHtml(selectedRoteiroId));
   }, [config, selectedRoteiroId])
+
+  // Mesma lógica dos roteiros: carrega o texto do município ou, na ausência,
+  // o padrão estadual do código.
+  useEffect(() => {
+    const padrao = textosPadraoDoTipo(selectedTipoTermo, effectiveMunicipioId)
+    setAutuacaoAtoHtml(config.autuacaoTextos?.[selectedTipoTermo]?.atoHtml || padrao.atoHtml)
+    setAutuacaoPrazoHtml(config.autuacaoTextos?.[selectedTipoTermo]?.prazoHtml || padrao.prazoHtml)
+  }, [config, selectedTipoTermo, effectiveMunicipioId])
 
   const resetToDefaultHeader = () => {
     const cityName = config.municipioNome || effectiveMunicipioNome || "MUNICÍPIO";
@@ -201,6 +216,24 @@ export default function IdentidadeMunicipalPage() {
     } finally { setSaving(false) }
   }
 
+  // Salva apenas o tipo aberto na tela. O merge preserva os demais tipos já
+  // configurados; tipo que o município nunca editou continua sem chave, e o
+  // documento cai no texto estadual padrão (ver atoTextoDoTipo).
+  const handleSaveAutuacaoTextos = async () => {
+    setSavingAutuacaoTextos(true)
+    try {
+      await updateConfig({
+        autuacaoTextos: {
+          ...config.autuacaoTextos,
+          [selectedTipoTermo]: { atoHtml: autuacaoAtoHtml, prazoHtml: autuacaoPrazoHtml },
+        },
+      })
+      toast({ title: "Texto do Termo Salvo", description: selectedTipoTermo })
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro ao salvar", description: e?.message })
+    } finally { setSavingAutuacaoTextos(false) }
+  }
+
   const handleSaveRoteiroTextos = async () => {
     setSavingRoteiroTextos(true)
     try {
@@ -255,6 +288,7 @@ export default function IdentidadeMunicipalPage() {
           <TabsTrigger value="rodape" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><Type className="h-3.5 w-3.5" /> Rodapé</TabsTrigger>
           <TabsTrigger value="prazos" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><Scale className="h-3.5 w-3.5" /> Prazos</TabsTrigger>
           <TabsTrigger value="roteiros" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><ClipboardList className="h-3.5 w-3.5" /> Roteiros</TabsTrigger>
+          <TabsTrigger value="termos" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><Gavel className="h-3.5 w-3.5" /> Termos</TabsTrigger>
         </TabsList>
 
         <TabsContent value="brasao" className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -439,6 +473,68 @@ export default function IdentidadeMunicipalPage() {
                   >
                       {savingRoteiroTextos ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
                       Salvar Textos deste Roteiro
+                  </Button>
+              </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="termos" className="mt-6">
+          <Card className="bg-white border-[#E4DFD1] rounded-lg overflow-hidden shadow-sm">
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4">
+                  <div>
+                      <CardTitle className="font-serif text-lg text-[#262420] flex items-center gap-2">
+                          <Gavel className="h-4 w-4 text-primary" /> Fundamento Legal dos Termos
+                      </CardTitle>
+                      <CardDescription className="text-[#A39D8C] font-bold uppercase text-[9px] tracking-widest">Base legal citada em cada tipo de autuação</CardDescription>
+                  </div>
+                  <select
+                      value={selectedTipoTermo}
+                      onChange={(e) => setSelectedTipoTermo(e.target.value)}
+                      className="text-xs font-bold uppercase outline-none bg-[#FAF8F3] border border-[#E4DFD1] rounded-xl px-3 h-11"
+                  >
+                      {TIPOS_COM_TEXTO_EDITAVEL.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+              </CardHeader>
+              <CardContent className="p-6 border-t space-y-6">
+                  <div className="rounded-lg border border-[#E4DFD1] bg-[#FAF8F3] p-4">
+                      <p className="text-[10px] font-medium text-[#6B6659] leading-relaxed">
+                          Este é o texto que já vem preenchido no termo quando o fiscal escolhe este tipo. Os trechos entre colchetes, como <code className="text-[#0E4A44]">[FIEL DEPOSITÁRIO]</code>, são lacunas que o fiscal completa em cada caso.
+                      </p>
+                      <p className="text-[10px] font-medium text-[#6B6659] leading-relaxed mt-2">
+                          O sistema já usa a lei certa de cada município: onde existe <strong>código sanitário próprio</strong> (Prudentópolis, Lei nº 2.276/2017), os termos citam os artigos municipais; nos demais, a <strong>Lei Estadual nº 13.331/2001</strong>. Só mexa aqui se precisar ajustar a redação — o botão "Restaurar Padrão" devolve o texto oficial do município a qualquer momento.
+                      </p>
+                  </div>
+                  <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                          <Label className="text-[10px] font-black uppercase text-[#6B6659]">Fundamento do Ato</Label>
+                          <Button onClick={() => setAutuacaoAtoHtml(textosPadraoDoTipo(selectedTipoTermo, effectiveMunicipioId).atoHtml)} variant="ghost" className="h-8 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest text-[#6B6659] hover:text-primary">
+                              <RotateCcw className="h-3 w-3 mr-2" /> Restaurar Padrão
+                          </Button>
+                      </div>
+                      <div className="p-6 border border-[#E4DFD1] rounded-lg bg-[#FAF8F3] min-h-[160px]">
+                          <RichTextEditor value={autuacaoAtoHtml} onChange={setAutuacaoAtoHtml} fontSize="10pt" minHeight="140px" />
+                      </div>
+                  </div>
+                  <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                          <Label className="text-[10px] font-black uppercase text-[#6B6659]">Prazo e Defesa</Label>
+                          <Button onClick={() => setAutuacaoPrazoHtml(textosPadraoDoTipo(selectedTipoTermo, effectiveMunicipioId).prazoHtml)} variant="ghost" className="h-8 px-3 rounded-lg text-[9px] font-black uppercase tracking-widest text-[#6B6659] hover:text-primary">
+                              <RotateCcw className="h-3 w-3 mr-2" /> Restaurar Padrão
+                          </Button>
+                      </div>
+                      <div className="p-6 border border-[#E4DFD1] rounded-lg bg-[#FAF8F3] min-h-[160px]">
+                          <RichTextEditor value={autuacaoPrazoHtml} onChange={setAutuacaoPrazoHtml} fontSize="10pt" minHeight="140px" />
+                      </div>
+                  </div>
+              </CardContent>
+              <CardContent className="px-6 pb-6 pt-0">
+                  <Button
+                      onClick={handleSaveAutuacaoTextos}
+                      disabled={savingAutuacaoTextos}
+                      className="w-full h-16 bg-primary hover:bg-primary/90 text-white rounded-2xl font-black uppercase text-[11px] tracking-widest gap-4 shadow-lg"
+                  >
+                      {savingAutuacaoTextos ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
+                      Salvar Texto deste Termo
                   </Button>
               </CardContent>
           </Card>

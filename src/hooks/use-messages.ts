@@ -21,6 +21,7 @@ import { useAuth } from './use-auth';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { normalizeId } from '@/lib/utils';
+import { salvarCacheColecao } from '@/lib/cache-colecao-local';
 
 export interface Message {
   id: string;
@@ -167,7 +168,7 @@ export function useMessages() {
       const newMessage = { ...messageData, id: targetId, createdAt: new Date() } as Message;
       const updated = [newMessage, ...messages];
       setMessages(updated);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+      salvarCacheColecao(LOCAL_STORAGE_KEY, updated);
     }
   }, [db, profile, configError, messages]);
 
@@ -193,7 +194,7 @@ export function useMessages() {
         const updated = data.map((m: any) => 
           m.id === messageId ? { ...m, deleted: true } : m
         );
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+        salvarCacheColecao(LOCAL_STORAGE_KEY, updated);
       }
     }
   }, [db, profile?.municipioId, configError]);
@@ -218,7 +219,7 @@ export function useMessages() {
         return m;
       });
       setMessages(updated);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+      salvarCacheColecao(LOCAL_STORAGE_KEY, updated);
     }
   }, [db, profile, configError, messages]);
 
@@ -319,7 +320,7 @@ export function useComments(messageId: string | null) {
       const newComment = { ...commentData, id: targetId, createdAt: new Date() } as Comment;
       const updated = [...comments, newComment];
       setComments(updated);
-      localStorage.setItem(`${LOCAL_STORAGE_COMMENTS_PREFIX}${messageId}`, JSON.stringify(updated));
+      salvarCacheColecao(`${LOCAL_STORAGE_COMMENTS_PREFIX}${messageId}`, updated);
     }
   }, [db, profile, messageId, configError, comments]);
 

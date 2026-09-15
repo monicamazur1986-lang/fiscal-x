@@ -5,7 +5,6 @@ import Link from "next/link"
 import {
   FileText,
   Home,
-  Archive,
   CalendarDays,
   Sparkles,
   ClipboardList,
@@ -18,15 +17,18 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { SentinelaMascot } from "./brand-logo"
 
-const navItems = [
+/** `emDesenvolvimento` marca o módulo que já dá pra usar mas ainda está sendo
+ *  construído — mesmo selo do cartão no Dashboard (ver dashboard-menu-items).
+ *  O item continua clicável: a sinalização é pra expectativa do usuário, não
+ *  um bloqueio. */
+const navItems: { href: string; icon: typeof Home; label: string; emDesenvolvimento?: boolean }[] = [
   { href: "/dashboard", icon: Home, label: "Início" },
-  { href: "/intimacoes/nova", icon: FileText, label: "Nova Autuação" },
+  { href: "/intimacoes", icon: FileText, label: "Autuações" },
   { href: "/rascunho", icon: Sparkles, label: "Fiscal AI" },
   { href: "/recados", icon: MessageSquare, label: "Recados" },
-  { href: "/intimacoes", icon: Archive, label: "Documentos" },
   { href: "/agenda", icon: CalendarDays, label: "Agenda" },
   { href: "/roteiros", icon: ClipboardList, label: "Roteiros" },
-  { href: "/pas", icon: Scale, label: "PAS" },
+  { href: "/pas", icon: Scale, label: "PAS", emDesenvolvimento: true },
   { href: "/legislacao", icon: Library, label: "Biblioteca" },
   { href: "/risco-sanitario", icon: ShieldAlert, label: "Risco Sanitário" },
 ]
@@ -52,15 +54,29 @@ export function AppSidebar() {
                   <Link
                     key={item.href}
                     href={item.href}
+                    title={item.emDesenvolvimento ? `${item.label} — módulo em desenvolvimento` : undefined}
                     className={cn(
                       "flex min-w-0 items-center justify-center gap-2 rounded-lg px-2 py-2.5 text-muted-foreground transition-all hover:text-primary hover:bg-primary/5 lg:justify-start lg:gap-3 lg:px-4",
                       isActive && "bg-primary/10 text-primary font-bold shadow-sm"
                     )}
                   >
-                    <item.icon className={cn("h-4 w-4 shrink-0 sm:h-5 sm:w-5", isActive ? "text-primary" : "text-muted-foreground")} />
-                    <span className="hidden text-[9px] font-black uppercase tracking-[0.16em] text-current lg:inline lg:text-[10px]">
+                    <span className="relative shrink-0">
+                      <item.icon className={cn("h-4 w-4 sm:h-5 sm:w-5", isActive ? "text-primary" : "text-muted-foreground")} />
+                      {/* Barra recolhida (só ícones): o selo textual não cabe,
+                          então o aviso vira um ponto — o title do link diz o
+                          que ele significa. */}
+                      {item.emDesenvolvimento && (
+                        <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-amber-500 lg:hidden" />
+                      )}
+                    </span>
+                    <span className="hidden min-w-0 truncate text-[9px] font-black uppercase tracking-[0.16em] text-current lg:inline lg:text-[10px]">
                       {item.label}
                     </span>
+                    {item.emDesenvolvimento && (
+                      <span className="hidden shrink-0 rounded-full bg-amber-100 px-1.5 py-[2px] text-[7px] font-black uppercase tracking-[0.1em] leading-none text-amber-700 lg:inline">
+                        em dev
+                      </span>
+                    )}
                   </Link>
                 )
             })}

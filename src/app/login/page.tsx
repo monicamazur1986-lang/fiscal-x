@@ -134,13 +134,18 @@ export default function LoginPage() {
               <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:28px_28px]" />
             </div>
 
-            <div className="relative z-10 rounded-[2rem] bg-white p-3 shadow-2xl">
-              <SentinelaMascot width={220} height={220} className="rounded-[1.5rem]" />
+            {/* Moldura redonda acompanhando o selo. Era um quadrado de cantos
+                arredondados, que deixava quatro sobras brancas em volta da
+                arte circular. O anel sutil substitui a borda dura de antes. */}
+            <div className="relative z-10 rounded-full bg-white p-2 shadow-2xl ring-1 ring-white/20">
+              <SentinelaMascot width={220} height={220} />
             </div>
 
             <div className="relative z-10">
-              <p className="font-black text-xl tracking-tight">FISCAL-X</p>
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/50 mt-1.5">Vigilância Sanitária</p>
+              {/* A própria arte já traz "Fiscal-X — vigilância sanitária
+                  inteligente". Repetir o nome logo abaixo era eco; fica só a
+                  assinatura curta. */}
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/50">Vigilância Sanitária Inteligente</p>
             </div>
 
             <div className="relative z-10 pt-6 mt-1 border-t border-white/10 w-full flex items-center justify-center">
@@ -151,11 +156,10 @@ export default function LoginPage() {
           {/* Formulário */}
           <div className="w-full lg:w-[56%] p-7 sm:p-10 lg:p-12 relative">
             <div className="flex lg:hidden flex-col items-center mb-8">
-              <div className="rounded-[2rem] bg-white p-2 shadow-[0_10px_30px_-8px_rgba(38,36,32,0.25)] border border-[#E4DFD1] mb-4">
-                <SentinelaMascot width={96} height={96} className="rounded-[1.5rem]" simplified />
+              <div className="rounded-full bg-white p-1.5 shadow-[0_10px_30px_-8px_rgba(38,36,32,0.25)] ring-1 ring-[#E4DFD1] mb-4">
+                <SentinelaMascot width={96} height={96} simplified />
               </div>
-              <p className="font-black text-[#262420] text-sm tracking-tight">FISCAL-X</p>
-              <p className="text-[9px] font-black uppercase tracking-[0.25em] text-[#A39D8C] mt-1.5">Vigilância Sanitária</p>
+              <p className="text-[9px] font-black uppercase tracking-[0.25em] text-[#A39D8C]">Vigilância Sanitária Inteligente</p>
             </div>
 
             {(localLoading || authLoading) && (

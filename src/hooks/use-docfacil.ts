@@ -18,6 +18,7 @@ import {
 import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
 import { attemptFirestoreWrite } from '@/lib/firestore-offline';
+import { salvarCacheColecao } from '@/lib/cache-colecao-local';
 
 const MODELOS_KEY = 'fiscal_x_docfacil_modelos_v1';
 const DOCUMENTOS_KEY = 'fiscal_x_docfacil_documentos_v1';
@@ -68,7 +69,7 @@ export function useDocfacil() {
     const qModelos = query(collection(db, 'docfacilModelos'), where('municipioId', '==', municipioId), orderBy('codigo', 'asc'));
     const unsubModelos = onSnapshot(qModelos, (snapshot) => {
       const items = snapshot.docs.map((d) => ({ ...d.data(), id: d.id } as DocfacilModelo));
-      localStorage.setItem(`${MODELOS_KEY}_${municipioId}`, JSON.stringify(items));
+      salvarCacheColecao(`${MODELOS_KEY}_${municipioId}`, items);
       setModelosMunicipio(items);
       setLoading(false);
     }, () => setLoading(false));
@@ -79,14 +80,14 @@ export function useDocfacil() {
     const qModelosGlobais = query(collection(db, 'docfacilModelos'), where('municipioId', '==', DOCFACIL_MODELO_GLOBAL), orderBy('codigo', 'asc'));
     const unsubModelosGlobais = onSnapshot(qModelosGlobais, (snapshot) => {
       const items = snapshot.docs.map((d) => ({ ...d.data(), id: d.id } as DocfacilModelo));
-      localStorage.setItem(`${MODELOS_KEY}_${DOCFACIL_MODELO_GLOBAL}`, JSON.stringify(items));
+      salvarCacheColecao(`${MODELOS_KEY}_${DOCFACIL_MODELO_GLOBAL}`, items);
       setModelosGlobais(items);
     });
 
     const qDocumentos = query(collection(db, 'docfacilDocumentos'), where('municipioId', '==', municipioId), orderBy('createdAt', 'desc'));
     const unsubDocumentos = onSnapshot(qDocumentos, (snapshot) => {
       const items = snapshot.docs.map((d) => ({ ...d.data(), id: d.id } as DocfacilDocumento));
-      localStorage.setItem(`${DOCUMENTOS_KEY}_${municipioId}`, JSON.stringify(items));
+      salvarCacheColecao(`${DOCUMENTOS_KEY}_${municipioId}`, items);
       setDocumentos(items);
     });
 

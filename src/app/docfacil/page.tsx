@@ -202,7 +202,17 @@ export default function DocfacilPage() {
                   const isGlobal = m.municipioId === DOCFACIL_MODELO_GLOBAL;
                   const podeEditar = !isGlobal || isRoot;
                   return (
-                  <div key={m.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                  <div key={m.id} className="group relative flex items-center justify-between gap-4 px-4 py-3 transition-colors hover:bg-[#FAF8F3]">
+                    {/* A linha inteira abre a redação, não só o botão do canto:
+                        este link cobre a linha toda por baixo dos botões de
+                        ação (que sobem com z-10). Link de verdade, e não um
+                        onClick, pra continuar funcionando com teclado, com o
+                        botão do meio e em "abrir em nova aba". */}
+                    <Link
+                      href={gerarHref(m.id)}
+                      aria-label={`Iniciar redação: ${m.descricao}`}
+                      className="absolute inset-0 z-0"
+                    />
                     <div className="min-w-0 flex-1 flex items-center gap-3">
                       <span className="text-xs text-[#A39D8C] tabular-nums shrink-0">Nº {String(m.codigo).padStart(3, "0")}</span>
                       <div className="min-w-0">
@@ -219,7 +229,7 @@ export default function DocfacilPage() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="relative z-10 flex items-center gap-1 shrink-0">
                       <Button asChild size="sm" className="h-8 text-xs font-medium gap-1.5 bg-[#0E4A44] hover:bg-[#0B3A35]">
                         <Link href={gerarHref(m.id)}><Send className="h-3.5 w-3.5" /> Iniciar Redação</Link>
                       </Button>
@@ -329,7 +339,13 @@ export default function DocfacilPage() {
                   return (
                   <div key={d.id} className="relative flex items-center justify-between gap-4 pl-5 pr-4 py-3 hover:bg-[#FAF8F3] transition-colors">
                     <span className={cn("absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-sm", isDraft ? "bg-amber-500" : "bg-[#1F7A5C]")} />
-                    <Link href={isDraft ? `/docfacil/gerar/${d.modeloId}` : `/docfacil/documento/${d.id}`} className="min-w-0 flex-1 flex items-center gap-3">
+                    {/* `after:inset-0` estica a área clicável do link pela linha
+                        inteira — sem isso, só o texto abria; o vão até o menu
+                        de ações ficava morto. O menu sobe com z-10. */}
+                    <Link
+                      href={isDraft ? `/docfacil/gerar/${d.modeloId}` : `/docfacil/documento/${d.id}`}
+                      className="min-w-0 flex-1 flex items-center gap-3 after:absolute after:inset-0 after:z-0"
+                    >
                       <span className={cn(
                         "h-7 w-7 rounded-full border flex items-center justify-center font-serif text-[13px] shrink-0",
                         isDraft ? "border-[#E4DFD1] text-[#A39D8C]" : "border-[#1F7A5C] text-[#1F7A5C]"
@@ -349,7 +365,7 @@ export default function DocfacilPage() {
                     </Link>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-md text-[#A39D8C] shrink-0 hover:bg-[#F5F2EA]"><MoreVertical className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="sm" className="relative z-10 h-8 w-8 p-0 rounded-md text-[#A39D8C] shrink-0 hover:bg-[#F5F2EA]"><MoreVertical className="h-4 w-4" /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="rounded-md w-48 p-1 shadow-lg">
                         {activeFolderId === "trash" ? (

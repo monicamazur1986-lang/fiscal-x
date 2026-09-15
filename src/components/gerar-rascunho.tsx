@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect, useMemo, type Dispatch, type SetStateAction } from "react"
 import {
   Loader2,
-  Sparkles,
   Check,
   FileText,
   Ban,
@@ -41,7 +40,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
 import { Badge } from "@/components/ui/badge"
-import { getBaseLawOptions, getIndividualLawOptions, toggleLawPreference as toggleLawPreferenceValue, searchLegislacao, buildFundamentacaoFromArticles, type LawPreference } from "@/lib/legal-search"
+import { EscolherEnquadramento } from "@/components/escolher-enquadramento"
+import { listarArtigosDeInfracao } from "@/lib/enquadramento-sanitario"
+import { getDefaultLawPreference, getBaseLawOptions, getIndividualLawOptions, toggleLawPreference as toggleLawPreferenceValue, searchLegislacao, buildFundamentacaoFromArticles, type LawPreference } from "@/lib/legal-search"
 import type { MatchedArticle } from "@/ai/flows/generate-intimacao-draft"
 
 type ReportType = 'intimação' | 'infração' | 'apreensão' | 'interdição';
@@ -68,13 +69,36 @@ const docTypes = [
 ] as const;
 
 export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRascunhoProps) {
+  const { profile } = useAuth()
   const [reportType, setReportType] = useState<ReportType | undefined>(undefined)
-  const [lawPreferences, setLawPreferences] = useState<LawPreference[]>(['estadual'])
+  // Padrão consciente do município: onde há código sanitário próprio, a base
+  // já abre na lei municipal (ver getDefaultLawPreference).
+  const [lawPreferences, setLawPreferences] = useState<LawPreference[]>(() => getDefaultLawPreference(profile?.municipioId))
+  // O perfil costuma chegar depois do primeiro render, e o inicializador do
+  // useState roda uma vez só — sem este ajuste, o fiscal de Prudentópolis
+  // continuaria abrindo a tela em "estadual". Só reposiciona enquanto ele não
+  // tiver mexido na seleção, pra nunca desfazer uma escolha dele.
+  const baseTocadaRef = useRef(false)
+  useEffect(() => {
+    if (baseTocadaRef.current) return
+    setLawPreferences(getDefaultLawPreference(profile?.municipioId))
+  }, [profile?.municipioId])
 
   const [draft, setDraft] = useState("")
   const [fundamentacao, setFundamentacao] = useState("")
   const [matchedArticles, setMatchedArticles] = useState<MatchedArticle[]>([])
   const [engine, setEngine] = useState<'local' | 'cloud' | null>(null)
+
+  // Enquadramento escolhido à mão pelo fiscal — quando preenchido, manda no
+  // lugar da sugestão automática (ver generate-intimacao-draft).
+  const [enquadramentoManual, setEnquadramentoManual] = useState<string[]>([])
+  const [isEscolherAberto, setIsEscolherAberto] = useState(false)
+  // Com o município, Prudentópolis enxerga também os 116 incisos do Art. 18
+  // municipal — sem ele, o seletor manual mostrava só os 54 estaduais.
+  const incisosDisponiveis = useMemo(
+    () => listarArtigosDeInfracao({ municipioId: profile?.municipioId || undefined }),
+    [profile?.municipioId]
+  )
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -87,7 +111,6 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
 
   const router = useRouter()
   const { toast } = useToast()
-  const { profile } = useAuth()
   const recognitionRef = useRef<any>(null)
 
   const lawOptions = getBaseLawOptions(profile?.municipioId)
@@ -162,6 +185,9 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
   }
 
   const toggleLawPreference = (value: LawPreference) => {
+    // A partir daqui a escolha é do fiscal — o padrão por município não
+    // reposiciona mais nada (ver efeito acima).
+    baseTocadaRef.current = true;
     setLawPreferences(prev => toggleLawPreferenceValue(prev, value));
   };
 
@@ -186,6 +212,10 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
         useCloudAI: true,
         lawPreference: lawPreferences,
         uid: profile?.uid || '',
+        enquadramentoManual,
+        // Com enquadramento escolhido à mão, o fiscal não quer um documento
+        // novo: quer a frase certa ligando a conduta ao inciso que ele apontou.
+        modo: enquadramentoManual.length > 0 ? 'reestruturar' : 'gerar',
       });
 
       if (result.error) {
@@ -213,7 +243,8 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
     setMatchedArticles([]);
     setError(null);
     setReportType(undefined);
-    setLawPreferences(['estadual']);
+    baseTocadaRef.current = false;
+    setLawPreferences(getDefaultLawPreference(profile?.municipioId));
     toast({ title: "Edição Reiniciada" });
   }
 
@@ -285,16 +316,10 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
     router.push(`/intimacoes/nova?${params.toString()}`);
   }
 
+  // O título "Fiscal AI" vive na página (src/app/rascunho/page.tsx), acima das
+  // abas, porque nomeia as duas — aqui embaixo ele parecia título só desta.
   return (
-    <div className="space-y-5 font-sans pb-40">
-      {/* Cabeçalho discreto — uma linha só, sem repetir informação dentro do card */}
-      <div className="flex items-center gap-3 no-print">
-        <div className="flex items-center gap-2 text-slate-500">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold">Fiscal AI – Assistente Inteligente</span>
-        </div>
-      </div>
-
+    <div className="space-y-5 font-sans pb-40 pt-5">
       <Card className="border border-zinc-100 bg-white shadow-sm rounded-[2rem] overflow-hidden">
         <CardContent className="p-5 sm:p-8 space-y-6">
 
@@ -467,6 +492,45 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                       </div>
                   ) : (
                       <div className="space-y-5">
+                          {/* Saída para quando a sugestão automática erra. Fica
+                              sempre visível, e não escondida atrás de uma
+                              falha: às vezes o fiscal já sabe o inciso antes
+                              mesmo de tentar. */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-zinc-50/70 px-4 py-3">
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-slate-700">
+                                {enquadramentoManual.length > 0
+                                  ? `Enquadramento definido por você (${enquadramentoManual.length})`
+                                  : "O enquadramento sugerido não está correto?"}
+                              </p>
+                              <p className="text-[11px] text-zinc-500 leading-snug mt-0.5">
+                                {enquadramentoManual.length > 0
+                                  ? "O texto será redigido a partir dos incisos que você escolheu."
+                                  : "Escolha o inciso você mesmo — o assistente redige o texto a partir dele."}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {enquadramentoManual.length > 0 && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setEnquadramentoManual([])}
+                                  className="h-9 px-3 rounded-lg text-xs font-medium text-zinc-500 hover:text-rose-600 hover:bg-rose-50"
+                                >
+                                  Voltar ao automático
+                                </Button>
+                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setIsEscolherAberto(true)}
+                                className="h-9 px-3 rounded-lg text-xs font-medium border-zinc-200 bg-white"
+                              >
+                                <Scale className="h-3.5 w-3.5 mr-1.5" /> Escolher artigo
+                              </Button>
+                            </div>
+                          </div>
+
                           {fundamentacao && (
                               <div className="bg-slate-900 p-5 rounded-2xl text-white border-l-4 border-l-primary">
                                   <div className="flex items-center justify-between mb-1.5">
@@ -584,6 +648,14 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
            </Button>
         </CardFooter>
       </Card>
+
+      <EscolherEnquadramento
+        aberto={isEscolherAberto}
+        onOpenChange={setIsEscolherAberto}
+        incisos={incisosDisponiveis}
+        selecionados={enquadramentoManual}
+        onConfirmar={setEnquadramentoManual}
+      />
     </div>
   )
 }

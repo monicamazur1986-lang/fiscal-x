@@ -347,6 +347,17 @@ export function DocumentoOficialBody({
   // soltos em sequência) — só assim dá pra intercalar um LivePageHeader entre
   // eles nos pontos calculados pelo pai, sem duplicar a lógica de cada um.
   // Nenhum bloco teve seu conteúdo/lógica interna alterado, só a "casca".
+  // Seções 1, 2 e 3 são fixas; as seguintes existem conforme o tipo do
+  // documento (ver autuacao-estrutura.ts), então o número de cada uma sai de
+  // uma contagem e não de um literal — assim a sequência nunca pula.
+  const numeroDaSecao = (() => {
+    let n = 3;
+    const itens = estrutura.listaDeItens ? ++n : 0;
+    const prazo = estrutura.prazo ? ++n : 0;
+    const ciencia = ++n;
+    return { itens, prazo, ciencia };
+  })();
+
   const sectionBlocks: React.ReactNode[] = [
     <div key="tipo-numero" className="section-box flex flex-row overflow-visible min-h-[30pt] mb-4" style={{ border: '1pt solid #94a3b8' }}>
       <div className="flex-1 border-r border-[#94a3b8] p-2 flex items-center justify-center text-center">
@@ -428,7 +439,7 @@ export function DocumentoOficialBody({
               isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <Textarea value={field.value || ""} onChange={field.onChange} disabled={isFinalized} rows={1} className="data-field-input min-h-[1.5em] resize-none border-none rounded-none p-0 bg-transparent shadow-none" />
             )} />
           </div>
-          <div className="data-cell" style={{ flex: '0 0 110pt' }}>
+          <div className="data-cell" style={{ flex: '0 1 130pt' }}>
             <span className="data-label">CARGO / FUNÇÃO:</span>
             <FormField control={control} name="reuCargo" render={({ field }) => (
               isGeneratingPdf ? <StaticField value={field.value} className="data-field-input" /> : <input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input" />
@@ -602,7 +613,7 @@ export function DocumentoOficialBody({
 
     ...(estrutura.listaDeItens ? [
       <div key="itens-apreendidos" className="section-box" style={{ borderTop: "none" }}>
-        <div className="sub-header-row">4. RELACAO DOS BENS</div>
+        <div className="sub-header-row">{numeroDaSecao.itens}. RELAÇÃO DOS BENS</div>
         <ItensApreendidosTable
           itens={watch("itensApreendidos") || []}
           onChange={(itens) => setValue("itensApreendidos", itens)}
@@ -615,13 +626,16 @@ export function DocumentoOficialBody({
 
     ...(estrutura.prazo ? [
       <div key="notificacao" className="section-box" style={{ borderTop: "none" }}>
-        <div className="sub-header-row">{estrutura.listaDeItens ? 5 : 4}. {estrutura.prazo.titulo}</div>
-      <div className="p-2 bg-zinc-50/20"><RichTextEditor value={watch('prazo')} onChange={(v) => { setValue('prazo', v); onPrazoChange?.(v); }} disabled={isFinalized} fontSize="9.5pt" minHeight="4em" /></div>
+        <div className="sub-header-row">{numeroDaSecao.prazo}. {estrutura.prazo.titulo}</div>
+      {/* Na edição o campo reserva 4em para o fiscal ter onde escrever. No PDF,
+          se ficou vazio, esse reservado vira uma caixa titulada com um vão de
+          quatro linhas no meio do documento — melhor sair rente. */}
+      <div className="p-2 bg-zinc-50/20"><RichTextEditor value={watch('prazo')} onChange={(v) => { setValue('prazo', v); onPrazoChange?.(v); }} disabled={isFinalized} fontSize="9.5pt" minHeight={isGeneratingPdf && !(watch('prazo') || '').replace(/<[^>]*>/g, '').trim() ? '0' : '4em'} /></div>
       </div>,
     ] : []),
 
     <div key="ciencia-digital" className="section-box" style={{ borderTop: 'none' }}>
-      <div className="sub-header-row">5. CIÊNCIA DIGITAL</div>
+      <div className="sub-header-row">{numeroDaSecao.ciencia}. CIÊNCIA DIGITAL</div>
       <div className="p-6">
         <div className="grid grid-cols-2 gap-12">
           <div className="space-y-12">

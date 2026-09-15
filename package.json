@@ -7,7 +7,9 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "generate-embeddings": "tsx scripts/generate-legal-embeddings.ts"
+    "generate-embeddings": "tsx scripts/generate-legal-embeddings.ts",
+    "extrair-biblioteca": "tsx scripts/extrair-texto-biblioteca.ts",
+    "prebuild": "node scripts/gravar-versao.mjs && npm run extrair-biblioteca"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",

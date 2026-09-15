@@ -5,18 +5,18 @@ import type { LegislacaoDocumento } from '@/lib/types';
 import { documentosDaLegislacao } from '@/lib/legislacao-biblioteca';
 import { extractPageText } from '@/lib/pdf-text-extract';
 import * as pdfjsLib from 'pdfjs-dist';
+import { lerAcervoCache, gravarAcervoCache } from '@/lib/cache-biblioteca-idb';
 
 // pdfjs-dist 4.x só publica o worker como ES module (.mjs) — precisa estar em
 // public/pdf.worker.min.mjs (copiado de node_modules/pdfjs-dist/build/).
 pdfjsLib.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs`;
 
-// v4: bump de propósito (só a chave, não precisa mudar o formato) — descarta
-// qualquer cache local antigo que possa ter ficado congelado numa versão de
-// manifest.json obtida via fetch com cache do navegador (ver cache: 'no-store'
-// abaixo), garantindo que todo mundo resincronize do zero pelo menos uma vez.
-// v4 especificamente descarta o texto extraído com o bug de "uma letra por
-// item" (ver extractPageText) — sem isso, quem já sincronizou continuaria
-// vendo o texto espaçado errado até limpar o cache manualmente.
+// Chaves do cache ANTIGO, em localStorage. O acervo agora mora em IndexedDB
+// (ver cache-biblioteca-idb.ts) — o texto extraído dos PDFs nunca coube no
+// teto de ~5 MB do localStorage, então a gravação falhava e a Biblioteca
+// reprocessava os 70 MB de PDF a cada acesso. Estas duas chaves só continuam
+// aqui pra serem apagadas na primeira sincronização, devolvendo o espaço que
+// ocupavam ao resto do app.
 const LOCAL_STORAGE_KEY = 'fiscal_x_biblioteca_local_v4';
 const MANIFEST_VERSION_KEY = 'fiscal_x_biblioteca_version_v4';
 
@@ -44,6 +44,29 @@ async function fetchManifest(path: string): Promise<ManifestFile | null> {
   }
 }
 
+/**
+ * Acervo já extraído no build (ver scripts/extrair-texto-biblioteca.ts):
+ * ~1,7 MB de texto em vez dos ~25 MB de PDF que o navegador teria de baixar e
+ * passar pelo pdf.js. Ausente (script não rodou, município novo), devolve null
+ * e o chamador cai na extração no navegador, como antes.
+ */
+async function fetchAcervoPreExtraido(
+  dir: string,
+  versaoEsperada: string
+): Promise<LegislacaoDocumento[] | null> {
+  try {
+    const res = await fetch(`${dir}/acervo.json`);
+    if (!res.ok) return null;
+    const acervo = await res.json();
+    if (!Array.isArray(acervo?.documents)) return null;
+    // Norma nova no manifest invalida o acervo gerado antes dela.
+    if (acervo.version !== versaoEsperada) return null;
+    return acervo.documents as LegislacaoDocumento[];
+  } catch {
+    return null;
+  }
+}
+
 async function processManifestDocuments(
   manifest: ManifestFile,
   setLoadingMessage: (message: string) => void,
@@ -55,7 +78,12 @@ async function processManifestDocuments(
     try {
       setLoadingMessage(`Processando ${index + 1}/${manifest.documents.length}: ${docInfo.titulo}`);
 
-      const pdfResponse = await fetch(docInfo.path, { cache: 'no-store' });
+      // Sem 'no-store' aqui, de propósito: PDF de lei é arquivo estático e
+      // imutável, e quando muda vem com caminho/versão nova no manifest. O
+      // 'no-store' obrigava a rebaixar os ~70 MB do acervo pela rede a cada
+      // reprocessamento, ignorando o cache HTTP do navegador — banda cara
+      // (egress do App Hosting) e espera longa pra ler o mesmo arquivo.
+      const pdfResponse = await fetch(docInfo.path);
       if (!pdfResponse.ok) {
         console.warn(`Arquivo PDF não encontrado em ${docInfo.path}. Pulando.`);
         continue;
@@ -130,35 +158,52 @@ export function useBiblioteca(municipioId?: string) {
         : null;
 
       const combinedVersion = `${rootManifest.version}::${municipalManifest?.version || ''}`;
-      const localVersion = localStorage.getItem(versionKey);
 
-      if (localVersion === combinedVersion) {
-        const cachedData = localStorage.getItem(localStorageKey);
-        if (cachedData) {
-          setLoadingMessage('Carregando do cache local...');
-          // As leis do legislacao.json entram DEPOIS do cache, nunca dentro
-          // dele: são um import estático (custo zero pra montar) e, guardadas
-          // no cache, ficariam congeladas na versão do manifest de PDFs — uma
-          // lei nova só apareceria se alguém lembrasse de subir a "version"
-          // do manifest, que não tem nada a ver com ela.
-          setDocuments([...JSON.parse(cachedData), ...documentosDaLegislacao]);
-          setLoading(false);
-          return;
-        }
+      const cache = await lerAcervoCache<LegislacaoDocumento>(cacheSuffix);
+      if (cache && cache.versao === combinedVersion) {
+        setLoadingMessage('Carregando do cache local...');
+        // As leis do legislacao.json entram DEPOIS do cache, nunca dentro
+        // dele: são um import estático (custo zero pra montar) e, guardadas
+        // no cache, ficariam congeladas na versão do manifest de PDFs — uma
+        // lei nova só apareceria se alguém lembrasse de subir a "version"
+        // do manifest, que não tem nada a ver com ela.
+        setDocuments([...cache.documentos, ...documentosDaLegislacao]);
+        setLoading(false);
+        return;
       }
 
-      setLoadingMessage('Sincronizando acervo local (isso pode levar um minuto)...');
-      const rootDocs = await processManifestDocuments(rootManifest, setLoadingMessage);
-      const municipalDocs = municipalManifest
-        ? await processManifestDocuments(municipalManifest, setLoadingMessage, municipioId)
+      // Caminho normal: o texto já vem pronto do build. A extração no
+      // navegador (abaixo) só acontece se o acervo.json faltar ou estiver
+      // defasado — por exemplo, num município que acabou de subir uma norma e
+      // ainda não passou por um deploy.
+      setLoadingMessage('Carregando acervo...');
+      const rootPreExtraido = await fetchAcervoPreExtraido('/documentos-biblioteca', rootManifest.version);
+      const municipalPreExtraido = municipalManifest
+        ? await fetchAcervoPreExtraido(`/documentos-biblioteca/municipios/${municipioId}`, municipalManifest.version)
         : [];
+
+      const precisaExtrairNoNavegador = rootPreExtraido === null || municipalPreExtraido === null;
+      if (precisaExtrairNoNavegador) {
+        setLoadingMessage('Sincronizando acervo local (isso pode levar um minuto)...');
+      }
+
+      const rootDocs = rootPreExtraido ?? await processManifestDocuments(rootManifest, setLoadingMessage);
+      const municipalDocs = municipalPreExtraido ?? (municipalManifest
+        ? await processManifestDocuments(municipalManifest, setLoadingMessage, municipioId)
+        : []);
 
       const allDocs = [...rootDocs, ...municipalDocs];
       setDocuments([...allDocs, ...documentosDaLegislacao]);
       // Só os documentos extraídos de PDF vão pro cache — o custo que o cache
       // existe pra evitar é o do pdf.js, não o do import estático.
-      localStorage.setItem(localStorageKey, JSON.stringify(allDocs));
-      localStorage.setItem(versionKey, combinedVersion);
+      await gravarAcervoCache(cacheSuffix, { versao: combinedVersion, documentos: allDocs });
+      // Limpa o cache antigo em localStorage (versões anteriores gravavam o
+      // acervo lá). Libera espaço no teto de ~5 MB que é dividido com todos os
+      // outros caches do app.
+      try {
+        localStorage.removeItem(localStorageKey);
+        localStorage.removeItem(versionKey);
+      } catch { /* storage indisponível: nada a limpar */ }
       setLoadingMessage('Biblioteca carregada!');
 
     } catch (err: any) {

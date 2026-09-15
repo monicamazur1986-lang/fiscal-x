@@ -18,6 +18,14 @@
  * deste mesmo processo (ver nomeGestorResponsavel em pas/[id]/page.tsx).
  * Antes disso existir (ainda na instauração), cai num endereçamento
  * genérico ao cargo, sem nome. */
+import { baseLegalDoMunicipio, porExtensoComUnidade } from '@/lib/base-legal-municipal';
+
+/** Todo texto do rito cita artigo e prazo, e ambos mudam conforme o município
+ *  tenha ou não código sanitário próprio (ver base-legal-municipal.ts). Por
+ *  isso cada função recebe o município: sem ele cai no estadual, que é o
+ *  comportamento de antes. */
+type ComMunicipio = { municipioId?: string | null };
+
 export interface Destinatario {
   nome?: string;
   cargo?: string;
@@ -41,12 +49,13 @@ export function textoDespachoInicial(params: {
 export function textoDespachoInstrucao(params: {
   numeroAI: string;
   prazoDefesaData: string; // já formatada (dd/MM/yyyy)
-}): string {
-  return `Determino à equipe operacional da vigilância sanitária municipal, nos termos do art. 37 da Lei Municipal nº 2.276/2017, que:<br><br>` +
+} & ComMunicipio): string {
+  const base = baseLegalDoMunicipio(params.municipioId);
+  return `Determino à equipe operacional da vigilância sanitária municipal, nos termos do ${base.citacaoInstrucao}, que:<br><br>` +
     `1) Manifeste-se mediante Relatório Técnico de Instrução quanto ao Auto de Infração nº <strong>${params.numeroAI}</strong> e demais fatos relevantes envolvidos na fiscalização, visando à adoção de providências;<br>` +
     `2) Junte aos autos as provas relacionadas às infrações apuradas;<br>` +
     `3) Forneça informações quanto aos antecedentes do infrator em relação às normas sanitárias.<br><br>` +
-    `Determino também que se aguarde o prazo legal de <strong>15 (quinze) dias úteis</strong> para apresentação de defesa administrativa ou impugnação, nos termos do art. 38 da Lei Municipal nº 2.276/2017 c/c art. 69 da Lei Estadual nº 13.331/2001 e art. 88, §2º, da Lei Estadual nº 20.656/2021.<br><br>` +
+    `Determino também que se aguarde o prazo legal de <strong>${porExtensoComUnidade(base.defesa.dias, base.contagemPrazo)}</strong> para apresentação de defesa administrativa ou impugnação, nos termos do ${base.defesa.citacao}.<br><br>` +
     `Prazo de defesa: até <strong>${params.prazoDefesaData}</strong>.<br><br>` +
     `Retornem-se os autos conclusos após o cumprimento do determinado ou o decurso do prazo, o que ocorrer por último.`;
 }
@@ -67,21 +76,74 @@ export function textoTermoJuntadaDefesa(params: {
   dataRecebimento: string; // formatada
   numeroProtocolo?: string;
   destinatario?: Destinatario;
-}): string {
+} & ComMunicipio): string {
+  const base = baseLegalDoMunicipio(params.municipioId);
+  const prazoLegal = `${porExtensoComUnidade(base.defesa.dias, base.contagemPrazo)} previsto no ${base.defesa.citacao}`;
   const protocolo = params.numeroProtocolo ? `, sob protocolo nº <strong>${params.numeroProtocolo}</strong>,` : '';
-  const base = `${blocoDestinatario(params.destinatario)}Junto aos autos a defesa administrativa apresentada pelo autuado${protocolo} recebida em <strong>${params.dataRecebimento}</strong>`;
+  const abertura = `${blocoDestinatario(params.destinatario)}Junto aos autos a defesa administrativa apresentada pelo autuado${protocolo} recebida em <strong>${params.dataRecebimento}</strong>`;
   if (params.tempestividade === 'tempestiva') {
-    return `${base}, dentro do prazo legal de 15 (quinze) dias úteis previsto no art. 69 da Lei Estadual nº 13.331/2001 c/c art. 88, §2º, da Lei Estadual nº 20.656/2021, para conhecimento e providências.`;
+    return `${abertura}, dentro do prazo legal de ${prazoLegal}, para conhecimento e providências.`;
   }
-  return `${base}, fora do prazo legal de 15 (quinze) dias úteis previsto no art. 69 da Lei Estadual nº 13.331/2001 c/c art. 88, §2º, da Lei Estadual nº 20.656/2021, para conhecimento e providências, sem prejuízo da análise de sua admissibilidade pela autoridade julgadora.`;
+  return `${abertura}, fora do prazo legal de ${prazoLegal}, para conhecimento e providências, sem prejuízo da análise de sua admissibilidade pela autoridade julgadora.`;
 }
 
-export function textoTermoInformacaoSemDefesa(params: { numeroAI: string; prazoDefesaData: string }): string {
-  return `Informo que, transcorrido o prazo de 15 (quinze) dias úteis previsto no art. 69 da Lei Estadual nº 13.331/2001 c/c art. 88, §2º, da Lei Estadual nº 20.656/2021, vencido em <strong>${params.prazoDefesaData}</strong>, contado da ciência do Auto de Infração nº <strong>${params.numeroAI}</strong>, <strong>não foi apresentada defesa administrativa</strong> pelo autuado até a presente data.`;
+export function textoTermoInformacaoSemDefesa(params: { numeroAI: string; prazoDefesaData: string } & ComMunicipio): string {
+  const base = baseLegalDoMunicipio(params.municipioId);
+  return `Informo que, transcorrido o prazo de ${porExtensoComUnidade(base.defesa.dias, base.contagemPrazo)} previsto no ${base.defesa.citacao}, vencido em <strong>${params.prazoDefesaData}</strong>, contado da ciência do Auto de Infração nº <strong>${params.numeroAI}</strong>, <strong>não foi apresentada defesa administrativa</strong> pelo autuado até a presente data, ficando o fato certificado nos autos.`;
 }
 
 export function textoDespachoEncerramentoInstrucao(params?: { destinatario?: Destinatario }): string {
   return `${blocoDestinatario(params?.destinatario)}Cumpridas as determinações do despacho de instrução — juntada do Relatório Técnico de Instrução, das provas pertinentes e, conforme o caso, da defesa administrativa ou da informação sobre sua ausência —, encaminho os presentes autos para julgamento e decisão em 1ª instância do Processo Administrativo Sanitário.<br><br>Atenciosamente,`;
+}
+
+/** Só o parágrafo de admissibilidade da defesa — o corpo do julgamento em si
+ * (síntese, fundamentação e decisão) é redigido livremente por quem julga
+ * (ver bloco "Julgamento" em pas/[id]/page.tsx, mesmo padrão do Relatório
+ * Técnico: campo de texto livre, sem modelo fixo pra fundamentação jurídica
+ * do mérito). Admissibilidade sempre entra automática porque já é um dado
+ * conhecido do processo (tempestividade calculada, ou revelia). */
+export function textoAdmissibilidadeJulgamento(params: {
+  temDefesa: boolean;
+  tempestividade?: 'tempestiva' | 'intempestiva';
+}): string {
+  if (!params.temDefesa) {
+    return 'Não tendo sido apresentada defesa administrativa no prazo legal, o julgamento se dá à revelia do autuado, sem prejuízo da análise integral do mérito.';
+  }
+  if (params.tempestividade === 'intempestiva') {
+    return 'A defesa administrativa apresentada, conquanto intempestiva, é conhecida nesta instância para fins de análise de sua admissibilidade, sem prejuízo do prosseguimento do feito.';
+  }
+  return 'A defesa administrativa apresentada é tempestiva e, portanto, conhecida e admitida para julgamento do mérito.';
+}
+
+export function textoDespachoEncaminhamentoTip(params?: { destinatario?: Destinatario }): string {
+  return `${blocoDestinatario(params?.destinatario)}Proferido o julgamento em 1ª instância do presente Processo Administrativo Sanitário, determino a lavratura do Termo de Imposição de Penalidade, dando-se ciência ao autuado da decisão proferida e do prazo para interposição de recurso.<br><br>Atenciosamente,`;
+}
+
+/** TIP — instrumento que dá ciência ao autuado da decisão e abre o prazo
+ * recursal, que não é o mesmo da defesa inicial. No rito estadual são 10 dias
+ * úteis (art. 73 da Lei 13.331/2001); em Prudentópolis são 10 dias para multa
+ * e 15 nos demais casos (art. 30, VI, da Lei 2.276/2017) — por isso o prazo
+ * sai da base legal do município e não de um número fixo. */
+export function textoTermoImposicaoPenalidade(params: { numeroAI: string; prazoRecursalData: string; prazoRecursalMultaData?: string } & ComMunicipio): string {
+  const base = baseLegalDoMunicipio(params.municipioId);
+  const prazoRecursal = base.recurso.diasMulta
+    ? `<strong>${porExtensoComUnidade(base.recurso.diasMulta, base.contagemPrazo)}</strong> na hipótese específica de aplicação de pena de multa, ou de <strong>${porExtensoComUnidade(base.recurso.dias, base.contagemPrazo)}</strong> nos demais casos`
+    : `<strong>${porExtensoComUnidade(base.recurso.dias, base.contagemPrazo)}</strong>`;
+  return `Fica o autuado, em razão do Auto de Infração nº <strong>${params.numeroAI}</strong>, cientificado da decisão proferida em julgamento de 1ª instância no presente Processo Administrativo Sanitário e da sanção nela imposta.<br><br>` +
+    `Fica ainda cientificado de que poderá interpor recurso administrativo à autoridade imediatamente superior àquela que proferiu a decisão, no prazo de ${prazoRecursal}, contados desta ciência, nos termos do ${base.recurso.citacao}.<br><br>` +
+    (base.recurso.diasMulta && params.prazoRecursalMultaData
+      ? `Prazo recursal: até <strong>${params.prazoRecursalMultaData}</strong> em caso de multa; até <strong>${params.prazoRecursalData}</strong> nos demais casos.`
+      : `Prazo recursal: até <strong>${params.prazoRecursalData}</strong>.`);
+}
+
+/** Só a frase de abertura — o corpo copia o texto da peça original (ver
+ * handleRetificarPeca em pas/[id]/page.tsx), editado no que precisar ser
+ * corrigido. Nunca substitui nem apaga a peça original (Título III, Cap.2,
+ * §1.1–1.2 do manual: vício sanável vira um NOVO ato — ratificação, reforma
+ * ou conversão —, sempre ao lado do ato original, "de forma absolutamente
+ * transparente"). */
+export function textoTermoRetificacao(params: { pecaOriginalTitulo: string; pecaOriginalNumero: number }): string {
+  return `Fica retificada, no que segue, a peça nº ${params.pecaOriginalNumero} (${params.pecaOriginalTitulo}) constante destes autos, para fins de correção do quanto nela constou:<br><br>`;
 }
 
 export const PAS_PECA_TITULOS: Record<string, string> = {
@@ -91,6 +153,10 @@ export const PAS_PECA_TITULOS: Record<string, string> = {
   termo_juntada: 'Termo de Juntada',
   termo_informacao: 'Termo de Informação',
   despacho_encerramento_instrucao: 'Despacho de Encerramento da Instrução',
+  julgamento_primeira_instancia: 'Julgamento em 1ª Instância',
+  despacho_encaminhamento_tip: 'Despacho — Encaminhamento para TIP',
+  termo_imposicao_penalidade: 'Termo de Imposição de Penalidade (TIP)',
+  termo_retificacao: 'Termo de Retificação',
 };
 
 export const PAS_FASE_LABEL: Record<string, string> = {

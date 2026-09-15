@@ -60,7 +60,10 @@ export function SelecionarAutoridadeParaFormulario({ onSelect }: { onSelect: (au
         <>
         <Dialog open={isOpen} onOpenChange={(open) => { if (!open) resetAndClose(); else setIsOpen(true); }}>
             <DialogTrigger asChild>
-                 <Button variant="ghost" size="sm" className="no-print h-9 gap-1.5 px-4 rounded-xl font-black text-[9px] uppercase tracking-widest menu-metallic-cobalt text-white shadow-lg shadow-blue-500/20 active:scale-95 transition-all shrink-0">
+                 {/* h-11 = 44px, o mínimo recomendado pra alvo de toque. Antes
+                     eram 36px com texto de 9px — difícil de acertar e de ler
+                     num celular, que é onde a vistoria é preenchida. */}
+                 <Button variant="ghost" size="sm" className="no-print h-11 gap-2 px-5 rounded-xl font-black text-[11px] uppercase tracking-widest menu-metallic-cobalt text-white shadow-lg shadow-blue-500/20 active:scale-95 transition-all shrink-0">
                     <UserPlus className="h-4 w-4" />
                     Adicionar Fiscal
                 </Button>

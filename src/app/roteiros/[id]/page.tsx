@@ -31,15 +31,19 @@ import {
   CheckSquare,
   Square,
   Cloud,
-  History,
   Eraser,
   Landmark,
   Clock,
-  Pencil
+  Pencil,
+  ScrollText,
+  ChevronRight,
+  Users,
+  type LucideIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { cn, normalizeId } from "@/lib/utils"
+import { useEscalaFolha } from "@/hooks/use-escala-folha"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -49,6 +53,8 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useAuth } from "@/hooks/use-auth"
 import { useInspecoes } from "@/hooks/use-inspecoes"
+import { GerarIntimacaoDialog } from "@/components/roteiros/gerar-intimacao-dialog"
+import { darkenHex } from "@/lib/dashboard-menu-items"
 import { useMunicipiosAtivos } from "@/hooks/use-municipios-ativos"
 import { setChecklistExitGuard } from "@/hooks/use-checklist-exit-guard"
 import { SelecionarAutoridadeParaFormulario } from "@/components/selecionar-autoridade-dialog"
@@ -84,6 +90,63 @@ type RespostaItem = 'SIM' | 'NAO' | 'ND' | NotaRoi
  * recebeu nota abaixo de NOTA_CONFORME (roteiros ROI) — nos dois casos é o que
  * entra no relatório como exigência a regularizar.
  */
+/** Minúsculas e sem acento — o fiscal digita "esterilizacao" e precisa achar
+ *  "ESTERILIZAÇÃO". */
+function normalizarTexto(texto: string): string {
+  return (texto || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+/**
+ * Cabeçalho das etapas recolhíveis do roteiro.
+ *
+ * Antes cada uma era uma linha de texto de 11px, toda em versalete com
+ * espaçamento largo ("TEXTO DE ABERTURA DO RELATÓRIO"), todas iguais entre si
+ * — o fiscal precisava ler a frase inteira pra descobrir do que se tratava, e
+ * nada indicava o que já estava preenchido. Agora cada etapa tem nome curto,
+ * uma linha explicando, ícone com cor e um distintivo com o estado atual.
+ */
+function TituloEtapa({
+  icone: Icone,
+  titulo,
+  descricao,
+  distintivo,
+  preenchida,
+}: {
+  icone: LucideIcon;
+  titulo: string;
+  descricao: string;
+  /** Resumo do estado (ex.: "15 dias", "3 de 40 respondidos"). */
+  distintivo?: string;
+  /** Pinta o ícone de verde quando a etapa já foi cumprida. */
+  preenchida?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-3 flex-1 min-w-0 text-left">
+      <div className={cn(
+        "p-2 rounded-xl shrink-0 transition-colors",
+        preenchida ? "bg-[#E4EEEC] text-[#1F7A5C]" : "bg-[#F1EEE4] text-[#6B6659]"
+      )}>
+        <Icone className="h-5 w-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="font-serif font-bold text-[16px] text-[#262420] leading-tight">{titulo}</p>
+        <p className="text-[12px] text-[#6B6659] leading-snug mt-0.5">{descricao}</p>
+      </div>
+      {distintivo && (
+        <span className={cn(
+          "rounded-full px-2.5 py-1 text-[11px] font-bold leading-none shrink-0 tabular-nums",
+          preenchida ? "bg-[#E4EEEC] text-[#0E4A44]" : "bg-[#F1EEE4] text-[#6B6659]"
+        )}>
+          {distintivo}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function ehNaoConformidade(resposta: RespostaItem | undefined): boolean {
   if (resposta === undefined) return false;
   if (resposta === 'NAO') return true;
@@ -2068,21 +2131,18 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   const router = useRouter()
   const { saveInspecao, deleteInspecao, inspecoes, loading: loadingInspecoes } = useInspecoes()
   const reportRef = useRef<HTMLDivElement>(null)
-  const reportWrapperRef = useRef<HTMLDivElement>(null)
   // Encolhe só a APARÊNCIA da folha A4 pra caber na tela do celular — nunca a
   // largura real (offsetWidth), que é a base de todo o cálculo de paginação
   // do PDF em generate-roteiro-pdf.tsx. `transform: scale` não altera
   // offsetWidth/offsetHeight, então o PDF gerado continua idêntico
   // independente do quanto a prévia está reduzida na tela.
-  const [reportPreviewScale, setReportPreviewScale] = useState(1)
-  const [reportPreviewHeight, setReportPreviewHeight] = useState<number | undefined>(undefined)
   const searchParams = useSearchParams()
 
   // Roteiro exclusivo de Prudentópolis — mesmo que alguém digite a URL direto,
   // fiscais/gestores de outros municípios são levados de volta pra lista.
   useEffect(() => {
     if (id === 'odontologia-prudentopolis' && profile && profile.municipioId !== 'prudentopolis' && profile.role !== 'root') {
-      router.replace('/roteiros');
+      router.replace('/roteiros/nova-inspecao');
     }
   }, [id, profile, router]);
 
@@ -2210,6 +2270,10 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   const conclusaoTravadaRef = useRef(false)
   const [uploadingItem, setUploadingItem] = useState<string | null>(null)
   const [view, setView] = useState<'checklist' | 'report'>('checklist')
+
+  // Encaixe da folha A4 na tela — ver use-escala-folha.ts. Só liga quando a
+  // prévia do relatório está aberta.
+  const escalaFolha = useEscalaFolha({ ativo: view === 'report' })
   const [isSearchingCnpj, setIsSearchingCnpj] = useState(false)
   const [fiscais, setFiscais] = useState<Autoridade[]>([])
   const [signingFiscalIndex, setSigningFiscalIndex] = useState<number | null>(null)
@@ -2237,8 +2301,6 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // Seletor de inspeções deste roteiro (rascunhos em andamento + já
   // finalizadas) — substitui o antigo popup de "um único rascunho recuperável"
   // (que usava .find() e só enxergava a mais recente).
-  const [isPickerOpen, setIsPickerOpen] = useState(false);
-  const jaAutoAbriuPickerRef = useRef(false);
   const isDirtyRef = useRef(false);
   // Sempre aponta para a versão mais recente de handleSaveDraft — sem isso, o
   // heartbeat abaixo (que só recria o intervalo quando answers/idData mudam)
@@ -2256,10 +2318,55 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // próxima pendente — vale pra cada seção aberta, mesmo com várias abertas
   // ao mesmo tempo, sem travar a navegação manual.
   const [openSections, setOpenSections] = useState<string[]>([]);
+  // BUSCA DENTRO DO ROTEIRO — roteiro grande chega a 183 itens em dezenas de
+  // seções recolhidas, e achar um item específico (principalmente um que o
+  // fiscal percebeu fora de ordem, já no fim da vistoria) exigia abrir seção
+  // por seção. Aqui a busca filtra os itens e deixa cada um respondível no
+  // lugar, sem tirar o fiscal da tela.
+  const [buscaItem, setBuscaItem] = useState("");
+  const [isGerarIntimacaoOpen, setIsGerarIntimacaoOpen] = useState(false);
+
+  const termoBusca = useMemo(() => normalizarTexto(buscaItem), [buscaItem]);
+
+  /** Seções com os itens que casam com a busca. Vazio = sem busca ativa. */
+  const secoesFiltradas = useMemo(() => {
+    if (!termoBusca) return null;
+    return checklist.secoes
+      .map(secao => ({
+        ...secao,
+        // Cabeçalho de agrupamento não tem resposta própria; só entra quando o
+        // texto dele casa, pra não poluir o resultado com linhas inúteis.
+        itens: secao.itens.filter(item =>
+          normalizarTexto(item.text).includes(termoBusca) ||
+          normalizarTexto(item.id).includes(termoBusca) ||
+          (item.roi ? normalizarTexto(item.roi.indicador).includes(termoBusca) : false)
+        ),
+      }))
+      .filter(secao => secao.itens.length > 0);
+  }, [checklist.secoes, termoBusca]);
+
+  const totalAchados = useMemo(
+    () => (secoesFiltradas || []).reduce((soma, s) => soma + s.itens.filter(i => !i.isHeader).length, 0),
+    [secoesFiltradas]
+  );
+
+  // Com busca ativa, tudo que casou já aparece aberto — ter de expandir a
+  // seção depois de buscar anularia o ganho.
+  const secoesVisiveis = secoesFiltradas ?? checklist.secoes;
+  const secoesAbertas = secoesFiltradas ? secoesFiltradas.map(s => s.id) : openSections;
+
   const expandirTodasSecoes = () => setOpenSections(checklist.secoes.map(s => s.id));
   const recolherTodasSecoes = () => setOpenSections([]);
   // [respondidos, total] — só itens com resposta própria contam (isHeader é
   // só um rótulo de agrupamento, sem SIM/NÃO/ND/nota).
+  // Progresso do roteiro inteiro — alimenta o distintivo da etapa "Itens da
+  // vistoria" ("12 de 183"), que antes não existia: o fiscal só descobria o
+  // quanto faltava abrindo seção por seção.
+  const [totalRespondidos, totalRespondiveis] = useMemo(() => {
+    const respondiveis = checklist.secoes.flatMap(s => s.itens).filter(i => !i.isHeader);
+    return [respondiveis.filter(i => answers[i.id] !== undefined).length, respondiveis.length];
+  }, [checklist.secoes, answers]);
+
   const progressoSecao = (secao: ChecklistSection): [number, number] => {
     const itensRespondiveis = secao.itens.filter(i => !i.isHeader);
     const respondidos = itensRespondiveis.filter(i => answers[i.id] !== undefined).length;
@@ -2296,13 +2403,25 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // fiscal em seguida.
   useEffect(() => {
     secoesAvancadasRef.current = new Set();
+    // Tudo recolhido ao abrir a tela — inclusive as seções de itens. A
+    // vistoria começa pelo botão "Iniciar inspeção", que abre a primeira
+    // pendente; daí em diante o avanço é automático (ver o efeito abaixo,
+    // que fecha a seção concluída e abre a seguinte).
+    setOpenSections([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, currentInspecaoId]);
+
+  /** Abre a primeira seção ainda não concluída (ou a primeira, se tudo pronto)
+   *  e rola até ela — o efeito de scroll acima reage à abertura. */
+  const iniciarInspecao = useCallback(() => {
     const primeiraPendente = checklist.secoes.find(s => {
       const [respondidos, total] = progressoSecao(s);
       return total > 0 && respondidos < total;
     });
-    setOpenSections(primeiraPendente ? [primeiraPendente.id] : []);
+    const alvo = primeiraPendente ?? checklist.secoes.find(s => progressoSecao(s)[1] > 0);
+    if (alvo) setOpenSections([alvo.id]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, currentInspecaoId]);
+  }, [checklist.secoes, answers]);
 
   // Sempre que uma seção aberta é concluída, fecha ela e abre sozinho a
   // próxima seção pendente — é o "sistema guiando" de uma seção pra outra.
@@ -2390,22 +2509,9 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     return () => setChecklistExitGuard(null);
   }, [view, currentInspecaoId, answers, idData.fantasia, router]);
 
-  // Todas as inspeções deste fiscal neste roteiro — em vez de só a mais
-  // recente (era o que o antigo .find() enxergava), separadas por status e
-  // ordenadas pela última atualização. Base do seletor (item 2 do plano).
-  const minhasInspecoesDoRoteiro = useMemo(() => {
-    if (!profile) return { emAndamento: [] as Inspecao[], finalizadas: [] as Inspecao[] };
-    const minhas = inspecoes.filter(i => i.checklistData?.roteiroId === id && i.fiscalId === profile.uid);
-    const porAtualizacao = (a: Inspecao, b: Inspecao) =>
-      new Date(b.updatedAt || b.data).getTime() - new Date(a.updatedAt || a.data).getTime();
-    return {
-      emAndamento: minhas.filter(i => i.status === 'rascunho').sort(porAtualizacao),
-      finalizadas: minhas.filter(i => i.status === 'concluido').sort(porAtualizacao),
-    };
-  }, [inspecoes, id, profile]);
-
   // Carrega uma inspeção específica (rascunho ou já finalizada) no
-  // formulário — usada tanto pelo seletor quanto por ?inspecaoId= na URL.
+  // formulário — hoje só por ?inspecaoId= na URL, que é como as telas
+  // Roteiros › Inspeções em Andamento e › Relatórios abrem uma vistoria.
   const carregarInspecao = useCallback((inspecao: Inspecao) => {
     if (!inspecao.checklistData) return;
     const cd = inspecao.checklistData;
@@ -2439,7 +2545,6 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     setView(inspecao.status === 'concluido' ? 'report' : 'checklist');
     isDirtyRef.current = false;
     router.replace(`/roteiros/${id}?inspecaoId=${inspecao.id}`, { scroll: false });
-    setIsPickerOpen(false);
   }, [config, id, isRoi, profile?.roteiroTextos, router]);
 
   // Reseta pra uma inspeção nova em branco — nem toca no que já está salvo
@@ -2456,12 +2561,12 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     setView('checklist');
     isDirtyRef.current = false;
     router.replace(`/roteiros/${id}`, { scroll: false });
-    setIsPickerOpen(false);
   }, [id, router, buildInitialIdData]);
 
   // Abre uma inspeção específica vinda da URL (?inspecaoId=) — link direto,
   // recarregar a página, ou voltar depois de sair. Só entra em ação uma vez;
-  // depois disso é o usuário quem decide trocar (pelo seletor).
+  // depois disso quem decide trocar de inspeção é a navegação pelas telas do
+  // menu de Roteiros.
   const jaCarregouPorUrlRef = useRef(false);
   useEffect(() => {
     if (jaCarregouPorUrlRef.current || loadingInspecoes) return;
@@ -2473,18 +2578,6 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
       jaCarregouPorUrlRef.current = true;
     }
   }, [searchParams, inspecoes, loadingInspecoes, carregarInspecao]);
-
-  // Abertura automática do seletor ao entrar na página sem ?inspecaoId= — só
-  // uma vez, e só se não veio nada pela URL (evita abrir por cima de uma
-  // inspeção que acabou de ser carregada) nem já estiver editando uma.
-  useEffect(() => {
-    if (jaAutoAbriuPickerRef.current || loadingInspecoes || !profile || currentInspecaoId) return;
-    if (searchParams.get('inspecaoId')) return;
-    if (minhasInspecoesDoRoteiro.emAndamento.length > 0) {
-      setIsPickerOpen(true);
-    }
-    jaAutoAbriuPickerRef.current = true;
-  }, [loadingInspecoes, profile, currentInspecaoId, searchParams, minhasInspecoesDoRoteiro]);
 
   // Marca alterações pendentes para o heartbeat/beforeunload saberem que há
   // algo ainda não confirmado como salvo na nuvem.
@@ -2562,15 +2655,14 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     conclusaoTravadaRef.current = true;
   };
 
-  // Atalho do cabeçalho ("Minhas Inspeções") — reabre o seletor a qualquer
-  // momento, não só automaticamente ao entrar na página. Salva antes de abrir
-  // pra garantir que nada da edição atual se perca ao trocar de inspeção.
-  const handleAbrirSeletor = async () => {
-    if (isDirtyRef.current) await handleSaveDraft(false);
-    setIsPickerOpen(true);
-  };
-
-  const handleSaveDraft = useCallback(async (showToast = true) => {
+  /**
+   * `respostasAgora` existe porque quem marca um item chama esta função no
+   * mesmo instante do `setAnswers`, e o estado do React ainda não mudou: sem
+   * o parâmetro, o save gravava o `answers` ANTERIOR — a primeira resposta da
+   * vistoria ia pra nuvem faltando justamente o item que acabou de ser
+   * marcado. Quem não precisa disso continua chamando sem o segundo argumento.
+   */
+  const handleSaveDraft = useCallback(async (showToast = true, respostasAgora?: Record<string, RespostaItem>) => {
     if (!profile) return;
     setIsSavingDraft(true);
     try {
@@ -2580,7 +2672,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         data: new Date(),
         fiscalId: profile.uid,
         fiscalNome: profile.displayName || "Fiscal",
-        checklistData: { answers, observations, itemPhotos, customItems, idData, cnaesDisponiveis: foundCnaes, roteiroId: id, introducaoHtml, conclusaoHtml }
+        checklistData: { answers: respostasAgora ?? answers, observations, itemPhotos, customItems, idData, cnaesDisponiveis: foundCnaes, roteiroId: id, introducaoHtml, conclusaoHtml }
       };
       const res = await saveInspecao(data, currentInspecaoId || undefined);
       if (res?.id) {
@@ -2588,7 +2680,15 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         setInspecaoStatus(prev => prev ?? 'rascunho');
         // Primeiro save de uma inspeção nova (sem ?inspecaoId= ainda) — reflete
         // o id na URL pra sobreviver a um refresh ou ser reaberta pelo link.
-        if (!currentInspecaoId) router.replace(`/roteiros/${id}?inspecaoId=${res.id}`, { scroll: false });
+        //
+        // E marca a inspeção como JÁ CARREGADA: sem isso, colocar o id na URL
+        // acordava o efeito que abre inspeção por link, que então recarregava
+        // por cima o que acabara de ser gravado — apagando da tela a resposta
+        // recém-marcada. Esta tela já É essa inspeção; não há o que carregar.
+        if (!currentInspecaoId) {
+          jaCarregouPorUrlRef.current = true;
+          router.replace(`/roteiros/${id}?inspecaoId=${res.id}`, { scroll: false });
+        }
       }
       isDirtyRef.current = false;
       // saveInspecao nunca lança erro — se a gravação na nuvem falhou de
@@ -2673,7 +2773,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     try {
         await deleteInspecao(currentInspecaoId);
         toast({ title: "Rascunho Excluído" });
-        router.push("/roteiros");
+        router.push("/roteiros/em-andamento");
     } catch (e: any) {
       // Mostra o motivo real (ex.: falha de permissão) em vez de um erro
       // genérico — sem isso, uma exclusão que falha silenciosamente no
@@ -2898,7 +2998,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
       if (res?.id) setCurrentInspecaoId(res.id);
       setInspecaoStatus('concluido');
       toast({ title: "Relatório Finalizado", description: "O PDF foi baixado e a vistoria foi encerrada." });
-      router.push('/roteiros');
+      router.push('/roteiros/relatorios');
     } catch (e) {
       toast({ variant: "destructive", title: "Erro ao finalizar relatório" });
     } finally {
@@ -3013,56 +3113,6 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     ? (isDataUrl ? config.logoUrl! : `/api/proxy-image?url=${encodeURIComponent(config.logoUrl!)}`)
     : undefined;
 
-  // Recalcula a escala da prévia sempre que a tela do relatório abre, muda de
-  // tamanho (rotação do aparelho) ou o conteúdo da folha muda de altura
-  // (seções carregando, fotos etc.) — sem isso a folha A4 (210mm ≈ 794px)
-  // fica maior que a tela e força rolagem lateral no celular.
-  useEffect(() => {
-    if (view !== 'report') return;
-    const wrapperEl = reportWrapperRef.current;
-    const paperEl = reportRef.current;
-    if (!wrapperEl || !paperEl) return;
-
-    const recompute = () => {
-      const wrapperStyle = window.getComputedStyle(wrapperEl);
-      const paddingX = parseFloat(wrapperStyle.paddingLeft || '0') + parseFloat(wrapperStyle.paddingRight || '0');
-      const availableWidth = wrapperEl.clientWidth - paddingX;
-      const naturalWidth = paperEl.offsetWidth;
-      const naturalHeight = paperEl.offsetHeight;
-      const scale = naturalWidth > availableWidth ? availableWidth / naturalWidth : 1;
-      setReportPreviewScale(scale);
-      setReportPreviewHeight(naturalHeight * scale);
-    };
-
-    recompute();
-
-    // Só reage a mudança de LARGURA do wrapper (rotação do aparelho, sidebar
-    // recolhendo) e a qualquer mudança de conteúdo do paperEl — nunca à
-    // mudança de ALTURA do próprio wrapper, que é a própria coisa que este
-    // efeito define logo acima (`setReportPreviewHeight`). Sem esse filtro,
-    // o ResizeObserver notifica a própria mudança que ele causou, entrando
-    // num ciclo observer → setState → nova notificação sem nunca convergir,
-    // travando a tela do relatório.
-    let lastWrapperWidth = wrapperEl.clientWidth;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.target === wrapperEl) {
-          const width = wrapperEl.clientWidth;
-          if (width === lastWrapperWidth) continue;
-          lastWrapperWidth = width;
-        }
-        recompute();
-        break;
-      }
-    });
-    ro.observe(wrapperEl);
-    ro.observe(paperEl);
-    window.addEventListener('resize', recompute);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', recompute);
-    };
-  }, [view]);
 
   if (view === 'report') {
     return (
@@ -3072,6 +3122,19 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             <div className="flex items-center gap-3">
               {inspecaoStatus !== 'concluido' && (
                 <Button onClick={handlePolishAllObservations} disabled={isPolishingBatch || !hasUnreviewedObservations} variant="outline" className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-violet-50 text-violet-600 border-violet-100 shadow-sm hover:bg-violet-100">{isPolishingBatch ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />} Revisar Observações com IA</Button>
+              )}
+              {/* Termo de intimação a partir das não conformidades — só depois
+                  de finalizar, quando o que é ou não conformidade já está
+                  decidido. Abre em diálogo sobre o relatório: o fiscal não sai
+                  da tela nem perde o que estava fazendo. */}
+              {inspecaoStatus === 'concluido' && !isRoi && nonConformitiesBySection.length > 0 && (
+                <Button
+                  onClick={() => setIsGerarIntimacaoOpen(true)}
+                  variant="outline"
+                  className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-[#E4EEEC] text-[#0E4A44] border-[#0E4A44]/20 shadow-sm hover:bg-[#d5e5e2]"
+                >
+                  <ScrollText className="h-4 w-4 mr-2" /> Gerar Termo de Intimação
+                </Button>
               )}
               {inspecaoStatus === 'concluido' ? (
                 <Button onClick={downloadPdf} disabled={isGeneratingPdf} className="bg-primary text-white rounded-xl h-11 px-8 font-black uppercase text-[10px] shadow-xl">{isGeneratingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />} Baixar PDF Novamente</Button>
@@ -3098,8 +3161,8 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             </div>
         </header>
 
-        <div ref={reportWrapperRef} className="document-paper-wrapper custom-scrollbar" style={{ overflowX: reportPreviewScale < 1 ? 'hidden' : 'auto', height: reportPreviewHeight }}>
-          <div ref={reportRef} className="document-paper h-auto bg-white" style={{ transform: `scale(${reportPreviewScale})`, transformOrigin: 'top left' }}>
+        <div ref={escalaFolha.wrapperRef} className="document-paper-wrapper custom-scrollbar" style={escalaFolha.estiloWrapper}>
+          <div ref={reportRef} className="document-paper h-auto bg-white" style={escalaFolha.estiloFolha}>
               <div data-pdf-header className="flex flex-row items-center justify-between gap-6 mb-1 pb-2 border-none">
                   <div className="w-[140px] h-[100px] md:w-[180px] md:h-[100px] flex items-center justify-start overflow-hidden">
                     {hasLogo ? (
@@ -3253,13 +3316,22 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
               </div>
           </div>
         </div>
+
+        <GerarIntimacaoDialog
+          aberto={isGerarIntimacaoOpen}
+          onOpenChange={setIsGerarIntimacaoOpen}
+          dados={idData}
+          grupos={nonConformitiesBySection}
+          inspecaoId={currentInspecaoId}
+          tituloRoteiro={checklist.titulo}
+        />
       </div>
     )
   }
 
   return (
-    <div className="max-w-6xl mx-auto w-full p-4 md:p-8 space-y-6 md:space-y-8 pb-40 font-sans">
-      <header className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 md:p-6 rounded-lg border border-[#E4DFD1] shadow-sm no-print">
+    <div className="max-w-6xl mx-auto w-full p-4 md:p-8 space-y-6 md:space-y-8 pb-32 sm:pb-40 font-sans">
+      <header className="flex flex-wrap items-center justify-between gap-4 bg-white p-5 md:p-6 rounded-2xl border border-[#E4DFD1] shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)] no-print">
         <div className="flex items-center gap-4">
           <div className="p-4 rounded-xl bg-[#E4EEEC] text-[#0E4A44]"><ClipboardList className="h-6 w-6" /></div>
           <div>
@@ -3267,38 +3339,11 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             <p className="text-[11px] text-[#A39D8C] font-black uppercase tracking-[0.2em] mt-1">{checklist.subtitulo}</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-            {lastAutoSave && (<div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100"><Cloud className="h-3 w-3" /><span className="text-[10px] font-black uppercase whitespace-nowrap">Salvo às {format(lastAutoSave, "HH:mm")}</span></div>)}
-            <button
-              type="button"
-              onClick={handleAbrirSeletor}
-              title="Minhas inspeções deste roteiro"
-              className="relative h-12 w-12 rounded-xl text-[#A39D8C] hover:text-primary hover:bg-primary/5 flex items-center justify-center transition-all"
-            >
-              <History className="h-5 w-5" />
-              {minhasInspecoesDoRoteiro.emAndamento.length > 0 && (
-                <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-primary text-white text-[10px] font-black flex items-center justify-center">{minhasInspecoesDoRoteiro.emAndamento.length}</span>
-              )}
-            </button>
-            {currentInspecaoId ? (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <button type="button" className="h-12 w-12 rounded-xl text-rose-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-all">{isDeletingDraft ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-5 w-5" />}</button>
-                </AlertDialogTrigger>
-                <AlertDialogContent className="rounded-lg">
-                  <AlertDialogHeader>
-                    <AlertDialogTitle className="font-serif text-xl text-[#262420]">Excluir este rascunho?</AlertDialogTitle>
-                    <AlertDialogDescription>Isso apaga permanentemente esta inspeção — respostas, fotos e observações. Não é possível desfazer.</AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDeleteDraft} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-rose-600 hover:bg-rose-700">Excluir</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            ) : (
-              <button type="button" onClick={handleDeleteDraft} className="h-12 w-12 rounded-xl text-rose-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-all"><Trash2 className="h-5 w-5" /></button>
-            )}
+        {/* Só o indicador de salvamento. O histórico ("Minhas inspeções deste
+            roteiro") saiu: repetia a tela Roteiros › Inspeções em Andamento, e
+            a exclusão desceu pra barra fixa, junto das outras duas ações. */}
+        <div className="flex items-center gap-2 sm:gap-3">
+            {lastAutoSave && (<div className="flex items-center gap-2 text-[#1F7A5C] bg-[#E4EEEC]/70 px-3 py-1.5 rounded-full border border-[#1F7A5C]/20"><Cloud className="h-3 w-3" /><span className="text-[10px] font-black uppercase whitespace-nowrap">Salvo às {format(lastAutoSave, "HH:mm")}</span></div>)}
         </div>
       </header>
 
@@ -3369,9 +3414,9 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             </div>
           )}
 
-          <div className="bg-white p-4 md:p-6 border border-[#E4DFD1] shadow-sm space-y-4">
+          <div className="bg-white p-5 md:p-6 rounded-2xl border border-[#E4DFD1] shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)] space-y-4">
             <div className="space-y-2">
-                <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Building2 className="h-4 w-4 text-primary" /> Estabelecimento</h2>
+                <TituloEtapa icone={Building2} titulo="Estabelecimento" descricao="Quem está sendo inspecionado" preenchida={!!idData.fantasia} />
                 <div className="bg-[#FAF8F3] border border-[#E4DFD1] divide-y divide-[#E4DFD1]">
                    <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
                       <Label className="sm:w-28 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Razão Social</Label>
@@ -3467,9 +3512,12 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
 
             <div className="h-px bg-[#F1EEE4]" />
 
-            <div className="space-y-2">
-                <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Building2 className="h-4 w-4 text-primary" /> Responsáveis e Data da Inspeção</h2>
-
+            <Accordion type="single" collapsible>
+              <AccordionItem value="responsavel" className="border border-[#E4DFD1] rounded-xl bg-white px-4 transition-all duration-200 hover:border-[#0E4A44]/30 data-[state=open]:border-[#0E4A44]/40 data-[state=open]:bg-[#FCFBF7] data-[state=open]:shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
+                <AccordionTrigger className="py-3 hover:no-underline [&>svg]:text-primary">
+                  <TituloEtapa icone={Users} titulo="Responsável pelo estabelecimento" descricao="Quem acompanhou a vistoria e quando ela foi feita" preenchida={!!idData.responsavel} />
+                </AccordionTrigger>
+                <AccordionContent className="pt-3 space-y-2">
                 {(mostrarResponsavelTecnico || idData.responsavelTecnico || idData.responsavelTecnicoRegistro) ? (
                   <div className="bg-[#FAF8F3] border border-[#E4DFD1] relative">
                      <button type="button" onClick={() => { setIdData({...idData, responsavelTecnico: '', responsavelTecnicoRegistro: ''}); setMostrarResponsavelTecnico(false); }} className="absolute right-2 top-2 h-6 w-6 flex items-center justify-center text-[#A39D8C] hover:text-rose-500 z-10" title="Remover responsável técnico"><X className="h-3.5 w-3.5" /></button>
@@ -3506,7 +3554,9 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                       <Input type="datetime-local" value={idData.dataHorario} onChange={e => setIdData({...idData, dataHorario: e.target.value})} className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
                    </div>
                 </div>
-            </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
 
             {/* ROI da ANVISA não usa os textos narrativos — ver checklist.roi. */}
             {!isRoi && (
@@ -3514,9 +3564,14 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             <div className="h-px bg-[#F1EEE4]" />
 
             <Accordion type="single" collapsible>
-              <AccordionItem value="introducao" className="border-none">
-                <AccordionTrigger className="py-0 hover:no-underline [&>svg]:text-primary">
-                  <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><FileText className="h-4 w-4 text-primary" /> Texto de Abertura do Relatório</h2>
+              <AccordionItem value="introducao" className="border border-[#E4DFD1] rounded-xl bg-white px-4 transition-all duration-200 hover:border-[#0E4A44]/30 data-[state=open]:border-[#0E4A44]/40 data-[state=open]:bg-[#FCFBF7] data-[state=open]:shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
+                <AccordionTrigger className="py-3 hover:no-underline [&>svg]:text-primary">
+                  <TituloEtapa
+                    icone={FileText}
+                    titulo="Introdução"
+                    descricao="Texto que abre o relatório"
+                    preenchida={!!introducaoHtml}
+                  />
                 </AccordionTrigger>
                 <AccordionContent className="pt-3 space-y-3">
                 <p className="text-[11px] font-medium text-[#6B6659]">Texto que abre o relatório final ("Considerações Gerais") — editável. Pré-preenchido com o padrão do município e os dados acima.</p>
@@ -3556,9 +3611,15 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             <div className="h-px bg-[#F1EEE4]" />
 
             <Accordion type="single" collapsible>
-              <AccordionItem value="prazo" className="border-none">
-                <AccordionTrigger className="py-0 hover:no-underline [&>svg]:text-primary">
-                  <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Clock className="h-4 w-4 text-primary" /> Prazo para Regularização e Anexos</h2>
+              <AccordionItem value="prazo" className="border border-[#E4DFD1] rounded-xl bg-white px-4 transition-all duration-200 hover:border-[#0E4A44]/30 data-[state=open]:border-[#0E4A44]/40 data-[state=open]:bg-[#FCFBF7] data-[state=open]:shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
+                <AccordionTrigger className="py-3 hover:no-underline [&>svg]:text-primary">
+                  <TituloEtapa
+                    icone={Clock}
+                    titulo="Prazo"
+                    descricao="Dias para o estabelecimento se adequar"
+                    distintivo={idData.prazoDias ? `${idData.prazoDias} dias` : undefined}
+                    preenchida={!!idData.prazoDias && !!idData.baseLegalPrazo}
+                  />
                 </AccordionTrigger>
                 <AccordionContent className="pt-3">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -3578,21 +3639,83 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   roteiro, e nem todos são estaduais (farmácia é lei federal,
                   os ROI são da ANVISA). */}
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><FileSearch className="h-4 w-4 text-primary" /> Avaliação Técnica</h2>
+                {/* Ação principal da tela: é aqui que a vistoria de fato
+                    acontece. Ganha o mesmo peso visual do botão primário, em
+                    vez de parecer só mais um cabeçalho de seção. */}
+                <button
+                  type="button"
+                  onClick={iniciarInspecao}
+                  className="group flex-1 min-w-0 rounded-2xl px-5 py-4 text-white text-left shadow-[0_10px_24px_-12px_rgba(38,36,32,0.45)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-14px_rgba(38,36,32,0.5)] active:scale-[0.99]"
+                  style={{ background: `linear-gradient(135deg, #1F7A5C 0%, ${darkenHex('#1F7A5C', 28)} 100%)` }}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+                      <FileSearch className="h-6 w-6" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-serif font-bold text-[19px] leading-tight">
+                        {totalRespondidos === 0 ? "Iniciar inspeção" : "Continuar inspeção"}
+                      </p>
+                      <p className="text-[12px] text-white/75 leading-snug mt-0.5">
+                        {totalRespondidos === 0
+                          ? `${totalRespondiveis} itens para verificar`
+                          : `${totalRespondidos} de ${totalRespondiveis} respondidos`}
+                      </p>
+                    </div>
+                    {totalRespondiveis > 0 && totalRespondidos === totalRespondiveis
+                      ? <CheckCircle2 className="h-6 w-6 text-white shrink-0" />
+                      : <ChevronRight className="h-6 w-6 text-white/60 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:text-white" />}
+                  </div>
+                </button>
                 <div className="flex items-center gap-2 no-print">
-                  <button type="button" onClick={expandirTodasSecoes} className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-[#6B6659] hover:bg-[#F1EEE4] transition-colors">Expandir tudo</button>
-                  <button type="button" onClick={recolherTodasSecoes} className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-[#6B6659] hover:bg-[#F1EEE4] transition-colors">Recolher tudo</button>
+                  <button type="button" onClick={expandirTodasSecoes} className="px-3 py-2 rounded-lg text-[11px] font-bold text-[#6B6659] hover:bg-[#F1EEE4] transition-colors">Expandir tudo</button>
+                  <button type="button" onClick={recolherTodasSecoes} className="px-3 py-2 rounded-lg text-[11px] font-bold text-[#6B6659] hover:bg-[#F1EEE4] transition-colors">Recolher tudo</button>
                 </div>
               </div>
-              <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="space-y-4">
-              {checklist.secoes.map((secao) => {
-                const [respondidos, totalItens] = progressoSecao(secao);
+
+              {/* Busca por palavra-chave: o item aparece já respondível, no
+                  lugar — sem precisar caçar a seção onde ele mora. */}
+              <div className="no-print space-y-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#A39D8C]" />
+                  <Input
+                    value={buscaItem}
+                    onChange={(e) => setBuscaItem(e.target.value)}
+                    placeholder="Buscar item por palavra-chave (ex.: esterilização, lixeira, alvará)..."
+                    className="pl-9 pr-9 h-11 rounded-xl bg-[#FAF8F3] border-[#E4DFD1] text-sm font-medium"
+                  />
+                  {buscaItem && (
+                    <button
+                      type="button"
+                      onClick={() => setBuscaItem("")}
+                      aria-label="Limpar busca"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#A39D8C] hover:text-[#262420] transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                {termoBusca && (
+                  <p className="px-1 text-[11px] font-bold text-[#6B6659]">
+                    {totalAchados === 0
+                      ? "Nenhum item encontrado. Verifique a palavra ou limpe a busca."
+                      : `${totalAchados} ${totalAchados === 1 ? 'item encontrado' : 'itens encontrados'} em ${secoesFiltradas!.length} ${secoesFiltradas!.length === 1 ? 'seção' : 'seções'}. Responda aqui mesmo — a resposta é salva no roteiro inteiro.`}
+                  </p>
+                )}
+              </div>
+              <Accordion type="multiple" value={secoesAbertas} onValueChange={setOpenSections} className="space-y-4">
+              {secoesVisiveis.map((secao) => {
+                // O contador é sempre o da seção INTEIRA, não o do recorte da
+                // busca — senão o distintivo mostraria "1/1" e daria a
+                // impressão de seção concluída.
+                const secaoCompleta = checklist.secoes.find(s => s.id === secao.id) ?? secao;
+                const [respondidos, totalItens] = progressoSecao(secaoCompleta);
                 return (
-                <AccordionItem key={secao.id} value={secao.id} ref={(el) => { sectionRefs.current[secao.id] = el; }} className="border border-[#E4DFD1] rounded-xl px-5 bg-white">
+                <AccordionItem key={secao.id} value={secao.id} ref={(el) => { sectionRefs.current[secao.id] = el; }} className="border border-[#E4DFD1] rounded-xl px-5 bg-white transition-all duration-200 hover:border-[#0E4A44]/30 data-[state=open]:border-[#0E4A44]/40 data-[state=open]:shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
                   <AccordionTrigger className="hover:no-underline py-4">
                     <div className="flex items-center gap-3 flex-1 text-left">
                       <h3 className="text-sm font-black text-[#262420] border-l-4 border-primary pl-4 uppercase">{secao.titulo}</h3>
-                      <Badge className={cn("text-[10px] font-black shrink-0", respondidos === totalItens && totalItens > 0 ? "bg-emerald-100 text-emerald-700" : "bg-[#F1EEE4] text-[#6B6659]")}>
+                      <Badge className={cn("text-[10px] font-black shrink-0", respondidos === totalItens && totalItens > 0 ? "bg-[#E4EEEC] text-[#0E4A44]" : "bg-[#F1EEE4] text-[#6B6659]")}>
                         {respondidos}/{totalItens}
                       </Badge>
                     </div>
@@ -3603,7 +3726,19 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                       item.isHeader ? (
                         <p key={item.id} className="pt-2 text-[11px] font-black uppercase tracking-widest text-[#6B6659]">{item.text}</p>
                       ) : (
-                      <div key={item.id} className="p-6 bg-[#FAF8F3] rounded-lg border border-[#E4DFD1] space-y-5">
+                      // Item já respondido ganha um traço verde na lateral e
+                      // fundo branco — o fiscal enxerga o avanço percorrendo a
+                      // seção, sem precisar reler cada resposta. Discreto de
+                      // propósito: são até 183 cartões numa tela só.
+                      <div
+                        key={item.id}
+                        className={cn(
+                          "p-5 sm:p-6 rounded-xl border space-y-5 transition-colors duration-200 border-l-[3px]",
+                          answers[item.id] !== undefined
+                            ? "bg-white border-[#E4DFD1] border-l-[#1F7A5C]"
+                            : "bg-[#FAF8F3] border-[#E4DFD1] border-l-[#E4DFD1]"
+                        )}
+                      >
                         {/* No ROI as alternativas são textos longos: empilha
                             sempre, em vez de dividir em duas colunas. */}
                         <div className={cn("flex gap-6", item.roi ? "flex-col" : "flex-col md:flex-row md:items-start justify-between")}>
@@ -3617,7 +3752,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                             // que já cumpre a norma.
                             <RadioGroup
                               value={answers[item.id]}
-                              onValueChange={(v: any) => { setAnswers(prev => ({ ...prev, [item.id]: v })); handleSaveDraft(false); }}
+                              onValueChange={(v: any) => { const proximas = { ...answers, [item.id]: v }; setAnswers(proximas); handleSaveDraft(false, proximas); }}
                               className="flex flex-col gap-2"
                             >
                               {item.roi.alternativas.map((alternativa, nota) => {
@@ -3653,7 +3788,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                               })}
                             </RadioGroup>
                           ) : (
-                          <RadioGroup value={answers[item.id]} onValueChange={(v: any) => { setAnswers(prev => ({ ...prev, [item.id]: v })); handleSaveDraft(false); }} className="flex items-center gap-2 bg-white p-1 rounded-lg border border-[#E4DFD1]">{['SIM', 'NAO', 'ND'].map(opt => (<label key={opt} className={cn("flex items-center justify-center h-10 px-5 rounded-xl text-[11px] font-black cursor-pointer transition-all", answers[item.id] === opt ? "bg-primary text-white" : "text-[#6B6659] hover:bg-[#F1EEE4]")}><RadioGroupItem value={opt} className="sr-only" /> {opt}</label>))}</RadioGroup>
+                          <RadioGroup value={answers[item.id]} onValueChange={(v: any) => { const proximas = { ...answers, [item.id]: v }; setAnswers(proximas); handleSaveDraft(false, proximas); }} className="flex items-center gap-1 bg-[#FAF8F3] p-1 rounded-xl border border-[#E4DFD1]">{['SIM', 'NAO', 'ND'].map(opt => (<label key={opt} className={cn("flex items-center justify-center h-10 px-5 rounded-lg text-[11px] font-black cursor-pointer transition-all duration-150", answers[item.id] !== opt ? "text-[#6B6659] hover:bg-white hover:shadow-sm" : opt === 'SIM' ? "bg-[#1F7A5C] text-white shadow-sm" : opt === 'NAO' ? "bg-[#A15437] text-white shadow-sm" : "bg-[#6B6659] text-white shadow-sm")}><RadioGroupItem value={opt} className="sr-only" /> {opt}</label>))}</RadioGroup>
                           )}
                         </div>
                         <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-[#E4DFD1]">
@@ -3686,7 +3821,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                                       key={s}
                                       type="button"
                                       onClick={() => handleSetPhotoSize(item.id, pIdx, s)}
-                                      className={cn("h-6 w-6 rounded-md text-[9px] font-black flex items-center justify-center transition-colors", size === s ? "bg-primary text-white" : "bg-black/60 text-white/80 hover:bg-black/80")}
+                                      className={cn("h-8 w-8 rounded-md text-[10px] font-black flex items-center justify-center transition-colors", size === s ? "bg-primary text-white" : "bg-black/60 text-white/80 hover:bg-black/80")}
                                     >
                                       {s}
                                     </button>
@@ -3713,9 +3848,15 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
 
             <div className="space-y-6">
               <Accordion type="single" collapsible value={nnConformidadeAberto} onValueChange={setNnConformidadeAberto}>
-                <AccordionItem value="nova-nao-conformidade" className="border-none">
-                  <AccordionTrigger className="py-0 hover:no-underline [&>svg]:text-primary">
-                    <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Plus className="h-4 w-4 text-primary" /> Adicionar Não Conformidade</h2>
+                <AccordionItem value="nova-nao-conformidade" className="border border-[#E4DFD1] rounded-xl bg-white px-4 transition-all duration-200 hover:border-[#0E4A44]/30 data-[state=open]:border-[#0E4A44]/40 data-[state=open]:bg-[#FCFBF7] data-[state=open]:shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
+                  <AccordionTrigger className="py-3 hover:no-underline [&>svg]:text-primary">
+                    <TituloEtapa
+                      icone={Plus}
+                      titulo="Item fora do roteiro"
+                      descricao="Registre algo que o roteiro oficial não prevê"
+                      distintivo={customItems.length > 0 ? `${customItems.length}` : undefined}
+                      preenchida={customItems.length > 0}
+                    />
                   </AccordionTrigger>
                   <AccordionContent className="pt-3 space-y-4">
                   <p className="text-xs text-[#6B6659]">Para fatos constatados que não estão previstos em nenhum item do roteiro oficial — entra no relatório junto com os demais, ao final do grupo de criticidade escolhido.</p>
@@ -3780,7 +3921,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                               <button type="button" onClick={() => handleRemovePhoto(item.id, pIdx)} className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-100 md:opacity-0 md:group-hover/photo:opacity-100 transition-opacity"><X className="h-3.5 w-3.5" /></button>
                               <div className="absolute bottom-1 left-1 flex gap-0.5 opacity-100 md:opacity-0 md:group-hover/photo:opacity-100 transition-opacity">
                                 {(['P', 'M', 'G'] as PhotoSize[]).map(s => (
-                                  <button key={s} type="button" onClick={() => handleSetPhotoSize(item.id, pIdx, s)} className={cn("h-6 w-6 rounded-md text-[9px] font-black flex items-center justify-center transition-colors", size === s ? "bg-primary text-white" : "bg-black/60 text-white/80 hover:bg-black/80")}>{s}</button>
+                                  <button key={s} type="button" onClick={() => handleSetPhotoSize(item.id, pIdx, s)} className={cn("h-8 w-8 rounded-md text-[10px] font-black flex items-center justify-center transition-colors", size === s ? "bg-primary text-white" : "bg-black/60 text-white/80 hover:bg-black/80")}>{s}</button>
                                 ))}
                               </div>
                             </div>
@@ -3800,9 +3941,14 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             <div className="h-px bg-[#F1EEE4]" />
 
             <Accordion type="single" collapsible>
-              <AccordionItem value="conclusao" className="border-none">
-                <AccordionTrigger className="py-0 hover:no-underline [&>svg]:text-primary">
-                  <h2 className="text-[11px] font-black uppercase tracking-[0.3em] text-[#9C7A3C] flex items-center gap-3"><Scale className="h-4 w-4 text-primary" /> Texto de Conclusão do Relatório</h2>
+              <AccordionItem value="conclusao" className="border border-[#E4DFD1] rounded-xl bg-white px-4 transition-all duration-200 hover:border-[#0E4A44]/30 data-[state=open]:border-[#0E4A44]/40 data-[state=open]:bg-[#FCFBF7] data-[state=open]:shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
+                <AccordionTrigger className="py-3 hover:no-underline [&>svg]:text-primary">
+                  <TituloEtapa
+                    icone={Scale}
+                    titulo="Conclusão"
+                    descricao="Texto que encerra o relatório"
+                    preenchida={!!conclusaoHtml}
+                  />
                 </AccordionTrigger>
                 <AccordionContent className="pt-3 space-y-3">
                 <p className="text-[11px] font-medium text-[#6B6659]">Texto que fecha o relatório final ("Conclusão e Prazo Legal") — editável. Pré-preenchido com o padrão do município e o prazo acima.</p>
@@ -3837,26 +3983,117 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             <div className="h-px bg-[#F1EEE4]" />
 
             <div className="space-y-10 pt-4">
-                <div className="bg-[#262420] text-white p-8 rounded-lg shadow-2xl space-y-8">
-                    <div className="flex items-center justify-between border-b border-white/10 pb-4"><div className="flex items-center gap-3"><div className="p-2.5 rounded-2xl bg-primary/20"><ClipboardList className="h-5 w-5 text-primary" /></div><div><h3 className="font-serif text-xl">Resumo da Vistoria</h3></div></div><Badge className="bg-primary text-white border-none text-[10px] font-black px-4 h-8">{Object.keys(answers).length} ITENS</Badge></div>
-                    <div className="space-y-3">
-                        <div>
-                          <p className="text-[10px] font-black uppercase text-white/60">1. Equipe de Fiscalização</p>
-                          <p className="text-[11px] text-white/40 mt-0.5">Adicione quem esteve na vistoria e toque no nome para assinar.</p>
+                {/* ASSINATURAS — reescrito pra quem nunca usou o sistema.
+                    Era um bloco escuro com a explicação em branco a 40% de
+                    opacidade (ilegível no sol, que é onde a vistoria acontece)
+                    e rótulos em jargão ("Ciência do Inspecionado"). Agora é
+                    claro como o resto do app, com o passo dizendo o que fazer
+                    e cada pessoa mostrando se já assinou ou não, em texto. */}
+                <div className="bg-white border border-[#E4DFD1] rounded-2xl shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between gap-3 px-5 sm:px-6 py-4 border-b border-[#F1EEE4] bg-[#FAF8F3]">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="p-2 rounded-xl bg-[#E4EEEC] text-[#0E4A44] shrink-0"><PenTool className="h-5 w-5" /></div>
+                        <div className="min-w-0">
+                          <h3 className="font-serif font-bold text-[17px] text-[#262420] leading-tight">Assinaturas</h3>
+                          <p className="text-xs text-[#6B6659]">Última etapa antes de gerar o relatório</p>
                         </div>
-                        {fiscais.length > 0 && (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              {fiscais.map((f, i) => (<Button key={i} onClick={() => setSigningFiscalIndex(i)} variant="outline" className={cn("h-14 rounded-2xl justify-between px-5 font-bold text-[10px] uppercase border-white/10 bg-white/5 text-white", f.signature && "border-emerald-500/50 bg-emerald-500/10")}><span className="truncate">{(f as any).nome}</span>{f.signature ? <CheckCircle2 className="h-5 w-5 text-emerald-400" /> : <PenTool className="h-4 w-4 text-white/20" />}</Button>))}
-                          </div>
-                        )}
-                        <SelecionarAutoridadeParaFormulario onSelect={(f) => { setFiscais(prev => [...prev, f]); handleSaveDraft(false); }} />
+                      </div>
+                      {/* Antes mostrava a contagem de ITENS respondidos, aqui no
+                          card de assinaturas — "0 itens" ao lado de "Assinaturas"
+                          não queria dizer nada. Agora mostra o que a etapa
+                          realmente controla. */}
+                      {(() => {
+                        const previstas = fiscais.length + 1;
+                        const feitas = fiscais.filter(f => f.signature).length + (idData.signatureResponsavel ? 1 : 0);
+                        const completo = feitas === previstas && fiscais.length > 0;
+                        return (
+                          <Badge className={cn(
+                            "border-none text-[11px] font-bold px-3 h-7 shrink-0 tabular-nums",
+                            completo ? "bg-[#E4EEEC] text-[#0E4A44]" : "bg-[#F1EEE4] text-[#6B6659]"
+                          )}>
+                            {feitas} de {previstas} assinadas
+                          </Badge>
+                        );
+                      })()}
                     </div>
-                    <div className="space-y-3 pt-2 border-t border-white/10">
-                        <div>
-                          <p className="text-[10px] font-black uppercase text-white/60">2. Ciência do Inspecionado</p>
-                          <p className="text-[11px] text-white/40 mt-0.5">O responsável pelo estabelecimento assina para confirmar o recebimento do relatório.</p>
-                        </div>
-                        <Button onClick={() => setSigningResponsavel(true)} variant="outline" className={cn("w-full sm:w-1/2 h-14 rounded-2xl justify-between px-5 font-bold text-[10px] uppercase border-white/10 bg-white/5 text-white", idData.signatureResponsavel && "border-emerald-500/50 bg-emerald-500/10")}><span className="truncate">{idData.responsavel || "Toque para assinar"}</span>{idData.signatureResponsavel ? <CheckCircle2 className="h-5 w-5 text-emerald-400" /> : <PenTool className="h-4 w-4 text-white/20" />}</Button>
+
+                    <div className="p-5 sm:p-6 space-y-6">
+                      <div className="space-y-3">
+                          <div className="flex items-start gap-3">
+                            <span className="h-6 w-6 rounded-full bg-[#0E4A44] text-white text-[12px] font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
+                            <div className="min-w-0">
+                              <p className="text-[15px] font-bold text-[#262420] leading-tight">Quem fez a vistoria</p>
+                              <p className="text-[13px] text-[#6B6659] leading-snug mt-0.5">Adicione os fiscais presentes. Depois toque no nome de cada um para assinar.</p>
+                            </div>
+                          </div>
+
+                          {fiscais.length > 0 && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-9">
+                                {fiscais.map((f, i) => (
+                                  <Button
+                                    key={i}
+                                    onClick={() => setSigningFiscalIndex(i)}
+                                    variant="outline"
+                                    className={cn(
+                                      "h-auto min-h-[56px] py-2.5 rounded-xl justify-between px-4 gap-3 text-left normal-case",
+                                      f.signature
+                                        ? "border-[#1F7A5C]/30 bg-[#E4EEEC]/70 hover:bg-[#E4EEEC]"
+                                        : "border-[#E4DFD1] bg-white hover:bg-[#FAF8F3]"
+                                    )}
+                                  >
+                                    <span className="min-w-0 flex flex-col items-start">
+                                      <span className="text-[14px] font-bold text-[#262420] truncate max-w-full">{(f as any).nome}</span>
+                                      <span className={cn("text-[12px] font-medium", f.signature ? "text-[#0E4A44]" : "text-[#9C7A3C]")}>
+                                        {f.signature ? "Assinado" : "Toque para assinar"}
+                                      </span>
+                                    </span>
+                                    {f.signature
+                                      ? <CheckCircle2 className="h-5 w-5 text-[#1F7A5C] shrink-0" />
+                                      : <PenTool className="h-5 w-5 text-[#9C7A3C] shrink-0" />}
+                                  </Button>
+                                ))}
+                            </div>
+                          )}
+                          <div className="pl-9">
+                            <SelecionarAutoridadeParaFormulario onSelect={(f) => { setFiscais(prev => [...prev, f]); handleSaveDraft(false); }} />
+                          </div>
+                      </div>
+
+                      <div className="h-px bg-[#F1EEE4]" />
+
+                      <div className="space-y-3">
+                          <div className="flex items-start gap-3">
+                            <span className="h-6 w-6 rounded-full bg-[#0E4A44] text-white text-[12px] font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
+                            <div className="min-w-0">
+                              <p className="text-[15px] font-bold text-[#262420] leading-tight">Quem recebeu o relatório</p>
+                              <p className="text-[13px] text-[#6B6659] leading-snug mt-0.5">O responsável pelo estabelecimento assina confirmando que recebeu o documento.</p>
+                            </div>
+                          </div>
+                          <div className="pl-9">
+                            <Button
+                              onClick={() => setSigningResponsavel(true)}
+                              variant="outline"
+                              className={cn(
+                                "w-full sm:max-w-sm h-auto min-h-[56px] py-2.5 rounded-xl justify-between px-4 gap-3 text-left normal-case",
+                                idData.signatureResponsavel
+                                  ? "border-[#1F7A5C]/30 bg-[#E4EEEC]/70 hover:bg-[#E4EEEC]"
+                                  : "border-[#E4DFD1] bg-white hover:bg-[#FAF8F3]"
+                              )}
+                            >
+                              <span className="min-w-0 flex flex-col items-start">
+                                <span className="text-[14px] font-bold text-[#262420] truncate max-w-full">
+                                  {idData.responsavel || "Responsável do estabelecimento"}
+                                </span>
+                                <span className={cn("text-[12px] font-medium", idData.signatureResponsavel ? "text-[#0E4A44]" : "text-[#9C7A3C]")}>
+                                  {idData.signatureResponsavel ? "Assinado" : "Toque para assinar"}
+                                </span>
+                              </span>
+                              {idData.signatureResponsavel
+                                ? <CheckCircle2 className="h-5 w-5 text-[#1F7A5C] shrink-0" />
+                                : <PenTool className="h-5 w-5 text-[#9C7A3C] shrink-0" />}
+                            </Button>
+                          </div>
+                      </div>
                     </div>
                 </div>
             </div>
@@ -3864,118 +4101,61 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 z-[100] no-print px-4 pb-8 pt-4 bg-white/90 backdrop-blur-xl border-t border-[#E4DFD1] shadow-[0_-25px_50px_rgba(0,0,0,0.15)]">
-          <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center gap-4">
-              <Button type="button" onClick={() => handleSaveDraft()} disabled={isSavingDraft} variant="outline" className="w-full sm:w-auto h-16 px-10 rounded-2xl border-[#E4DFD1] text-[#6B6659] font-black uppercase text-[11px] tracking-widest gap-3 shadow-md">{isSavingDraft ? <Loader2 className="animate-spin h-5 w-5" /> : <Save className="h-5 w-5" />} Salvar Rascunho</Button>
-              <Button type="button" onClick={async () => { await handleSaveDraft(false); setView('report'); window.scrollTo(0,0); }} disabled={Object.keys(answers).length === 0} className="flex-1 w-full h-16 bg-primary hover:bg-primary/90 text-white gap-4 rounded-2xl shadow-2xl transition-all active:scale-95"><FileText className="h-6 w-6" /><div className="flex flex-col items-start leading-none text-left"><span className="text-lg font-black uppercase tracking-tighter italic">VISUALIZAR RELATÓRIO</span><span className="text-[8px] font-bold opacity-70 uppercase tracking-widest mt-0.5">Sincronizar e gerar PDF</span></div></Button>
+          {/* Barra sempre em UMA linha. Empilhada no celular, eram dois botões
+              de 64px + espaçamento = ~160px fixos, quase um quarto da tela de
+              um aparelho pequeno, justamente onde a vistoria é preenchida.
+              "Salvar" encolhe pra ícone + rótulo curto, já que o rascunho
+              também é salvo sozinho a cada 8 segundos. */}
+          {/* Três ações, mesma largura: salvar, visualizar e excluir. Ícone em
+              cima do rótulo pra caber em tela estreita sem abreviar nada. */}
+          <div className="max-w-4xl mx-auto grid grid-cols-3 items-stretch gap-2 sm:gap-3">
+              <Button
+                type="button"
+                onClick={() => handleSaveDraft()}
+                disabled={isSavingDraft}
+                variant="outline"
+                className="h-16 flex-col gap-1 rounded-2xl border-[#E4DFD1] text-[#6B6659] font-black uppercase text-[10px] sm:text-[11px] tracking-widest shadow-md"
+              >
+                {isSavingDraft ? <Loader2 className="animate-spin h-5 w-5" /> : <Save className="h-5 w-5" />}
+                Salvar
+              </Button>
+
+              <Button
+                type="button"
+                onClick={async () => { await handleSaveDraft(false); setView('report'); window.scrollTo(0,0); }}
+                disabled={Object.keys(answers).length === 0}
+                className="h-16 flex-col gap-1 bg-primary hover:bg-primary/90 text-white rounded-2xl shadow-2xl transition-all active:scale-95 font-black uppercase text-[10px] sm:text-[11px] tracking-widest"
+              >
+                <FileText className="h-5 w-5" />
+                Visualizar
+              </Button>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-16 w-full flex-col gap-1 rounded-2xl border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 font-black uppercase text-[10px] sm:text-[11px] tracking-widest shadow-md"
+                  >
+                    {isDeletingDraft ? <Loader2 className="animate-spin h-5 w-5" /> : <Trash2 className="h-5 w-5" />}
+                    Excluir
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="rounded-[2rem]">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="font-black uppercase tracking-tighter text-xl italic">Excluir esta vistoria?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Apaga permanentemente as respostas, fotos e observações desta inspeção. Não é possível desfazer.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteDraft} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-rose-600 hover:bg-rose-700">Excluir</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
           </div>
       </div>
-
-      <Dialog open={isPickerOpen} onOpenChange={setIsPickerOpen}>
-        <DialogContent className="rounded-lg sm:max-w-md border-none shadow-2xl bg-white overflow-hidden p-0">
-            <DialogHeader className="p-8 bg-[#0E4A44] text-white border-b border-white/10">
-                <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-2xl bg-white/10 text-white"><History className="h-6 w-6" /></div>
-                    <div>
-                        <DialogTitle className="font-serif text-xl">Minhas Inspeções</DialogTitle>
-                        <DialogDescription className="text-white/60 text-[10px] font-bold uppercase tracking-widest mt-1">{checklist.titulo}</DialogDescription>
-                    </div>
-                </div>
-            </DialogHeader>
-            <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                <Button onClick={resetToBlank} variant="outline" className="w-full h-12 rounded-xl font-black uppercase text-[11px] tracking-widest gap-2 border-primary/30 text-primary hover:bg-primary/5">
-                  <Eraser className="h-4 w-4" /> Nova Inspeção
-                </Button>
-
-                {minhasInspecoesDoRoteiro.emAndamento.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-[9px] font-black uppercase text-amber-600 tracking-widest px-1">Em Andamento</p>
-                    <div className="space-y-2">
-                      {minhasInspecoesDoRoteiro.emAndamento.map((insp) => (
-                        <div
-                          key={insp.id}
-                          className={cn(
-                            "rounded-2xl border transition-colors flex items-center gap-1 pr-2",
-                            insp.id === currentInspecaoId ? "bg-primary/5 border-primary/30" : "bg-[#FAF8F3] border-[#E4DFD1]"
-                          )}
-                        >
-                          <button type="button" onClick={() => carregarInspecao(insp)} className="flex-1 min-w-0 text-left p-4 rounded-2xl hover:bg-[#F1EEE4]/70 transition-colors flex items-center gap-3">
-                            <Building2 className="h-4 w-4 text-amber-600 shrink-0" />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-bold text-[#262420] uppercase truncate">{insp.titulo || "VISTORIA SEM NOME"}</p>
-                              <p className="text-[10px] font-medium text-[#6B6659] italic">Salvo às {insp.updatedAt ? format(new Date(insp.updatedAt), "HH:mm 'de' dd/MM") : "..."}</p>
-                            </div>
-                          </button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <button type="button" className="h-9 w-9 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center shrink-0 transition-colors">
-                                {deletandoDaListaId === insp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                              </button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent className="rounded-lg">
-                              <AlertDialogHeader>
-                                <AlertDialogTitle className="font-serif text-xl text-[#262420]">Excluir permanentemente?</AlertDialogTitle>
-                                <AlertDialogDescription>Apaga "{insp.titulo || "vistoria sem nome"}" — respostas, fotos e observações. Não é possível desfazer.</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDeleteInspecaoDaLista(insp)} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-rose-600 hover:bg-rose-700">Excluir</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {minhasInspecoesDoRoteiro.finalizadas.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-[9px] font-black uppercase text-emerald-600 tracking-widest px-1">Finalizadas</p>
-                    <div className="space-y-2">
-                      {minhasInspecoesDoRoteiro.finalizadas.map((insp) => (
-                        <div
-                          key={insp.id}
-                          className={cn(
-                            "rounded-2xl border transition-colors flex items-center gap-1 pr-2",
-                            insp.id === currentInspecaoId ? "bg-primary/5 border-primary/30" : "bg-[#FAF8F3] border-[#E4DFD1]"
-                          )}
-                        >
-                          <button type="button" onClick={() => carregarInspecao(insp)} className="flex-1 min-w-0 text-left p-4 rounded-2xl hover:bg-[#F1EEE4]/70 transition-colors flex items-center gap-3">
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-bold text-[#262420] uppercase truncate">{insp.titulo || "VISTORIA SEM NOME"}</p>
-                              <p className="text-[10px] font-medium text-[#6B6659] italic">Concluída {insp.updatedAt ? format(new Date(insp.updatedAt), "dd/MM/yyyy") : ""}</p>
-                            </div>
-                          </button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <button type="button" className="h-9 w-9 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center shrink-0 transition-colors">
-                                {deletandoDaListaId === insp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                              </button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent className="rounded-lg">
-                              <AlertDialogHeader>
-                                <AlertDialogTitle className="font-serif text-xl text-[#262420]">Excluir permanentemente?</AlertDialogTitle>
-                                <AlertDialogDescription>Apaga "{insp.titulo || "vistoria sem nome"}" — inclusive o histórico do relatório finalizado. Não é possível desfazer.</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDeleteInspecaoDaLista(insp)} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-rose-600 hover:bg-rose-700">Excluir</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {minhasInspecoesDoRoteiro.emAndamento.length === 0 && minhasInspecoesDoRoteiro.finalizadas.length === 0 && (
-                  <p className="text-[11px] font-bold text-[#A39D8C] text-center py-2">Nenhuma outra inspeção deste roteiro ainda.</p>
-                )}
-            </div>
-        </DialogContent>
-      </Dialog>
 
       <SignaturePad isOpen={signingFiscalIndex !== null} onOpenChange={(open) => !open && setSigningFiscalIndex(null)} onSave={(sig) => { if (signingFiscalIndex !== null) { const updated = [...fiscais]; updated[signingFiscalIndex] = { ...updated[signingFiscalIndex], signature: sig }; setFiscais(updated); handleSaveDraft(false); } }} title="Assinatura Fiscal" />
       <SignaturePad isOpen={signingResponsavel} onOpenChange={setSigningResponsavel} onSave={(sig) => { setIdData({...idData, signatureResponsavel: sig}); handleSaveDraft(false); }} title="Ciência Inspecionado" />

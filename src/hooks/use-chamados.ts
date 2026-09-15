@@ -18,6 +18,7 @@ import {
 import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
 import { attemptFirestoreWrite } from '@/lib/firestore-offline';
+import { salvarCacheColecao } from '@/lib/cache-colecao-local';
 
 const LOCAL_STORAGE_KEY = 'fiscal_x_chamados_v1';
 
@@ -63,7 +64,7 @@ export function useChamados(options?: { municipioIdOverride?: string }) {
 
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const items = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Chamado));
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
+        salvarCacheColecao(LOCAL_STORAGE_KEY, items);
         setChamados(items);
         setLoading(false);
       }, (err) => {
@@ -99,7 +100,7 @@ export function useChamados(options?: { municipioIdOverride?: string }) {
 
     setChamados(prev => {
       const updated = [docData, ...prev];
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+      salvarCacheColecao(LOCAL_STORAGE_KEY, updated);
       return updated;
     });
 
@@ -114,7 +115,7 @@ export function useChamados(options?: { municipioIdOverride?: string }) {
     const now = new Date().toISOString();
     setChamados(prev => {
       const updated = prev.map(c => c.id === id ? { ...c, resposta, status: novoStatus, respondidoPor: profile?.displayName || '', updatedAt: now } : c);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+      salvarCacheColecao(LOCAL_STORAGE_KEY, updated);
       return updated;
     });
 
@@ -127,7 +128,7 @@ export function useChamados(options?: { municipioIdOverride?: string }) {
     const now = new Date().toISOString();
     setChamados(prev => {
       const updated = prev.map(c => c.id === id ? { ...c, status, updatedAt: now } : c);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+      salvarCacheColecao(LOCAL_STORAGE_KEY, updated);
       return updated;
     });
 

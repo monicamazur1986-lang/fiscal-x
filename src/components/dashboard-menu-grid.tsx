@@ -74,6 +74,11 @@ function MenuTile({
       </div>
       <div className="min-w-0">
         <p className="font-serif text-[15px] font-semibold text-white leading-tight">{item.label}</p>
+        {item.emDesenvolvimento && (
+          <span className="mt-1.5 inline-block rounded-full bg-black/25 px-2 py-[3px] text-[8px] font-black uppercase tracking-[0.12em] leading-none text-white/90">
+            Em desenvolvimento
+          </span>
+        )}
         <p
           className={cn(
             "text-[10.5px] text-white/75 mt-1 leading-snug transition-opacity duration-200",

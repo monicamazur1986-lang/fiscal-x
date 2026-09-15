@@ -1,0 +1,35 @@
+{
+  "version": "1.1.0",
+  "documents": [
+    {
+      "id": "decreto-4908-2005-pato-branco-comercio-ambulante",
+      "titulo": "Decreto nº 4.908/2005 — Comércio Ambulante",
+      "path": "/documentos-biblioteca/municipios/pato-branco/decreto-4908-2005-comercio-ambulante.pdf",
+      "esfera": "municipal",
+      "categoria": "Decreto",
+      "tema": "Alimentos e Bebidas",
+      "descricao": "Regulamenta a Lei Municipal nº 2.463/2005 e disciplina o licenciamento da atividade de comércio ambulante em Pato Branco, incluindo o Alvará de Autorização e sua renovação anual.",
+      "keywords": "decreto 4908, comercio ambulante, alvara de autorizacao, licenciamento, pato branco, ambulante, feira"
+    },
+    {
+      "id": "decreto-9318-2022-pato-branco-food-trucks",
+      "titulo": "Decreto nº 9.318/2022 — Food Trucks e Alimentos em Vias Públicas",
+      "path": "/documentos-biblioteca/municipios/pato-branco/decreto-9318-2022-food-trucks.pdf",
+      "esfera": "municipal",
+      "categoria": "Decreto",
+      "tema": "Alimentos e Bebidas",
+      "descricao": "Regulamenta a Lei Municipal nº 4.871/2016 e estabelece as regras para comercialização, doação e transporte de alimentos e bebidas em vias e áreas públicas de Pato Branco, incluindo food trucks.",
+      "keywords": "decreto 9318, food truck, alimentos em via publica, comercializacao de alimentos, pato branco, ambulante, trailer"
+    },
+    {
+      "id": "lei-3430-2010-pato-branco-anteparo-higienico",
+      "titulo": "Lei nº 3.430/2010 — Anteparo Higiênico (Protetor Salivar) em Buffets",
+      "path": "/documentos-biblioteca/municipios/pato-branco/lei-3430-2010-anteparo-higienico-protetor.pdf",
+      "esfera": "municipal",
+      "categoria": "Lei",
+      "tema": "Alimentos e Bebidas",
+      "descricao": "Obriga a instalação de anteparo higiênico protetor (protetor salivar) nos balcões expositores térmicos ou refrigerados e a afixação de saboneteiras de álcool gel em restaurantes e demais estabelecimentos que comercializam alimentos pelo sistema de auto-serviço (buffet), em Pato Branco. O primeiro auto de infração tem caráter educativo, com prazo de até 30 dias para adequação.",
+      "keywords": "lei 3430, anteparo higienico, protetor salivar, quebra-vento, buffet, auto-servico, self service, balcao expositor, balcao termico, refrigerado, saboneteira, alcool gel, restaurante, pato branco, alimentos"
+    }
+  ]
+}

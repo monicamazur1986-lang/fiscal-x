@@ -170,8 +170,22 @@ service cloud.firestore {
         (resource.data.responsavelAtualUid == request.auth.uid)
       );
       allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
+      // Registrar a defesa recebida (ou qualquer outro avanço) não é um ato
+      // decisório — é a pessoa que fisicamente recebeu o documento inserindo
+      // ele no sistema, então precisa valer pra quem o processo foi
+      // encaminhado também, não só pra quem abriu o PAS ou pro gestor.
+      // Faltava aqui o mesmo `responsavelAtualUid` que a leitura já tem
+      // (acima) — sem isso, um fiscal que recebeu o processo por
+      // encaminhamento conseguia ABRIR o PAS mas não conseguia registrar a
+      // defesa nele (a gravação da peça em si passava, mas a atualização do
+      // campo `defesa` no processo, feita junto, era negada).
       allow update: if isAuthenticated() && (
-        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()) && request.resource.data.municipioId == resource.data.municipioId)
+        isRoot() ||
+        (resource.data.municipioId == getUserData().municipioId && request.resource.data.municipioId == resource.data.municipioId && (
+          resource.data.createdBy == request.auth.uid ||
+          resource.data.responsavelAtualUid == request.auth.uid ||
+          isAdmin()
+        ))
       );
       // Exclusão de verdade (não é lixeira) — pra corrigir um PAS aberto por
       // engano/teste. Mesmo dono-ou-gestor de sempre, não só admin.
@@ -181,9 +195,14 @@ service cloud.firestore {
 
       // Peças dos autos — herdam a permissão do processo pai. Create/read
       // liberados a qualquer um do município (qualquer peça nova só entra
-      // com revisão/assinatura, controlado na UI); delete só serve pra
-      // limpar peças ao excluir o processo inteiro (excluirPas), nunca pra
-      // "corrigir" apagando uma peça isolada de um processo que continua.
+      // com revisão/assinatura, controlado na UI). Delete serve tanto pra
+      // limpar as peças ao excluir o processo inteiro (excluirPas) quanto pra
+      // remover uma peça juntada por engano — documento errado ou duplicado
+      // (excluirPeca); em ambos os casos, só dono do PAS ou gestor.
+      // O update existe só pela renumeração que vem logo depois desse
+      // excluirPeca (a folha seguinte assume o número da que saiu): peça não
+      // é editada em lugar nenhum do app — corrigir conteúdo é Termo de
+      // Retificação, que nasce como peça nova.
       match /pecas/{pecaId} {
         allow read: if isAuthenticated() && (
           isRoot() ||
@@ -200,6 +219,13 @@ service cloud.firestore {
             (get(/databases/$(database)/documents/pas/$(id)).data.createdBy == request.auth.uid || isAdmin())
           )
         );
+        // Só a renumeração: nenhum campo de conteúdo da peça pode mudar aqui.
+        allow update: if isAuthenticated() && (
+          isRoot() || (
+            get(/databases/$(database)/documents/pas/$(id)).data.municipioId == getUserData().municipioId &&
+            (get(/databases/$(database)/documents/pas/$(id)).data.createdBy == request.auth.uid || isAdmin())
+          )
+        ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['numero', 'refPecaNumero']);
       }
     }
 

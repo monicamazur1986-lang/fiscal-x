@@ -7,6 +7,7 @@ import { collection, onSnapshot, doc, setDoc, query, where } from 'firebase/fire
 import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
 import { attemptFirestoreWrite } from '@/lib/firestore-offline';
+import { salvarCacheColecao } from '@/lib/cache-colecao-local';
 
 const LOCAL_STORAGE_KEY = 'fiscal_x_folders';
 
@@ -41,7 +42,7 @@ export function useFolders(area: 'intimacoes' | 'docfacil') {
     const q = query(collection(db, 'folders'), where('municipioId', '==', municipioId), where('area', '==', area));
     const unsub = onSnapshot(q, (snapshot) => {
       const items = snapshot.docs.map((d) => ({ ...d.data(), id: d.id } as Folder));
-      localStorage.setItem(storageKey, JSON.stringify(items));
+      salvarCacheColecao(storageKey, items);
       setFolders(items);
       setLoading(false);
     }, () => setLoading(false));

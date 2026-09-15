@@ -19,6 +19,7 @@ import {
 import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
 
+import { lerCacheColecao, salvarCacheColecao } from '@/lib/cache-colecao-local';
 const LOCAL_STORAGE_KEY = 'fiscal_x_inspecoes';
 const PENDING_SYNC_KEY = 'fiscal_x_inspecoes_pending_sync';
 
@@ -39,7 +40,17 @@ function loadPendingWrites(): Record<string, PendingWrite> {
 }
 
 function savePendingWrites(pending: Record<string, PendingWrite>) {
-  localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(pending));
+  // Diferente do cache de partida rápida, esta fila NÃO pode ser podada: cada
+  // entrada é uma vistoria ainda não confirmada no servidor, e descartar uma
+  // significaria perder o trabalho do fiscal. Mas também não pode derrubar o
+  // salvamento se a cota do localStorage estourar — o Firestore já mantém a
+  // própria fila offline em IndexedDB (ver firebase.ts), então aqui o pior
+  // caso é ficar sem a rede de segurança extra, não perder a gravação.
+  try {
+    localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(pending));
+  } catch (e) {
+    console.warn("Fila local de sincronização não pôde ser gravada (cota do localStorage?). O reenvio segue pela fila do próprio Firestore.", e);
+  }
 }
 
 function buildFirestorePayload(docData: any) {
@@ -129,18 +140,12 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
     }
     setNeedsMunicipioSelection(false);
 
-    // Carregamento rápido do Cache
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved).map((i: any) => ({
-          ...i,
-          data: new Date(i.data)
-        }));
-        setInspecoes(parsed);
-      } catch (e) {
-        console.error("Erro no cache local de inspeções");
-      }
+    // Partida rápida: só os mais recentes, pra pintar algo antes do primeiro
+    // snapshot (ver cache-colecao-local.ts). A lista completa vem do Firestore
+    // logo depois, inclusive offline, pelo cache persistente em IndexedDB.
+    const salvas = lerCacheColecao<any>(LOCAL_STORAGE_KEY);
+    if (salvas) {
+      setInspecoes(salvas.map((i: any) => ({ ...i, data: new Date(i.data) })));
     }
 
     if (db && !configError) {
@@ -215,11 +220,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
                 }),
             ];
 
-        try {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(merged));
-        } catch (e) {
-          console.warn("Falha ao salvar cache local de inspeções (cota excedida?):", e);
-        }
+        salvarCacheColecao(LOCAL_STORAGE_KEY, merged, 'ultimos');
         setInspecoes(merged);
         setLoading(false);
       }, (err) => {
@@ -258,14 +259,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
         const existing = prev.find(i => i.id === targetId);
         const newItem = { ...existing, ...docData, data: inspectionDate } as Inspecao;
         const updated = id ? prev.map(i => i.id === id ? newItem : i) : [...prev, newItem];
-        try {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
-        } catch (e) {
-          // Cota do localStorage estourada (comum com muitas fotos em
-          // base64 acumuladas) — sem este try/catch, isso quebrava a
-          // atualização do estado local inteiro, silenciosamente.
-          console.warn("Falha ao salvar cache local de inspeções (cota excedida?):", e);
-        }
+        salvarCacheColecao(LOCAL_STORAGE_KEY, updated, 'ultimos');
         return updated;
     });
 
@@ -302,11 +296,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
 
     setInspecoes(prev => {
         const updated = prev.filter(i => i.id !== id);
-        try {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
-        } catch (e) {
-          console.warn("Falha ao salvar cache local de inspeções (cota excedida?):", e);
-        }
+        salvarCacheColecao(LOCAL_STORAGE_KEY, updated, 'ultimos');
         return updated;
     });
 
@@ -335,7 +325,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
       const updated = prev.map(i =>
         stringIds.includes(String(i.id)) ? { ...i, folderId: folderValue, deleted: false } : i
       );
-      try { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated)); } catch (e) {}
+      salvarCacheColecao(LOCAL_STORAGE_KEY, updated, 'ultimos');
       return updated;
     });
 
@@ -356,7 +346,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
       const updated = prev.map(i =>
         stringIds.includes(String(i.id)) ? { ...i, deleted: toTrash, deletedAt: now } : i
       );
-      try { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated)); } catch (e) {}
+      salvarCacheColecao(LOCAL_STORAGE_KEY, updated, 'ultimos');
       return updated;
     });
 
@@ -374,7 +364,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
 
     setInspecoes(prev => {
       const updated = prev.filter(i => !stringIds.includes(String(i.id)));
-      try { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated)); } catch (e) {}
+      salvarCacheColecao(LOCAL_STORAGE_KEY, updated, 'ultimos');
       return updated;
     });
 
@@ -390,7 +380,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
 
     setInspecoes(prev => {
       const updated = prev.map(i => String(i.id) === stringId ? { ...i, favorito } : i);
-      try { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated)); } catch (e) {}
+      salvarCacheColecao(LOCAL_STORAGE_KEY, updated, 'ultimos');
       return updated;
     });
 

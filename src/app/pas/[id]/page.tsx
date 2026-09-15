@@ -30,14 +30,15 @@ import { useIntimacoes } from "@/hooks/use-intimacoes"
 import { useAuth } from "@/hooks/use-auth"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useToast } from "@/hooks/use-toast"
-import { addBusinessDays, calculateDeadline } from "@/lib/prazo"
+import { addPrazo, calculateDeadline } from "@/lib/prazo"
+import { baseLegalDoMunicipio } from "@/lib/base-legal-municipal"
 import { criarLembretePrazo, cancelarLembretePrazo } from "@/lib/prazo-lembrete"
 import { storage } from "@/lib/firebase"
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage"
 import { blobToDataUrl } from "@/lib/compress-image"
 import { sanitizeHtml } from "@/lib/sanitize-html"
-import { renderReportIntoPdf } from "@/lib/generate-roteiro-pdf"
-import type { PasPeca } from "@/lib/types"
+import { renderPasIntoPdf } from "@/lib/generate-pas-pdf"
+import type { PasPeca, PasFase } from "@/lib/types"
 import {
   textoDespachoInicial,
   textoDespachoInstrucao,
@@ -46,6 +47,10 @@ import {
   textoTermoJuntadaDefesa,
   textoTermoInformacaoSemDefesa,
   textoDespachoEncerramentoInstrucao,
+  textoAdmissibilidadeJulgamento,
+  textoDespachoEncaminhamentoTip,
+  textoTermoImposicaoPenalidade,
+  textoTermoRetificacao,
   PAS_PECA_TITULOS,
   PAS_FASE_LABEL,
   PAS_FASE_COR,
@@ -55,6 +60,16 @@ import { cn, normalizeId } from "@/lib/utils"
 /** Sobe o anexo externo escolhido na revisão (ver PasPecaReviewDialog),
  * quando houver — usado por todas as peças pra destravar uma etapa que não
  * foi feita pelo sistema (documento já pronto, escaneado). */
+/** Falha na geração do PDF costuma vir de biblioteca (html2canvas/pdf.js) com
+ *  formato imprevisível — inclusive um `Event` cru, que vira "[object Event]"
+ *  se for jogado direto na tela. Aqui sempre sai um texto legível. */
+function descreverErro(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === 'string') return e;
+  if (e && typeof e === 'object' && 'type' in e) return `Falha ao carregar um recurso (${(e as Event).type}).`;
+  return 'Tente novamente.';
+}
+
 async function uploadAnexoExterno(pasId: string, file?: File): Promise<string | undefined> {
   if (!file) return undefined;
   return uploadArquivoPas(pasId, file);
@@ -80,7 +95,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const { toast } = useToast();
   const { profile } = useAuth();
   const { processos, loading: loadingPas, atualizarPas, excluirPas } = usePas();
-  const { pecas, loading: loadingPecas, adicionarPeca, adicionarPecas } = usePasPecas(id);
+  const { pecas, loading: loadingPecas, adicionarPeca, adicionarPecas, excluirPeca } = usePasPecas(id);
   const { saveInspecao, deleteInspecao } = useInspecoes();
   const { updateIntimacaoMeta } = useIntimacoes();
   const { config } = useAppConfig({ municipioIdOverride: profile?.municipioId });
@@ -120,22 +135,33 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
     return 'Prudentópolis';
   }, [profile?.municipioId, config.municipioNome]);
 
-  // PDF de cada peça — reaproveita o mesmo algoritmo de paginação do
-  // relatório de roteiro (renderReportIntoPdf), só trocando o corpo/HTML.
-  // O "papel" fica sempre montado, mas fora da tela (position:fixed,
-  // left:-99999px) — precisa estar de verdade no DOM (não display:none) pra
-  // offsetWidth/offsetHeight terem valor real na hora de gerar o PDF.
-  const [pecaParaBaixar, setPecaParaBaixar] = useState<PasPeca | null>(null);
+  // PDF — gerador próprio dos autos (renderPasIntoPdf): folhas A4 de verdade,
+  // um documento por folha, numeração contínua a partir da capa e os arquivos
+  // anexados juntados logo depois da peça a que se referem. Serve tanto pra
+  // baixar uma peça isolada quanto várias juntas (processo completo ou só
+  // uma etapa) — a lista sempre tem 1+ peças; o "papel" fica sempre montado,
+  // mas fora da tela (position:fixed, left:-99999px) — precisa estar de
+  // verdade no DOM (não display:none) pra offsetWidth/offsetHeight terem
+  // valor real na hora de gerar o PDF.
+  const [pecasParaBaixar, setPecasParaBaixar] = useState<PasPeca[] | null>(null);
+  const [nomeArquivoBaixar, setNomeArquivoBaixar] = useState("");
+  // true pra download de etapa/processo completo (a capa entra junto, pronta
+  // pra imprimir); false pra baixar uma peça avulsa, onde uma capa seria
+  // redundante.
+  const [incluirCapaNoDownload, setIncluirCapaNoDownload] = useState(true);
   const [isBaixandoPdf, setIsBaixandoPdf] = useState(false);
+  // Autos completos com anexos escaneados chegam fácil a algumas dezenas de
+  // folhas — sem um "folha 7 de 32" o usuário acha que travou.
+  const [progressoPdf, setProgressoPdf] = useState("");
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!pecaParaBaixar || !pas) return;
+    if (!pecasParaBaixar || !pas) return;
     let stagingEl: HTMLDivElement | null = null;
     (async () => {
-      // Um frame de espera garante que o React já pintou o conteúdo da peça
-      // no printRef antes de medir/capturar — sem isso, a primeira geração
-      // depois de trocar de peça podia capturar o HTML anterior.
+      // Um frame de espera garante que o React já pintou o conteúdo no
+      // printRef antes de medir/capturar — sem isso, a primeira geração
+      // depois de trocar a lista podia capturar o HTML anterior.
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       try {
         const { jsPDF } = await import("jspdf");
@@ -146,24 +172,83 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         document.body.appendChild(stagingEl);
         const pdf = new jsPDF('p', 'mm', 'a4');
         if (!printRef.current) throw new Error('Modelo de impressão não encontrado.');
-        await renderReportIntoPdf(pdf, printRef.current, stagingEl);
-        const nomeArquivo = `${pecaParaBaixar.titulo} - PAS ${pas.numeroProcesso}.pdf`.replace(/[\\/:*?"<>|]/g, '_');
-        pdf.save(nomeArquivo);
+        await renderPasIntoPdf(pdf, printRef.current, stagingEl, {
+          onProgress: (folha, total) => setProgressoPdf(`${folha}/${total}`),
+        });
+        pdf.save(`${nomeArquivoBaixar} - PAS ${pas.numeroProcesso}.pdf`.replace(/[\\/:*?"<>|]/g, '_'));
       } catch (e) {
-        console.error('Erro ao gerar PDF da peça do PAS:', e);
-        toast({ variant: "destructive", title: "Erro ao gerar o PDF" });
+        console.error('Erro ao gerar PDF do PAS:', e);
+        toast({ variant: "destructive", title: "Erro ao gerar o PDF", description: descreverErro(e) });
       } finally {
         if (stagingEl) document.body.removeChild(stagingEl);
         setIsBaixandoPdf(false);
-        setPecaParaBaixar(null);
+        setProgressoPdf("");
+        setPecasParaBaixar(null);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pecaParaBaixar]);
+  }, [pecasParaBaixar]);
 
-  const handleBaixarPeca = (peca: PasPeca) => {
+  const iniciarDownload = (pecasList: PasPeca[], nomeArquivo: string, comCapa = true) => {
+    if (pecasList.length === 0) return;
+    setNomeArquivoBaixar(nomeArquivo);
+    setIncluirCapaNoDownload(comCapa);
     setIsBaixandoPdf(true);
-    setPecaParaBaixar(peca);
+    setPecasParaBaixar(pecasList);
+  };
+
+  const handleBaixarPeca = (peca: PasPeca) => iniciarDownload([peca], peca.titulo, false);
+  const handleBaixarProcessoCompleto = () => iniciarDownload(pecas, "Processo Completo");
+
+  // Agrupa as peças por etapa pra download avulso — peças não guardam a
+  // fase em que nasceram, então o agrupamento é posicional: tudo até o
+  // despacho inicial é Instauração, dali até o encerramento da instrução é
+  // Instrução, dali até o TIP é Julgamento (cobre também o Termo de Juntada
+  // do julgamento, que tem `tipo: 'termo_juntada'` igual aos da Instrução —
+  // agrupar por posição em vez de por tipo evita misturar etapas erradas).
+  const etapasParaDownload = useMemo(() => {
+    const idxInicial = pecas.findIndex(p => p.tipo === 'despacho_inicial');
+    const idxEncerramento = pecas.findIndex(p => p.tipo === 'despacho_encerramento_instrucao');
+    const idxTip = pecas.findIndex(p => p.tipo === 'termo_imposicao_penalidade');
+    const grupos = [
+      { key: 'instauracao', label: 'Etapa 1 — Instauração', pecas: idxInicial >= 0 ? pecas.slice(0, idxInicial + 1) : [] },
+      { key: 'instrucao', label: 'Etapa 2 — Instrução', pecas: idxInicial >= 0 ? pecas.slice(idxInicial + 1, idxEncerramento >= 0 ? idxEncerramento + 1 : undefined) : [] },
+      { key: 'julgamento', label: 'Etapa 3 — Julgamento', pecas: idxEncerramento >= 0 ? pecas.slice(idxEncerramento + 1, idxTip >= 0 ? idxTip + 1 : undefined) : [] },
+      { key: 'posTip', label: 'Etapa 4 — Recursal/Arquivamento', pecas: idxTip >= 0 ? pecas.slice(idxTip + 1) : [] },
+    ];
+    return grupos.filter(g => g.pecas.length > 0);
+  }, [pecas]);
+
+  // Etiqueta de capa — não é uma peça dos autos, é só uma folha de
+  // identificação pra colar na pasta física do processo (prática comum em
+  // processos administrativos em papel). PDF próprio, mais simples, sem
+  // paginação (sempre cabe numa folha só).
+  const [isBaixandoCapa, setIsBaixandoCapa] = useState(false);
+  const capaRef = useRef<HTMLDivElement>(null);
+
+  const handleBaixarEtiquetaCapa = async () => {
+    if (!pas) return;
+    setIsBaixandoCapa(true);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    let stagingEl: HTMLDivElement | null = null;
+    try {
+      const { jsPDF } = await import("jspdf");
+      stagingEl = document.createElement('div');
+      stagingEl.style.position = 'fixed';
+      stagingEl.style.left = '-99999px';
+      stagingEl.style.top = '0';
+      document.body.appendChild(stagingEl);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      if (!capaRef.current) throw new Error('Modelo de etiqueta não encontrado.');
+      await renderPasIntoPdf(pdf, capaRef.current, stagingEl);
+      pdf.save(`Etiqueta de Capa - PAS ${pas.numeroProcesso}.pdf`.replace(/[\\/:*?"<>|]/g, '_'));
+    } catch (e) {
+      console.error('Erro ao gerar a etiqueta de capa do PAS:', e);
+      toast({ variant: "destructive", title: "Erro ao gerar a etiqueta", description: descreverErro(e) });
+    } finally {
+      if (stagingEl) document.body.removeChild(stagingEl);
+      setIsBaixandoCapa(false);
+    }
   };
 
   const [isEncaminharOpen, setIsEncaminharOpen] = useState(false);
@@ -225,6 +310,16 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
     }
   };
 
+  // Julgamento — texto livre (mesmo padrão do Relatório Técnico: estado
+  // local, editável a qualquer momento, sem depender de nada estar fechado
+  // antes) e emissão de verdade só quando handlePodeEmitirJulgamento liberar
+  // mais abaixo (relatório + defesa/informação já completos).
+  const [julgamentoFundamentacao, setJulgamentoFundamentacao] = useState("");
+  const [julgamentoDecisao, setJulgamentoDecisao] = useState("");
+  const [isEmitindoJulgamento, setIsEmitindoJulgamento] = useState(false);
+  const [isEncaminhandoTip, setIsEncaminhandoTip] = useState(false);
+  const [isArquivando, setIsArquivando] = useState(false);
+
   const [isExcluindoPas, setIsExcluindoPas] = useState(false);
 
   const handleExcluirPas = async () => {
@@ -242,6 +337,31 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       console.error('Erro ao excluir o PAS:', e);
       toast({ variant: "destructive", title: "Erro ao excluir" });
       setIsExcluindoPas(false);
+    }
+  };
+
+  // Remoção de peça juntada por engano (documento errado ou duplicado). Não
+  // é edição dos autos: pra corrigir o CONTEÚDO de uma peça válida o caminho
+  // continua sendo o Termo de Retificação, que preserva a original. Aqui é o
+  // caso em que a peça simplesmente não deveria existir.
+  const [pecaParaExcluir, setPecaParaExcluir] = useState<PasPeca | null>(null);
+  const [isExcluindoPeca, setIsExcluindoPeca] = useState(false);
+  const podeExcluirPeca = isGestor || isAutuante;
+
+  const handleExcluirPeca = async () => {
+    if (!pecaParaExcluir) return;
+    setIsExcluindoPeca(true);
+    try {
+      const { renumerado } = await excluirPeca(pecaParaExcluir.id);
+      toast(renumerado
+        ? { title: "Peça excluída", description: "As peças seguintes foram renumeradas." }
+        : { title: "Peça excluída", description: "A numeração das peças seguintes não pôde ser ajustada — publique as regras do Firestore e reabra o processo." });
+      setPecaParaExcluir(null);
+    } catch (e) {
+      console.error('Erro ao excluir peça do PAS:', e);
+      toast({ variant: "destructive", title: "Erro ao excluir a peça", description: descreverErro(e) });
+    } finally {
+      setIsExcluindoPeca(false);
     }
   };
 
@@ -289,6 +409,17 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
     );
   }
 
+  // Roadmap sempre visível no topo — mostra o percurso inteiro do PAS, não
+  // só a fase atual, pra dar contexto de onde o processo está e o que ainda
+  // falta, mesmo em fases que ainda não têm ação própria na tela.
+  const ROADMAP_STEPS: { key: string; label: string; fases: PasFase[] }[] = [
+    { key: 'instauracao', label: 'Instauração', fases: ['instauracao'] },
+    { key: 'instrucao', label: 'Instrução', fases: ['instrucao'] },
+    { key: 'julgamento', label: 'Julgamento', fases: ['aguardando_julgamento', 'julgamento', 'recursal'] },
+    { key: 'arquivamento', label: 'Arquivamento', fases: ['arquivamento'] },
+  ];
+  const roadmapIndexAtual = ROADMAP_STEPS.findIndex(s => s.fases.includes(pas.fase));
+
   const temDespachoInstrucao = pecas.some(p => p.tipo === 'despacho_instrucao');
   const temRelatorioInstrucao = pecas.some(p => p.tipo === 'relatorio_instrucao');
   const temDefesaOuInformacao = !!pas.defesa || pecas.some(p => p.tipo === 'termo_informacao');
@@ -301,6 +432,140 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   // disso existir, os textos caem num endereçamento genérico ao cargo.
   const gestorResponsavel = pecas.find(p => p.tipo === 'despacho_instrucao');
   const destinatarioGestor = gestorResponsavel ? { nome: gestorResponsavel.criadoPorNome, cargo: 'Coordenação da Vigilância Sanitária Municipal' } : undefined;
+
+  // Julgamento: só a EMISSÃO de verdade exige a instrução completa (julgar
+  // com o processo incompleto é ato prematuro, invalidável — Título III,
+  // Cap.3 do manual); redigir a fundamentação não depende de nada disso, por
+  // isso o bloco de Julgamento aparece sempre, mesmo em fases anteriores.
+  const temJulgamento = pecas.some(p => p.tipo === 'julgamento_primeira_instancia');
+  const temTip = pecas.some(p => p.tipo === 'termo_imposicao_penalidade');
+  const podeEmitirJulgamento = temRelatorioInstrucao && temDefesaOuInformacao;
+
+  const handleEmitirJulgamento = () => {
+    if (!julgamentoFundamentacao.trim()) {
+      toast({ variant: "destructive", title: "Escreva a fundamentação antes de emitir" });
+      return;
+    }
+    const admissibilidade = textoAdmissibilidadeJulgamento({
+      temDefesa: !!pas.defesa,
+      tempestividade: pas.defesa?.tempestividade,
+    });
+    const julgamentoHtml = [
+      `<p><strong>1. ADMISSIBILIDADE</strong></p><p>${admissibilidade}</p>`,
+      `<p><strong>2. FUNDAMENTAÇÃO</strong></p><p>${julgamentoFundamentacao.replace(/\n/g, '<br>')}</p>`,
+      `<p><strong>3. DECISÃO</strong></p><p>${(julgamentoDecisao || 'A definir.').replace(/\n/g, '<br>')}</p>`,
+    ].join('');
+    setRevisao({
+      titulo: PAS_PECA_TITULOS.julgamento_primeira_instancia,
+      conteudoInicial: julgamentoHtml,
+      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile }) => {
+        setIsEmitindoJulgamento(true);
+        try {
+          const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
+          await adicionarPecas([
+            { tipo: 'termo_juntada', titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: `Junto aos autos o Julgamento em 1ª Instância proferido nesta data, para os devidos fins.` },
+            { tipo: 'julgamento_primeira_instancia', titulo: PAS_PECA_TITULOS.julgamento_primeira_instancia, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl },
+          ]);
+          await atualizarPas(pas.id, { fase: 'julgamento' });
+          setJulgamentoFundamentacao(""); setJulgamentoDecisao("");
+          toast({ title: "Julgamento emitido" });
+          await limparEncaminhamento();
+          setRevisao(null);
+        } catch (e) {
+          console.error('Erro ao emitir o julgamento do PAS:', e);
+          toast({ variant: "destructive", title: "Erro ao emitir o julgamento" });
+        } finally {
+          setIsEmitindoJulgamento(false);
+        }
+      },
+    });
+  };
+
+  const handleEncaminharTip = () => {
+    // O prazo recursal sai da lei aplicável ao município: 10 dias úteis no
+    // rito estadual, 10 (multa) ou 15 (demais casos) em Prudentópolis.
+    const baseLegal = baseLegalDoMunicipio(profile?.municipioId);
+    const prazoRecursal = addPrazo(new Date(), baseLegal.recurso.dias, baseLegal.contagemPrazo);
+    const prazoRecursalFormatada = format(prazoRecursal, "dd/MM/yyyy");
+    const prazoRecursalMultaData = baseLegal.recurso.diasMulta
+      ? format(addPrazo(new Date(), baseLegal.recurso.diasMulta, baseLegal.contagemPrazo), "dd/MM/yyyy")
+      : undefined;
+    setRevisao({
+      titulo: PAS_PECA_TITULOS.despacho_encaminhamento_tip,
+      conteudoInicial: textoDespachoEncaminhamentoTip({ destinatario: destinatarioGestor }),
+      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile }) => {
+        setIsEncaminhandoTip(true);
+        try {
+          const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
+          await adicionarPecas([
+            { tipo: 'despacho_encaminhamento_tip', titulo: PAS_PECA_TITULOS.despacho_encaminhamento_tip, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl },
+            { tipo: 'termo_imposicao_penalidade', titulo: PAS_PECA_TITULOS.termo_imposicao_penalidade, conteudoHtml: textoTermoImposicaoPenalidade({ numeroAI: pas.numeroProcesso, prazoRecursalData: prazoRecursalFormatada, prazoRecursalMultaData, municipioId: profile?.municipioId }) },
+          ]);
+          const lembreteId = await criarLembretePrazo(saveInspecao, {
+            titulo: `Prazo recursal (PAS) vence em breve — ${pas.estabelecimento.fantasia}`,
+            prazoISO: prazoRecursal.toISOString(),
+            fiscalId: pas.autuanteUid,
+            fiscalNome: pas.autuanteNome,
+            municipioId: profile!.municipioId,
+          });
+          await atualizarPas(pas.id, { fase: 'recursal', agendaLembreteId: lembreteId });
+          toast({ title: "TIP emitido — prazo recursal em andamento" });
+          await limparEncaminhamento();
+          setRevisao(null);
+        } catch (e) {
+          console.error('Erro ao encaminhar o TIP do PAS:', e);
+          toast({ variant: "destructive", title: "Erro ao encaminhar o TIP" });
+        } finally {
+          setIsEncaminhandoTip(false);
+        }
+      },
+    });
+  };
+
+  const handleArquivarProcesso = async () => {
+    setIsArquivando(true);
+    try {
+      await atualizarPas(pas.id, { fase: 'arquivamento' });
+      toast({ title: "Processo arquivado" });
+    } catch (e) {
+      console.error('Erro ao arquivar o PAS:', e);
+      toast({ variant: "destructive", title: "Erro ao arquivar" });
+    } finally {
+      setIsArquivando(false);
+    }
+  };
+
+  // Corrigir uma peça já lavrada nunca edita/apaga a original (Título III,
+  // Cap.2, §1.1–1.2 do manual) — abre a mesma revisão de sempre, só que
+  // pré-preenchida com o conteúdo da peça errada como ponto de partida, e
+  // grava um Termo de Retificação novo que referencia a original por número.
+  const handleRetificarPeca = (pecaOriginal: PasPeca) => {
+    setRevisao({
+      titulo: `${PAS_PECA_TITULOS.termo_retificacao} — Peça nº ${pecaOriginal.numero}`,
+      conteudoInicial: textoTermoRetificacao({ pecaOriginalTitulo: pecaOriginal.titulo, pecaOriginalNumero: pecaOriginal.numero }) + pecaOriginal.conteudoHtml,
+      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile }) => {
+        try {
+          const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
+          await adicionarPeca({
+            tipo: 'termo_retificacao',
+            titulo: `${PAS_PECA_TITULOS.termo_retificacao} — Peça nº ${pecaOriginal.numero}`,
+            conteudoHtml: conteudoFinal,
+            assinaturaUrl,
+            assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile,
+            anexoUrl,
+            refPecaId: pecaOriginal.id,
+            refPecaNumero: pecaOriginal.numero,
+          });
+          toast({ title: "Termo de retificação registrado" });
+          await limparEncaminhamento();
+          setRevisao(null);
+        } catch (e) {
+          console.error('Erro ao retificar peça do PAS:', e);
+          toast({ variant: "destructive", title: "Erro ao registrar a retificação" });
+        }
+      },
+    });
+  };
 
   const handleIniciarInstrucao = () => {
     setRevisao({
@@ -324,11 +589,12 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
 
   const handleEmitirDespachoInstrucao = () => {
     if (!profile?.municipioId) return;
-    const prazoData = addBusinessDays(new Date(pas.dataCienciaAI), 15);
+    const baseLegal = baseLegalDoMunicipio(profile.municipioId);
+    const prazoData = addPrazo(new Date(pas.dataCienciaAI), baseLegal.defesa.dias, baseLegal.contagemPrazo);
     const prazoFormatada = format(prazoData, "dd/MM/yyyy");
     setRevisao({
       titulo: PAS_PECA_TITULOS.despacho_instrucao,
-      conteudoInicial: textoDespachoInstrucao({ numeroAI: pas.numeroProcesso, prazoDefesaData: prazoFormatada }),
+      conteudoInicial: textoDespachoInstrucao({ numeroAI: pas.numeroProcesso, prazoDefesaData: prazoFormatada, municipioId: profile.municipioId }),
       onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile }) => {
         try {
           const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
@@ -467,7 +733,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
     const prazoFormatada = pas.prazoDefesaData ? format(new Date(pas.prazoDefesaData), "dd/MM/yyyy") : '';
     setRevisao({
       titulo: PAS_PECA_TITULOS.termo_informacao,
-      conteudoInicial: textoTermoInformacaoSemDefesa({ numeroAI: pas.numeroProcesso, prazoDefesaData: prazoFormatada }),
+      conteudoInicial: textoTermoInformacaoSemDefesa({ numeroAI: pas.numeroProcesso, prazoDefesaData: prazoFormatada, municipioId: profile?.municipioId }),
       onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile }) => {
         try {
           const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
@@ -568,19 +834,78 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
           )}
         </div>
 
+        {/* Percurso completo do PAS — sempre visível, não só a fase atual. */}
+        <div className="flex items-center">
+          {ROADMAP_STEPS.map((step, i) => (
+            <div key={step.key} className="flex items-center flex-1 last:flex-none">
+              <div className="flex flex-col items-center gap-1.5 shrink-0">
+                <span className={cn(
+                  "h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-black shrink-0",
+                  i < roadmapIndexAtual ? "bg-[#E3F1EA] text-[#1F7A5C]" : i === roadmapIndexAtual ? "bg-[#0E4A44] text-white" : "bg-[#F1EEE4] text-[#A39D8C]"
+                )}>
+                  {i < roadmapIndexAtual ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
+                </span>
+                <span className={cn("text-[10px] font-bold uppercase whitespace-nowrap", i === roadmapIndexAtual ? "text-[#0E4A44]" : "text-[#A39D8C]")}>{step.label}</span>
+              </div>
+              {i < ROADMAP_STEPS.length - 1 && (
+                <div className={cn("h-0.5 flex-1 mx-2 mb-4", i < roadmapIndexAtual ? "bg-[#1F7A5C]" : "bg-[#E4DFD1]")} />
+              )}
+            </div>
+          ))}
+        </div>
+
         {/* Linha do tempo das peças */}
         <div className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C] px-1">Autos do processo</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Autos do processo</h2>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button type="button" variant="outline" size="sm" onClick={handleBaixarEtiquetaCapa} disabled={isBaixandoCapa} className="h-7 rounded-md text-[11px] gap-1.5 text-[#6B6659]">
+                {isBaixandoCapa ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />} Etiqueta de Capa
+              </Button>
+              {pecas.length > 0 && (
+                <Button type="button" variant="outline" size="sm" onClick={handleBaixarProcessoCompleto} disabled={isBaixandoPdf} className="h-7 rounded-md text-[11px] gap-1.5 text-[#6B6659]">
+                  {isBaixandoPdf && nomeArquivoBaixar === "Processo Completo" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />} Processo Completo
+                </Button>
+              )}
+              {etapasParaDownload.map((etapa) => (
+                <Button
+                  key={etapa.key}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => iniciarDownload(etapa.pecas, etapa.label)}
+                  disabled={isBaixandoPdf}
+                  className="h-7 rounded-md text-[11px] gap-1.5 text-[#6B6659]"
+                >
+                  {isBaixandoPdf && nomeArquivoBaixar === etapa.label ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />} {etapa.label}
+                </Button>
+              ))}
+              {isBaixandoPdf && progressoPdf && (
+                <span className="text-[11px] text-[#6B6659] tabular-nums">folha {progressoPdf}</span>
+              )}
+            </div>
+          </div>
           {pecas.length === 0 ? (
             <p className="text-sm text-[#A39D8C] px-1">Nenhuma peça ainda.</p>
           ) : (
             <div className="rounded-lg border border-[#E4DFD1] bg-white divide-y divide-[#F1EEE4]">
-              {pecas.map((peca) => (
+              {pecas.map((peca) => {
+                // A original nunca é alterada — só marcada visualmente com a
+                // peça de retificação que a corrigiu (ver handleRetificarPeca).
+                const retificadaPor = pecas.find(p => p.refPecaId === peca.id);
+                return (
                 <details key={peca.id} className="group">
                   <summary className="flex items-center gap-3 px-4 py-3 cursor-pointer list-none">
                     <span className="h-6 w-6 rounded-full bg-[#F5F2EA] text-[#6B6659] text-[11px] font-black flex items-center justify-center shrink-0">{peca.numero}</span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[#262420] truncate">{peca.titulo}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-[#262420] truncate">{peca.titulo}</p>
+                        {retificadaPor && (
+                          <Badge variant="outline" className="text-[9px] font-medium h-[18px] px-1.5 border-none bg-amber-50 text-amber-700 shrink-0">
+                            Retificada pela peça nº {retificadaPor.numero}
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-[11px] text-[#A39D8C]">{peca.criadoPorNome} — {format(new Date(peca.criadoEm), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
                     </div>
                     <button
@@ -590,20 +915,45 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                       title="Baixar PDF desta peça"
                       className="h-7 w-7 rounded-md flex items-center justify-center text-[#6B6659] hover:text-[#0E4A44] hover:bg-[#E4EEEC] transition-colors shrink-0 disabled:opacity-50"
                     >
-                      {isBaixandoPdf && pecaParaBaixar?.id === peca.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+                      {isBaixandoPdf && pecasParaBaixar?.length === 1 && pecasParaBaixar[0].id === peca.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
                     </button>
+                    {podeExcluirPeca && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPecaParaExcluir(peca); }}
+                        title="Excluir esta peça dos autos"
+                        className="h-7 w-7 rounded-md flex items-center justify-center text-[#A39D8C] hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     <ChevronDown className="h-4 w-4 text-[#C4BEAC] shrink-0 transition-transform group-open:rotate-180" />
                   </summary>
                   <div className="px-4 pb-4 space-y-2">
                     <div className="text-sm text-[#3F3B33] leading-relaxed pl-9" dangerouslySetInnerHTML={{ __html: peca.conteudoHtml }} />
-                    {peca.anexoUrl && (
-                      <a href={peca.anexoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 pl-9 text-xs font-medium text-[#0E4A44] hover:underline">
-                        <Download className="h-3.5 w-3.5" /> Baixar anexo
-                      </a>
+                    {peca.refPecaNumero && (
+                      <p className="text-xs text-[#A39D8C] pl-9">Retifica a peça nº {peca.refPecaNumero}.</p>
                     )}
+                    <div className="flex items-center gap-3 pl-9 pt-1">
+                      {peca.anexoUrl && (
+                        <a href={peca.anexoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0E4A44] hover:underline">
+                          <Download className="h-3.5 w-3.5" /> Baixar anexo
+                        </a>
+                      )}
+                      {!retificadaPor && (
+                        <button
+                          type="button"
+                          onClick={() => handleRetificarPeca(peca)}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-[#9C7A3C] hover:underline"
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> Retificar
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </details>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -761,12 +1111,79 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             </div>
           )}
 
-          {pas.fase === 'aguardando_julgamento' && (
-            <div className="flex items-center gap-2 text-sm text-[#6B6659]">
-              <CheckCircle2 className="h-4 w-4 text-[#1F7A5C]" /> Instrução concluída — aguardando julgamento. Essa fase ainda não tem tela própria neste sistema.
+        </div>
+
+        {/* Julgamento — sempre visível, mesmo antes de a Instrução fechar:
+            só a EMISSÃO de verdade (abaixo) exige o processo completo;
+            redigir a fundamentação pode começar a qualquer momento, do
+            mesmo jeito que o Relatório Técnico já funciona. */}
+        {pas.fase !== 'arquivamento' && (
+        <div className="rounded-lg border border-[#E4DFD1] bg-white p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Julgamento</h2>
+            <PasDica chave="julgamento" />
+          </div>
+
+          <div className="flex items-start gap-3 pb-4 border-b border-[#F1EEE4]">
+            <span className={cn("h-6 w-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-black mt-0.5", temJulgamento ? "bg-[#E3F1EA] text-[#1F7A5C]" : "bg-[#F5F2EA] text-[#A39D8C]")}>
+              {temJulgamento ? <CheckCircle2 className="h-3.5 w-3.5" /> : "1"}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-[#262420]">Julgamento em 1ª Instância</p>
+              {!temJulgamento && isGestor && (
+                <div className="space-y-3 mt-2">
+                  {!podeEmitirJulgamento && (
+                    <p className="text-xs text-[#A39D8C]">Pode redigir desde já — a emissão só libera depois de relatório técnico e defesa (ou termo de informação) prontos.</p>
+                  )}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#6B6659]">Fundamentação</Label>
+                    <Textarea value={julgamentoFundamentacao} onChange={(e) => setJulgamentoFundamentacao(e.target.value)} rows={5} placeholder="Análise dos fatos, das provas e do enquadramento legal..." className="rounded-md border-[#E4DFD1] resize-none" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#6B6659]">Decisão</Label>
+                    <Textarea value={julgamentoDecisao} onChange={(e) => setJulgamentoDecisao(e.target.value)} rows={3} placeholder="Procedência/improcedência e sanção aplicada..." className="rounded-md border-[#E4DFD1] resize-none" />
+                  </div>
+                  <Button onClick={handleEmitirJulgamento} disabled={!podeEmitirJulgamento || isEmitindoJulgamento} className="bg-[#0E4A44] hover:bg-[#0B3A35]">
+                    {isEmitindoJulgamento ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Emitir Julgamento
+                  </Button>
+                </div>
+              )}
+              {!temJulgamento && !isGestor && (
+                <p className="text-xs text-[#A39D8C] mt-1">Exclusivo do gestor.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <span className={cn("h-6 w-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-black mt-0.5", temTip ? "bg-[#E3F1EA] text-[#1F7A5C]" : "bg-[#F5F2EA] text-[#A39D8C]")}>
+              {temTip ? <CheckCircle2 className="h-3.5 w-3.5" /> : "2"}
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-[#262420]">Termo de Imposição de Penalidade (TIP)</p>
+                <PasDica chave="tip" />
+              </div>
+              {!temTip && (
+                temJulgamento && isGestor ? (
+                  <Button onClick={handleEncaminharTip} disabled={isEncaminhandoTip} className="mt-2 bg-[#0E4A44] hover:bg-[#0B3A35]">
+                    {isEncaminhandoTip ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />} Encaminhar TIP
+                  </Button>
+                ) : (
+                  <p className="text-xs text-[#A39D8C] mt-1">Libera depois do Julgamento em 1ª Instância emitido.</p>
+                )
+              )}
+            </div>
+          </div>
+
+          {temTip && isGestor && (
+            <div className="pt-4 border-t border-[#F1EEE4]">
+              <Button type="button" variant="outline" onClick={handleArquivarProcesso} disabled={isArquivando} className="rounded-md gap-1.5">
+                {isArquivando ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Arquivar Processo
+              </Button>
             </div>
           )}
         </div>
+        )}
       </div>
 
       <Dialog open={isDefesaDialogOpen} onOpenChange={setIsDefesaDialogOpen}>
@@ -869,10 +1286,38 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         </DialogContent>
       </Dialog>
 
+      <AlertDialog open={!!pecaParaExcluir} onOpenChange={(aberto) => { if (!aberto && !isExcluindoPeca) setPecaParaExcluir(null); }}>
+        <AlertDialogContent className="rounded-[2rem]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-black uppercase tracking-tighter text-xl italic">Excluir a peça nº {pecaParaExcluir?.numero}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pecaParaExcluir?.titulo} — juntada por {pecaParaExcluir?.criadoPorNome}.
+              {' '}Use isso só para documento errado ou duplicado: a peça é apagada de vez (não é lixeira) e as seguintes são renumeradas.
+              {pecaParaExcluir?.anexoUrl ? ' O arquivo anexado deixa de aparecer nos autos e no PDF.' : ''}
+              {' '}A fase do processo não volta atrás sozinha: se esta peça era a que abriu a fase atual, ajuste o andamento em seguida.
+              {' '}Para corrigir o conteúdo de uma peça válida, use o Termo de Retificação, que preserva a original.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isExcluindoPeca} className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleExcluirPeca(); }}
+              disabled={isExcluindoPeca}
+              className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-rose-600 hover:bg-rose-700"
+            >
+              {isExcluindoPeca ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Modelo de impressão — sempre montado, fora da tela, reaproveitando o
-          mesmo cabeçalho/rodapé institucional (Identidade Municipal) e o
-          mesmo algoritmo de paginação do relatório de roteiro
-          (renderReportIntoPdf). Só o conteúdo muda conforme `pecaParaBaixar`. */}
+          cabeçalho/rodapé institucional (Identidade Municipal). Aceita 1 peça
+          (download avulso) ou várias (processo completo/etapa). Cada
+          `data-pdf-doc` é um documento dos autos e sempre começa numa folha
+          nova: capa, depois o 1º despacho, e assim por diante — o
+          renderPasIntoPdf quebra o conteúdo de cada documento em folhas A4 e
+          numera tudo de forma contínua a partir da capa. */}
       <div style={{ position: 'fixed', left: -99999, top: 0 }} aria-hidden="true">
         <div ref={printRef} className="document-paper h-auto bg-white">
           <div data-pdf-header className="flex flex-row items-center justify-between gap-6 mb-1 pb-2 border-none">
@@ -902,34 +1347,137 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             </div>
           </div>
 
-          {pecaParaBaixar && (
-            <div data-pdf-block className="mb-4 text-[10pt]" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
-              <p><strong>Processo Administrativo Sanitário nº:</strong> {pas.numeroProcesso}</p>
-              <p><strong>Autuado:</strong> {pas.estabelecimento.fantasia}</p>
-              {pas.estabelecimento.cnpj && <p><strong>CNPJ:</strong> {pas.estabelecimento.cnpj}</p>}
+          {/* Capa — só entra no PDF de etapa/processo completo (download
+              avulso de uma peça não precisa dela). Mesmo conteúdo da
+              Etiqueta de Capa avulsa, mas já dentro do próprio arquivo,
+              pronta pra imprimir junto — era exatamente o que faltava:
+              baixar a etapa já vinha com todos os documentos em ordem, só
+              não vinha com a capa junto. */}
+          {incluirCapaNoDownload && pecasParaBaixar && pecasParaBaixar.length > 0 && (
+            <div data-pdf-doc>
+              <div data-pdf-block className="text-center" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+              <p className="text-[18pt] font-black uppercase tracking-tight mt-4">Processo Administrativo Sanitário</p>
+              <p className="text-[14pt] font-bold mt-1">Nº {pas.numeroProcesso}</p>
+              <p className="text-[11pt] uppercase mt-1 text-zinc-600">{nomeArquivoBaixar}</p>
+              <table className="w-full max-w-[420px] mx-auto border-collapse mt-10 text-left text-[11pt]">
+                <tbody>
+                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Autuado:</td><td className="py-2 uppercase">{pas.estabelecimento.fantasia}</td></tr>
+                  {pas.estabelecimento.cnpj && (<tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">CNPJ:</td><td className="py-2">{pas.estabelecimento.cnpj}</td></tr>)}
+                  {pas.estabelecimento.endereco && (<tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Endereço:</td><td className="py-2">{pas.estabelecimento.endereco}</td></tr>)}
+                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Auto de Infração de origem:</td><td className="py-2">nº {pas.numeroProcesso}</td></tr>
+                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Autuante:</td><td className="py-2 uppercase">{pas.autuanteNome}</td></tr>
+                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Data de instauração:</td><td className="py-2">{format(new Date(pas.dataCienciaAI), "dd/MM/yyyy")}</td></tr>
+                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Fase atual:</td><td className="py-2">{PAS_FASE_LABEL[pas.fase]}</td></tr>
+                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Peças neste volume:</td><td className="py-2">{pecasParaBaixar[0].numero} a {pecasParaBaixar[pecasParaBaixar.length - 1].numero}</td></tr>
+                </tbody>
+              </table>
+            </div>
             </div>
           )}
 
-          {pecaParaBaixar && (
-            <div data-pdf-block className="mb-6">
-              <div className="sub-header-row text-center">{pecaParaBaixar.titulo.toUpperCase()}</div>
-              <div
-                className="p-4"
-                style={{ fontSize: '10pt', lineHeight: 1.6, textAlign: 'justify', fontWeight: 500, color: '#18181b', fontFamily: "'Times New Roman', Times, serif" }}
-                dangerouslySetInnerHTML={{ __html: sanitizeHtml(pecaParaBaixar.conteudoHtml) }}
-              />
-            </div>
-          )}
-
-          {pecaParaBaixar && (
-            <div data-pdf-block className="mt-16 text-center space-y-6" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
-              <p className="text-[10pt]">{nomeMunicipioExibicao.toUpperCase()}, {format(new Date(pecaParaBaixar.criadoEm), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.</p>
-              {pecaParaBaixar.assinaturaUrl && (
-                <img src={pecaParaBaixar.assinaturaUrl} alt="Assinatura" className="h-16 mx-auto object-contain" />
-              )}
-              <div className="pt-1 mx-auto w-full max-w-[280px] border-t border-black">
-                <p className="font-bold uppercase text-[10pt] mt-1">{pecaParaBaixar.criadoPorNome}</p>
+          {/* Uma peça = um documento = uma folha nova. O `data-pdf-anexo-url`
+              faz o arquivo juntado (defesa escaneada, prova, peça assinada
+              fora do sistema) entrar logo depois dela, no tamanho real. */}
+          {pecasParaBaixar?.map((peca) => (
+            <div
+              key={peca.id}
+              data-pdf-doc
+              data-pdf-anexo-url={peca.anexoUrl || undefined}
+              data-pdf-anexo-nome={peca.anexoUrl ? `${peca.numero}. ${peca.titulo}` : undefined}
+            >
+              <div data-pdf-block className="mb-4 text-[9pt]" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+                <p><strong>Processo Administrativo Sanitário nº:</strong> {pas.numeroProcesso}</p>
+                <p><strong>Autuado:</strong> {pas.estabelecimento.fantasia}{pas.estabelecimento.cnpj ? ` — CNPJ: ${pas.estabelecimento.cnpj}` : ''}</p>
               </div>
+
+              <div data-pdf-block className="mb-2">
+                <div className="sub-header-row text-center">{peca.numero}. {peca.titulo.toUpperCase()}</div>
+              </div>
+
+              {/* Só recuo lateral: quando o corpo é maior que uma folha, o
+                  gerador o reparte repetindo esta mesma "casca" em cada
+                  folha — com padding vertical isso viraria um espaço em
+                  branco fantasma no meio do texto. */}
+              <div
+                data-pdf-block
+                className="px-4"
+                style={{ fontSize: '10pt', lineHeight: 1.6, textAlign: 'justify', fontWeight: 500, color: '#18181b', fontFamily: "'Times New Roman', Times, serif" }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(peca.conteudoHtml) }}
+              />
+
+              <div data-pdf-block className="mt-16 mb-10 text-center space-y-6" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+                <p className="text-[10pt]">{nomeMunicipioExibicao.toUpperCase()}, {format(new Date(peca.criadoEm), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.</p>
+                {peca.assinaturaUrl && (
+                  <img src={peca.assinaturaUrl} alt="Assinatura" className="h-16 mx-auto object-contain" />
+                )}
+                <div className="pt-1 mx-auto w-full max-w-[280px] border-t border-black">
+                  <p className="font-bold uppercase text-[10pt] mt-1">{peca.criadoPorNome}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          <div
+            data-pdf-footer
+            className="pt-2 mt-4 border-t border-black/20 text-center text-[8pt] text-black"
+            style={{ fontFamily: "'Times New Roman', Times, serif" }}
+          >
+            {config.footerRichText && <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(config.footerRichText) }} />}
+            <p data-pdf-pagenum className="mt-1">Página 1 de 1</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Etiqueta de capa — folha de identificação avulsa (não é uma peça
+          dos autos), pensada pra colar na pasta física do processo. Sempre
+          cabe numa página só, sem precisar da lógica de paginação. */}
+      <div style={{ position: 'fixed', left: -99999, top: 0 }} aria-hidden="true">
+        <div ref={capaRef} className="document-paper h-auto bg-white">
+          <div data-pdf-header className="flex flex-row items-center justify-between gap-6 mb-1 pb-2 border-none">
+            <div className="w-[140px] h-[100px] flex items-center justify-start overflow-hidden">
+              {config.logoUrl ? (
+                <img
+                  src={config.logoUrl.startsWith('data:') ? config.logoUrl : `/api/proxy-image?url=${encodeURIComponent(config.logoUrl)}`}
+                  className="max-w-full max-h-full object-contain block"
+                  alt="Brasão"
+                  crossOrigin={config.logoUrl.startsWith('data:') ? undefined : "anonymous"}
+                />
+              ) : (
+                <Landmark className="w-2/3 h-2/3 text-zinc-300" strokeWidth={1} />
+              )}
+            </div>
+            <div className="flex-1 text-center">
+              {config.headerRichText ? (
+                <div style={{ fontFamily: "'Times New Roman', Times, serif" }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(config.headerRichText) }} />
+              ) : (
+                <>
+                  <p className="text-[10pt] font-black uppercase text-black">PREFEITURA MUNICIPAL DE {config.municipioNome || "PRUDENTÓPOLIS"}</p>
+                  <h2 className="text-[12pt] font-black uppercase leading-tight">{config.secretaria || "SECRETARIA MUNICIPAL DE SAÚDE"}</h2>
+                  <h3 className="text-[10pt] font-bold uppercase text-zinc-700">{config.departamento || "VIGILÂNCIA SANITÁRIA"}</h3>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div data-pdf-block className="mt-10 text-center" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+            <p className="text-[20pt] font-black uppercase tracking-tight">Processo Administrativo Sanitário</p>
+            <p className="text-[16pt] font-bold mt-2">Nº {pas?.numeroProcesso}</p>
+          </div>
+
+          {pas && (
+            <div data-pdf-block className="mt-14 mx-auto max-w-[420px] text-[11pt]" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+              <table className="w-full border-collapse">
+                <tbody>
+                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Autuado:</td><td className="py-2 uppercase">{pas.estabelecimento.fantasia}</td></tr>
+                  {pas.estabelecimento.cnpj && (<tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">CNPJ:</td><td className="py-2">{pas.estabelecimento.cnpj}</td></tr>)}
+                  {pas.estabelecimento.endereco && (<tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Endereço:</td><td className="py-2">{pas.estabelecimento.endereco}</td></tr>)}
+                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Auto de Infração de origem:</td><td className="py-2">nº {pas.numeroProcesso}</td></tr>
+                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Autuante:</td><td className="py-2 uppercase">{pas.autuanteNome}</td></tr>
+                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Data de instauração:</td><td className="py-2">{format(new Date(pas.dataCienciaAI), "dd/MM/yyyy")}</td></tr>
+                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Fase atual:</td><td className="py-2">{PAS_FASE_LABEL[pas.fase]}</td></tr>
+                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Volume:</td><td className="py-2">1</td></tr>
+                </tbody>
+              </table>
             </div>
           )}
 

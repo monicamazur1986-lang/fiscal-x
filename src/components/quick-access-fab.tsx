@@ -198,6 +198,11 @@ export function QuickAccessFab() {
                     <a.icon className="h-4 w-4" />
                   </div>
                   <span className="text-[11px] leading-tight text-[#262420] font-medium">{a.label}</span>
+                  {a.emDesenvolvimento && (
+                    <span className="rounded-full bg-amber-100 px-1.5 py-[2px] text-[7px] font-black uppercase tracking-[0.1em] leading-none text-amber-700">
+                      em dev
+                    </span>
+                  )}
                 </button>
               ))}
             </div>

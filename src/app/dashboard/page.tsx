@@ -122,7 +122,10 @@ export default function Dashboard() {
                 ? `Prazo de ${prazosVencendoHoje[0].numeroProcesso || prazosVencendoHoje[0].autor || "1 autuação"} vence hoje`
                 : `${prazosVencendoHoje.length} prazos vencem hoje`}
               description="Toque para revisar"
-              href="/intimacoes"
+              // Prazo de defesa só corre em autuação finalizada: com um só, vai
+              // direto ao documento; com vários, cai na lista de finalizadas,
+              // onde o prazo de cada um aparece com o destaque de vencido.
+              href={prazosVencendoHoje.length === 1 ? `/intimacoes/${prazosVencendoHoje[0].id}` : "/intimacoes/finalizadas"}
             />
           )}
           {isGestor && pendingUsersCount > 0 && (

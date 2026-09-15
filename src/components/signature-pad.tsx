@@ -15,6 +15,96 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from '@/lib/utils';
 
+/**
+ * Largura máxima do PNG exportado. A assinatura é desenhada nos documentos com
+ * altura fixa e `object-contain` (h-10 no corpo da autuação, h-16 nas peças do
+ * PAS), ocupando cerca de 70mm no papel — 600px ali dão ~220 DPI, mais do que
+ * qualquer impressora de escritório resolve.
+ */
+const LARGURA_MAX_ASSINATURA = 600;
+
+/** Piso do recorte, como fração do canvas: uma rubrica curta não pode virar um
+ *  recorte minúsculo, senão o `object-contain` a ampliaria desproporcionalmente
+ *  na hora de imprimir. */
+const RECORTE_MINIMO = 0.35;
+
+/** Cresce um intervalo até o tamanho mínimo, mantendo o centro e respeitando a
+ *  borda do canvas. */
+function expandirAteMinimo(inicio: number, fim: number, minimo: number, limite: number): [number, number] {
+  if (fim - inicio >= minimo) return [Math.max(0, inicio), Math.min(limite, fim)];
+  const centro = (inicio + fim) / 2;
+  let novoInicio = Math.round(centro - minimo / 2);
+  let novoFim = Math.round(centro + minimo / 2);
+  if (novoInicio < 0) { novoFim -= novoInicio; novoInicio = 0; }
+  if (novoFim > limite) { novoInicio -= novoFim - limite; novoFim = limite; }
+  return [Math.max(0, novoInicio), Math.min(limite, novoFim)];
+}
+
+/**
+ * ASSINATURA ENXUTA, SEM SAIR DO DOCUMENTO.
+ *
+ * A assinatura continua embutida no próprio documento como data URL — é peça de
+ * valor legal, e depender do Storage pra renderizar significaria PDF sem
+ * assinatura quando a rede ou o bucket falham. O que muda é só o tamanho do
+ * que é exportado.
+ *
+ * O canvas do pad é criado em `rect.width * dpr` (ver initPad): num diálogo de
+ * 900px com dpr 3, isso dá ~2700px de largura, quase toda transparente, e o
+ * `toDataURL` levava tudo isso pra dentro do Firestore e do localStorage — a
+ * maior parte do peso de uma autuação vinha daí. Aqui o PNG é recortado no
+ * retângulo onde realmente há traço e reamostrado pra uma largura fixa.
+ *
+ * Se qualquer etapa falhar (canvas sem contexto, getImageData bloqueado), cai
+ * pro comportamento antigo: exporta o canvas inteiro. Nunca devolve vazio.
+ */
+function exportarAssinatura(canvas: HTMLCanvasElement): string {
+  const contexto = canvas.getContext('2d');
+  if (!contexto) return canvas.toDataURL('image/png');
+
+  let pixels: ImageData;
+  try {
+    pixels = contexto.getImageData(0, 0, canvas.width, canvas.height);
+  } catch {
+    return canvas.toDataURL('image/png');
+  }
+
+  // O pad desenha traço preto sobre fundo transparente, então o canal alfa
+  // identifica a tinta. O limiar 8 (de 255) ignora o quase-nada da borda
+  // antisserrilhada sem cortar o traço de verdade.
+  const { data, width, height } = pixels;
+  let minX = width, minY = height, maxX = -1, maxY = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] > 8) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < 0) return canvas.toDataURL('image/png');
+
+  const folga = Math.round(Math.min(width, height) * 0.04);
+  const [x0, x1] = expandirAteMinimo(minX - folga, maxX + folga, width * RECORTE_MINIMO, width);
+  const [y0, y1] = expandirAteMinimo(minY - folga, maxY + folga, height * RECORTE_MINIMO, height);
+
+  const larguraRecorte = Math.max(1, x1 - x0);
+  const alturaRecorte = Math.max(1, y1 - y0);
+  const escala = Math.min(1, LARGURA_MAX_ASSINATURA / larguraRecorte);
+
+  const saida = document.createElement('canvas');
+  saida.width = Math.max(1, Math.round(larguraRecorte * escala));
+  saida.height = Math.max(1, Math.round(alturaRecorte * escala));
+  const contextoSaida = saida.getContext('2d');
+  if (!contextoSaida) return canvas.toDataURL('image/png');
+
+  contextoSaida.imageSmoothingEnabled = true;
+  contextoSaida.imageSmoothingQuality = 'high';
+  contextoSaida.drawImage(canvas, x0, y0, larguraRecorte, alturaRecorte, 0, 0, saida.width, saida.height);
+  return saida.toDataURL('image/png');
+}
+
 interface SignaturePadProps {
   onSave: (signature: string) => void;
   isOpen?: boolean;
@@ -83,9 +173,8 @@ export function SignaturePad({
   };
 
   const save = () => {
-    if (!padRef.current || padRef.current.isEmpty()) return;
-    const dataUrl = padRef.current.toDataURL('image/png');
-    onSave(dataUrl);
+    if (!padRef.current || padRef.current.isEmpty() || !canvasRef.current) return;
+    onSave(exportarAssinatura(canvasRef.current));
     onOpenChange(false);
   };
 

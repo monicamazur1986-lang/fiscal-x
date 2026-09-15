@@ -22,6 +22,7 @@ import {
 import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
 import { attemptFirestoreWrite } from '@/lib/firestore-offline';
+import { lerCacheColecao, salvarCacheColecao } from '@/lib/cache-colecao-local';
 
 const LOCAL_STORAGE_KEY = 'fiscal_x_intimacoes_v4';
 
@@ -58,20 +59,18 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     }
     setNeedsMunicipioSelection(false);
 
-    // Carregamento inicial do Cache Local (Rápido)
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved).map((i: any) => ({
-            ...i,
-            dataIntimacao: new Date(i.dataIntimacao),
-            dataRecebimento: i.dataRecebimento ? new Date(i.dataRecebimento) : undefined,
-            dataRecebimentoTecnico: i.dataRecebimentoTecnico ? new Date(i.dataRecebimentoTecnico) : undefined,
-        }));
-        setIntimacoes(parsed);
-      } catch (e) {
-        console.error("Erro ao ler cache local");
-      }
+    // Partida rápida: pinta os mais recentes antes do primeiro snapshot chegar.
+    // Não é o acervo — é só o que cabe com folga no localStorage (ver
+    // cache-colecao-local.ts); a lista completa vem do Firestore logo em
+    // seguida, inclusive offline, pelo cache persistente em IndexedDB.
+    const salvos = lerCacheColecao<any>(LOCAL_STORAGE_KEY);
+    if (salvos) {
+      setIntimacoes(salvos.map((i: any) => ({
+        ...i,
+        dataIntimacao: new Date(i.dataIntimacao),
+        dataRecebimento: i.dataRecebimento ? new Date(i.dataRecebimento) : undefined,
+        dataRecebimentoTecnico: i.dataRecebimentoTecnico ? new Date(i.dataRecebimentoTecnico) : undefined,
+      })));
     }
 
     if (db && !configError) {
@@ -121,7 +120,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
         });
 
         // Sincroniza o Cache Local com a Nuvem
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
+        salvarCacheColecao(LOCAL_STORAGE_KEY, items);
         setIntimacoes(items);
         setLoading(false);
       }, (err) => {
@@ -157,16 +156,19 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
       }
     }
 
-    // Sem conexão (ou falha acima): estimativa local a partir do cache,
-    // só para não travar o preenchimento — o número real é confirmado ao salvar online.
-    const localItems = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '[]');
-    const maxSeq = localItems.reduce((max: number, i: any) => {
+    // Sem conexão (ou falha acima): estimativa a partir da lista já carregada,
+    // só para não travar o preenchimento — o número real é confirmado ao salvar
+    // online. Usa o estado em memória, não o cache do localStorage: aquele
+    // guarda só os mais recentes (ver MAX_ITENS_CACHE), e um recorte parcial
+    // aqui poderia repetir um sequencial já usado. O estado vem do Firestore,
+    // que serve a coleção inteira do próprio cache persistente mesmo offline.
+    const maxSeq = intimacoes.reduce((max: number, i) => {
       const [seqPart, yearPart] = (i.numeroProcesso || '').split('/');
       if (parseInt(yearPart, 10) !== year) return max;
       return Math.max(max, parseInt(seqPart, 10) || 0);
     }, 0);
     return `${String(maxSeq + 1).padStart(4, '0')}/${year}`;
-  }, [db, profile?.municipioId]);
+  }, [db, profile?.municipioId, intimacoes]);
 
   const saveIntimacao = useCallback(async (data: z.input<typeof intimacaoSchema>, id?: string) => {
     const parsedData = intimacaoSchema.parse(data);
@@ -203,7 +205,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
         updatedList = [newItem, ...prev];
       }
       
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedList));
+      salvarCacheColecao(LOCAL_STORAGE_KEY, updatedList);
       return [...updatedList];
     });
 
@@ -258,7 +260,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
           ? { ...i, deleted: toTrash, deletedAt: now } 
           : i
       );
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+      salvarCacheColecao(LOCAL_STORAGE_KEY, updated);
       return [...updated];
     });
 
@@ -284,7 +286,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
 
     setIntimacoes(prev => {
       const updated = prev.filter(i => !stringIds.includes(String(i.id)));
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+      salvarCacheColecao(LOCAL_STORAGE_KEY, updated);
       return [...updated];
     });
 
@@ -305,7 +307,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
           ? { ...i, folderId: folderValue, deleted: false }
           : i
       );
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+      salvarCacheColecao(LOCAL_STORAGE_KEY, updated);
       return [...updated];
     });
 
@@ -323,7 +325,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
 
     setIntimacoes(prev => {
       const updated = prev.map(i => String(i.id) === stringId ? { ...i, favorito } : i);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+      salvarCacheColecao(LOCAL_STORAGE_KEY, updated);
       return [...updated];
     });
 
@@ -340,7 +342,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
 
     setIntimacoes(prev => {
       const updated = prev.map(i => String(i.id) === stringId ? { ...i, ...partial } : i);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+      salvarCacheColecao(LOCAL_STORAGE_KEY, updated);
       return [...updated];
     });
 

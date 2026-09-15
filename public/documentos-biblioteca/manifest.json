@@ -1,5 +1,5 @@
 {
-  "version": "2.9.0",
+  "version": "2.12.0",
   "documents": [
     {
       "id": "codigo-sanitario-estadual-pr",
@@ -184,7 +184,7 @@
     {
       "id": "resolucao-sesa-956-2018-vacinacao-extramuro",
       "titulo": "Resolução SESA nº 956/2018 — Vacinação Extramuro",
-      "path": "/documentos-biblioteca/Resolu%C3%A7%C3%A3o%20SESA%20n%20956-2018.pdf",
+      "path": "/documentos-biblioteca/resolucao-sesa-956-2018-vacinacao-extramuro.pdf",
       "esfera": "estadual",
       "categoria": "Resolução",
       "tema": "Serviços de Saúde (Assistência)",
@@ -220,6 +220,26 @@
       "tema": "Estética, Beleza e Bem-estar",
       "descricao": "Resolução da ANVISA que estabelece as condições de uso do acetato de chumbo, formaldeído, paraformaldeído e pirogalol em produtos de higiene pessoal, cosméticos e perfumes (como tinturas capilares), incorporando a Resolução GMC MERCOSUL nº 48/2010. Revoga a RDC nº 521/2021.",
       "keywords": "rdc 645, anvisa, acetato de chumbo, formaldeido, paraformaldeido, pirogalol, tintura capilar, cosmeticos, substancias restritas, mercosul"
+    },
+    {
+      "id": "resolucao-sesa-469-2016",
+      "titulo": "Resolução SESA nº 469/2016 — Boas Práticas em Serviços de Alimentação",
+      "path": "/documentos-biblioteca/Resolucao SESA 469 2016.pdf",
+      "esfera": "estadual",
+      "categoria": "Resolução",
+      "tema": "Alimentos e Bebidas",
+      "descricao": "Norma estadual sobre boas práticas em serviços de alimentação no Paraná, editada com base na Portaria 326/1997/SVS/MS e nas RDC nº 275/2002 e nº 216/2004 da ANVISA, e no Código de Saúde do Paraná (Lei nº 13.331/2001).",
+      "keywords": "resolucao sesa 469, boas praticas, servicos de alimentacao, alimentos, manipulacao, rdc 216, rdc 275, codigo de saude do parana"
+    },
+    {
+      "id": "manual-012-2023-pas-sesa-pr",
+      "titulo": "Manual 012/2023 — Processo Administrativo Sanitário (SESA-PR)",
+      "path": "/documentos-biblioteca/manual-012-2023-processo-administrativo-sanitario.pdf",
+      "esfera": "estadual",
+      "categoria": "Manual",
+      "tema": "Normas Gerais e Institucionais",
+      "descricao": "Manual de apoio teórico-prático da Coordenadoria de Vigilância Sanitária da SESA-PR, com orientações aos municípios do Paraná sobre a condução do Processo Administrativo Sanitário — da autuação à decisão final. É a referência que fundamenta os modelos de peça do módulo PAS deste sistema.",
+      "keywords": "manual 012 2023, processo administrativo sanitario, pas, sesa, cvis, autuacao, defesa, instrucao, julgamento, penalidade, recurso, termo de juntada, despacho, referencia"
     }
   ]
 }

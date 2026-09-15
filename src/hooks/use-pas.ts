@@ -7,6 +7,7 @@ import {
   collection,
   doc,
   setDoc,
+  updateDoc,
   deleteDoc,
   getDocs,
   onSnapshot,
@@ -143,7 +144,7 @@ export function usePasPecas(pasId: string | null) {
     return () => unsubscribe();
   }, [pasId]);
 
-  type NovaPeca = { tipo: PasPecaTipo; titulo: string; conteudoHtml: string; anexoUrl?: string; assinaturaUrl?: string; assinadoForaDoSistema?: boolean };
+  type NovaPeca = { tipo: PasPecaTipo; titulo: string; conteudoHtml: string; anexoUrl?: string; assinaturaUrl?: string; assinadoForaDoSistema?: boolean; refPecaId?: string; refPecaNumero?: number };
 
   // Aceita uma ou várias peças de uma vez, numerando sequencialmente a partir
   // de `pecas.length` — necessário pra respeitar a "regra de ouro" do manual
@@ -171,6 +172,8 @@ export function usePasPecas(pasId: string | null) {
         ...(item.anexoUrl ? { anexoUrl: item.anexoUrl } : {}),
         ...(item.assinaturaUrl ? { assinaturaUrl: item.assinaturaUrl } : {}),
         ...(item.assinadoForaDoSistema ? { assinadoForaDoSistema: true } : {}),
+        ...(item.refPecaId ? { refPecaId: item.refPecaId } : {}),
+        ...(item.refPecaNumero !== undefined ? { refPecaNumero: item.refPecaNumero } : {}),
         criadoPorUid: profile.uid,
         criadoPorNome: profile.displayName || 'Fiscal',
         criadoEm: new Date().toISOString(),
@@ -191,5 +194,48 @@ export function usePasPecas(pasId: string | null) {
     return id;
   }, [adicionarPecas]);
 
-  return { pecas, loading, adicionarPeca, adicionarPecas };
+  /** Remove uma peça juntada por engano (documento errado, duplicado, teste).
+   * Não é lixeira: some de vez. As peças seguintes são renumeradas pra
+   * numeração dos autos continuar sem buraco — o processo em papel é foliado
+   * em sequência e a capa do PDF anuncia "peças X a Y", então um vão ali
+   * significaria folha faltando. A referência de um Termo de Retificação que
+   * aponte pra uma peça renumerada é corrigida junto. */
+  const excluirPeca = useCallback(async (pecaId: string): Promise<{ renumerado: boolean }> => {
+    if (!pasId || !db) throw new Error('Processo não carregado.');
+    const alvo = pecas.find((p) => p.id === pecaId);
+    if (!alvo) return { renumerado: true };
+
+    await attemptFirestoreWrite(deleteDoc(doc(db, 'pas', pasId, 'pecas', pecaId)));
+
+    const restantes = pecas.filter((p) => p.id !== pecaId);
+    const novoNumeroPorId = new Map<string, number>();
+    restantes.forEach((p, i) => novoNumeroPorId.set(p.id, i + 1));
+
+    // A exclusão já aconteceu: uma falha daqui pra frente (tipicamente as
+    // regras do Firestore ainda sem o `allow update` da renumeração) não pode
+    // virar erro de "não excluiu". Quem chama avisa que a numeração ficou com
+    // buraco, e o resto do app continua funcionando.
+    try {
+      for (const p of restantes) {
+        const numero = novoNumeroPorId.get(p.id)!;
+        const novoRef = p.refPecaId ? novoNumeroPorId.get(p.refPecaId) : undefined;
+        const mudouNumero = numero !== p.numero;
+        const mudouRef = novoRef !== undefined && novoRef !== p.refPecaNumero;
+        if (!mudouNumero && !mudouRef) continue;
+        // eslint-disable-next-line no-await-in-loop -- mesma ordem sequencial de adicionarPecas
+        await attemptFirestoreWrite(
+          updateDoc(doc(db, 'pas', pasId, 'pecas', p.id), {
+            numero,
+            ...(mudouRef ? { refPecaNumero: novoRef } : {}),
+          })
+        );
+      }
+      return { renumerado: true };
+    } catch (e) {
+      console.error('Peça excluída, mas a renumeração das seguintes falhou:', e);
+      return { renumerado: false };
+    }
+  }, [pasId, pecas]);
+
+  return { pecas, loading, adicionarPeca, adicionarPecas, excluirPeca };
 }
