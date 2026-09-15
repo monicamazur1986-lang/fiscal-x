@@ -45,6 +45,7 @@ import { Label } from "@/components/ui/label"
 import { cn, normalizeId } from "@/lib/utils"
 import { useEscalaFolha } from "@/hooks/use-escala-folha"
 import { useDitadoPorVoz } from "@/hooks/use-ditado-por-voz"
+import { baseLegalDoMunicipio } from "@/lib/base-legal-municipal"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -2189,19 +2190,19 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     signatureResponsavel: '',
     dataHorario: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
     prazoDias: id === 'odontologia-prudentopolis' ? '30' : '15',
-    // Base legal citada na Conclusão junto do prazo (ex.: "Lei Municipal nº
-    // 2.276/2017") — cada município tem a sua, por isso fica editável e não
-    // fixa no texto; Prudentópolis e Alimentação já vêm preenchidos por padrão.
-    baseLegalPrazo: id === 'odontologia-prudentopolis'
-      ? 'Lei Municipal nº 2.276/2017'
-      : id === 'alimentacao'
-        ? 'Lei Estadual nº 13.331/2001 (Código de Saúde do Estado do Paraná) e RDC nº 216/2004 da Anvisa'
-        : id === 'farmacia'
-          ? 'Lei Estadual nº 13.331/2001 (Código de Saúde do Estado do Paraná) e RDC nº 44/2009 da Anvisa'
-          : id === 'clinica-estetica-prudentopolis'
-            ? 'Decreto Estadual nº 5.711/2002 e RDC nº 63/2011 da Anvisa'
-            : '',
-  }), [id]);
+    // BASE LEGAL DO PRAZO — vem do código sanitário aplicável ao MUNICÍPIO,
+    // não do roteiro.
+    //
+    // Quem concede prazo de regularização é o código sanitário: o estadual
+    // (Lei 13.331/2001, art. 66, §1º) ou, onde existe código próprio, o
+    // municipal (Prudentópolis, Lei 2.276/2017, art. 25, §2º). Antes o padrão
+    // saía do roteiro escolhido e alguns citavam RDC da ANVISA — norma técnica
+    // não fixa prazo de adequação, ela diz o que tem de ser cumprido.
+    //
+    // O campo segue editável: inspeção apoiada em outra legislação é ajustada
+    // à mão pelo fiscal.
+    baseLegalPrazo: baseLegalDoMunicipio(profile?.municipioId).prazoRegularizacao.citacao,
+  }), [id, profile?.municipioId]);
 
   const [idData, setIdData] = useState(buildInitialIdData)
   // Responsável Técnico e e-mail são opcionais — somem da tela até o fiscal
@@ -3296,7 +3297,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                                                   )}
                                                 </div>
                                               </div>
-                                              {observations[item.id] && (<div className="ml-8 mb-2 p-3 bg-zinc-50 border-l-2 border-zinc-300 rounded-r-lg"><p className="text-[7pt] font-black uppercase text-zinc-400 mb-0.5">Relato do Fiscal:</p><p className="text-[9.5pt] text-zinc-800 leading-relaxed whitespace-pre-wrap font-sans">{observations[item.id]}</p></div>)}
+                                              {observations[item.id] && (<div className="ml-8 mb-2 p-3 bg-zinc-50 border-l-2 border-zinc-300 rounded-r-lg"><p className="text-[7pt] font-black uppercase text-zinc-400 mb-0.5">Observação do fiscal:</p><p className="text-[9.5pt] text-zinc-800 leading-relaxed whitespace-pre-wrap font-sans">{observations[item.id]}</p></div>)}
                                               {itemPhotos[item.id] && itemPhotos[item.id].length > 0 && (
                                                 <div className="ml-8 mb-2 grid grid-cols-2 gap-2">
                                                   {itemPhotos[item.id].map((photo, pIdx) => {
@@ -3906,7 +3907,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                             onClick={() => setShowObsInput(prev => ({ ...prev, [item.id]: true }))}
                             className="w-full text-left rounded-lg border border-[#E4DFD1] bg-white px-3 py-2.5 transition-colors hover:border-primary/40 hover:bg-[#FAF8F3]"
                           >
-                            <span className="block text-[9px] font-black uppercase tracking-widest text-primary/70">Relato registrado</span>
+                            <span className="block text-[9px] font-black uppercase tracking-widest text-primary/70">Observação do fiscal</span>
                             <span className="mt-0.5 block text-[13px] leading-snug text-[#3F3B33] line-clamp-2">{observations[item.id]}</span>
                           </button>
                         )}
@@ -3916,11 +3917,11 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                           onClick={() => setShowObsInput(prev => ({ ...prev, [item.id]: true }))}
                           className="w-full text-left rounded-lg border border-[#E4DFD1] bg-white px-3 py-2.5 transition-colors hover:border-primary/40 hover:bg-[#FAF8F3]"
                         >
-                          <span className="block text-[9px] font-black uppercase tracking-widest text-primary/70">Relato registrado</span>
+                          <span className="block text-[9px] font-black uppercase tracking-widest text-primary/70">Observação do fiscal</span>
                           <span className="mt-0.5 block text-[13px] leading-snug text-[#3F3B33] line-clamp-2">{observations[item.id]}</span>
                         </button>
                       )}
-                      {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => { setObservations(prev => ({ ...prev, [item.id]: e.target.value })); }} onBlur={() => handleSaveDraft(false)} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><div className="flex flex-wrap items-center gap-2"><Button type="button" onClick={() => toggleRecordingObservacao(item.id)} variant="outline" size="sm" className={cn("h-9 w-full sm:w-auto px-4 rounded-xl font-black text-[10px] uppercase gap-2", recordingItemId === item.id ? "bg-red-500 text-white border-red-500 animate-pulse hover:bg-red-500 hover:text-white" : "text-[#6B6659] border-[#E4DFD1]")}>{recordingItemId === item.id ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {recordingItemId === item.id ? "Parar" : "Ditar por voz"}</Button></div></div>)}
+                      {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Observação do fiscal</Label><Textarea value={observations[item.id] || ""} onChange={e => { setObservations(prev => ({ ...prev, [item.id]: e.target.value })); }} onBlur={() => handleSaveDraft(false)} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><div className="flex flex-wrap items-center gap-2"><Button type="button" onClick={() => toggleRecordingObservacao(item.id)} variant="outline" size="sm" className={cn("h-9 w-full sm:w-auto px-4 rounded-xl font-black text-[10px] uppercase gap-2", recordingItemId === item.id ? "bg-red-500 text-white border-red-500 animate-pulse hover:bg-red-500 hover:text-white" : "text-[#6B6659] border-[#E4DFD1]")}>{recordingItemId === item.id ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {recordingItemId === item.id ? "Parar" : "Ditar por voz"}</Button></div></div>)}
                       </div>
                       )
                     ))}
@@ -4017,7 +4018,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                           })}
                         </div>
                       )}
-                      {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => setObservations(prev => ({ ...prev, [item.id]: e.target.value }))} onBlur={() => handleSaveDraft(false)} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><div className="flex flex-wrap items-center gap-2"><Button type="button" onClick={() => toggleRecordingObservacao(item.id)} variant="outline" size="sm" className={cn("h-9 w-full sm:w-auto px-4 rounded-xl font-black text-[10px] uppercase gap-2", recordingItemId === item.id ? "bg-red-500 text-white border-red-500 animate-pulse hover:bg-red-500 hover:text-white" : "text-[#6B6659] border-[#E4DFD1]")}>{recordingItemId === item.id ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {recordingItemId === item.id ? "Parar" : "Ditar por voz"}</Button></div></div>)}
+                      {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Observação do fiscal</Label><Textarea value={observations[item.id] || ""} onChange={e => setObservations(prev => ({ ...prev, [item.id]: e.target.value }))} onBlur={() => handleSaveDraft(false)} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><div className="flex flex-wrap items-center gap-2"><Button type="button" onClick={() => toggleRecordingObservacao(item.id)} variant="outline" size="sm" className={cn("h-9 w-full sm:w-auto px-4 rounded-xl font-black text-[10px] uppercase gap-2", recordingItemId === item.id ? "bg-red-500 text-white border-red-500 animate-pulse hover:bg-red-500 hover:text-white" : "text-[#6B6659] border-[#E4DFD1]")}>{recordingItemId === item.id ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {recordingItemId === item.id ? "Parar" : "Ditar por voz"}</Button></div></div>)}
                     </div>
                   ))}
                 </div>

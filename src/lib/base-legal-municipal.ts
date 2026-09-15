@@ -52,6 +52,13 @@ export interface BaseLegal {
   /** Recurso da decisão de 1ª instância. `diasMulta` só existe onde a lei
    *  distingue o prazo da multa do dos demais casos. */
   recurso: { dias: number; diasMulta?: number; citacao: string };
+  /**
+   * Prazo de REGULARIZAÇÃO — o que o relatório de inspeção concede para o
+   * estabelecimento se adequar, diferente do prazo de defesa do auto. `dias`
+   * é o teto legal, não a sugestão: quem fixa o prazo de cada caso é a
+   * autoridade sanitária, dentro desse limite.
+   */
+  prazoRegularizacao: { tetoDias: number; citacao: string };
   /** Artigo que manda instruir o processo (base do despacho de instrução). */
   citacaoInstrucao: string;
   /** Textos padrão dos termos nesta esfera. Tipo ausente cai no estadual. */
@@ -176,6 +183,10 @@ const PRUDENTOPOLIS: BaseLegal = {
   contagemPrazo: 'corridos',
   defesa: { dias: 15, citacao: 'art. 38 da Lei Municipal nº 2.276/2017' },
   recurso: { dias: 15, diasMulta: 10, citacao: 'art. 30, VI, c/c art. 58 da Lei Municipal nº 2.276/2017' },
+  prazoRegularizacao: {
+    tetoDias: 90,
+    citacao: 'Lei Municipal nº 2.276/2017, art. 25, §2º',
+  },
   citacaoInstrucao: 'art. 37 da Lei Municipal nº 2.276/2017',
   textos: {
     'AUTO DE INFRAÇÃO': { prazoHtml: PRUDENTOPOLIS_DEFESA_TEXT },
@@ -207,6 +218,10 @@ export const BASE_LEGAL_ESTADUAL: BaseLegal = {
   recurso: {
     dias: 10,
     citacao: 'art. 73 da Lei Estadual nº 13.331/2001 c/c art. 88, §2º, da Lei Estadual nº 20.656/2021',
+  },
+  prazoRegularizacao: {
+    tetoDias: 90,
+    citacao: 'Lei Estadual nº 13.331/2001, art. 66, §1º (Código de Saúde do Paraná)',
   },
   citacaoInstrucao: 'art. 560 do Decreto Estadual nº 5.711/2002',
   textos: {},
