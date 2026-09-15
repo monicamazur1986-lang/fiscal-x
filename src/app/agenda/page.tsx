@@ -179,14 +179,25 @@ export default function AgendaPage() {
       const [h, m] = hora.split(":").map(Number)
       const [year, month, day] = dataAgendamento.split("-").map(Number)
       const dataCompleta = new Date(year, month - 1, day, h, m, 0, 0)
-      const fiscal = autoridades.find(a => a.id === selectedFiscalId) || { nome: profile?.displayName || "Fiscal", id: profile?.uid || "" };
-      
+      const fiscal = autoridades.find(a => a.id === selectedFiscalId);
+
+      // ATENÇÃO ao que vai em cada campo:
+      //
+      //   fiscalNome = quem vai fazer a inspeção (a autoridade escolhida);
+      //   fiscalId   = o DONO do registro, sempre o uid de quem salvou.
+      //
+      // Aqui ia o id da autoridade, que é um documento
+      // aleatório da coleção de autoridades e nunca coincide com o uid. A
+      // consulta que devolve os compromissos filtra por fiscalId igual ao uid (ver
+      // use-inspecoes.ts), o agendamento era gravado, aparecia por um
+      // instante vindo do estado local e sumia assim que o onSnapshot
+      // respondia sem ele. Daí o "não grava e não mostra".
       const resultado = await saveInspecao({
         titulo,
         descricao,
         data: dataCompleta,
-        fiscalId: (fiscal as any).id,
-        fiscalNome: (fiscal as any).nome,
+        fiscalId: profile?.uid || "",
+        fiscalNome: fiscal?.nome || profile?.displayName || "Fiscal",
         status: status,
         alertaMinutosAntes,
         // Qualquer edição rearma o alarme (relevante ao reagendar um compromisso

@@ -18,7 +18,7 @@ import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
 import { usePendingAlerts } from "@/hooks/use-pending-alerts"
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { ProfileEditDialog } from "./profile-edit-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -164,8 +164,36 @@ export function AppHeader() {
   const handleInicioClick = (e: React.MouseEvent) => {
     if (requestChecklistExit("/dashboard")) {
       e.preventDefault();
+      return;
     }
+    // VOLTAR É VOLTAR UM PASSO, não pular para o início.
+    //
+    // Este botão era um link cravado em /dashboard: de dentro de uma pasta da
+    // Biblioteca, ou de qualquer tela aninhada, ele descartava todo o caminho
+    // percorrido e jogava a pessoa na tela inicial. Agora, havendo passo
+    // anterior DENTRO do app, ele desfaz esse passo.
+    //
+    // O contador vem do próprio app (ver o efeito abaixo) em vez de
+    // history.length, que conta também as páginas visitadas antes de entrar
+    // aqui — usá-lo levaria a pessoa para fora do sistema.
+    if (passosNoApp.current > 0) {
+      e.preventDefault();
+      passosNoApp.current -= 1;
+      router.back();
+    }
+    // Sem passo anterior, o href="/dashboard" do link resolve sozinho.
   };
+
+  // Quantas telas o usuário percorreu DENTRO do app nesta aba. Serve para o
+  // voltar saber se existe para onde voltar sem sair do sistema.
+  const passosNoApp = useRef(0);
+  const rotaAnteriorRef = useRef(pathname);
+  useEffect(() => {
+    if (rotaAnteriorRef.current !== pathname) {
+      rotaAnteriorRef.current = pathname;
+      passosNoApp.current += 1;
+    }
+  }, [pathname]);
 
   // Definição clara dos papéis
   const role = profile?.role

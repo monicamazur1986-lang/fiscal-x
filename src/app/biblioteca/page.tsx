@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useMemo, useEffect, useRef, useCallback } from "react"
+import { useState, useMemo, useEffect, useRef, useCallback, Suspense } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   Search,
   BookOpen,
@@ -59,7 +60,7 @@ import {
 } from "@/components/ui/popover"
 import municipiosPR from "@/lib/municipios-pr.json"
 
-export default function BibliotecaJuridicaPage() {
+function BibliotecaJuridicaConteudo() {
   const { profile } = useAuth();
   const isRoot = profile?.role === 'root';
   const [municipioPickerOpen, setMunicipioPickerOpen] = useState(false);
@@ -133,7 +134,22 @@ export default function BibliotecaJuridicaPage() {
   // Pasta selecionada na navegação (2º nível) — null = mostrando a grade de
   // pastas (1º nível). Uma busca ativa ignora as pastas e mostra tudo junto,
   // então volta pra grade sozinha quando o campo de busca é limpo de novo.
-  const [selectedTema, setSelectedTema] = useState<Tema | null>(null);
+  // A PASTA ABERTA MORA NA URL (/biblioteca?pasta=Alimentos...), não num
+  // useState. Antes era estado interno: entrar numa pasta não criava passo
+  // nenhum no histórico, então o "voltar" — do cabeçalho, do navegador ou do
+  // botão físico do Android — pulava a Biblioteca inteira e caía na
+  // dashboard. Com a pasta no endereço, voltar devolve ao rol de pastas, e
+  // de quebra a pasta pode ser recarregada e compartilhada por link.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const selectedTema = (searchParams.get("pasta") as Tema | null) || null;
+
+  const setSelectedTema = useCallback((tema: Tema | null) => {
+    // `push` (e não `replace`) é o que cria o passo de histórico — é dele
+    // que o voltar depende.
+    router.push(tema ? `${pathname}?pasta=${encodeURIComponent(tema)}` : pathname);
+  }, [router, pathname]);
   const isSearching = search.trim().length > 0;
 
   // Contagem por pasta sempre a partir do acervo completo (não filtrado pela
@@ -796,5 +812,17 @@ export default function BibliotecaJuridicaPage() {
       )}
       </div>
     </div>
+  )
+}
+
+/**
+ * useSearchParams() precisa de um limite de Suspense no App Router — sem ele
+ * o build acusa e a rota inteira perde a pré-renderização.
+ */
+export default function BibliotecaJuridicaPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-sm text-[#6B6659]">Abrindo a biblioteca...</div>}>
+      <BibliotecaJuridicaConteudo />
+    </Suspense>
   )
 }
