@@ -16,6 +16,7 @@ import { useIntimacoes } from "@/hooks/use-intimacoes"
 import { calculateDeadline } from "@/lib/prazo"
 import { usePendingAlerts } from "@/hooks/use-pending-alerts"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { AvisoBoasVindas } from "@/components/aviso-boas-vindas"
 import { AlertCard } from "@/components/alert-card"
 import { DashboardMenuGrid } from "@/components/dashboard-menu-grid"
 import { DASHBOARD_MENU_ITEMS } from "@/lib/dashboard-menu-items"
@@ -102,6 +103,10 @@ export default function Dashboard() {
             </div>
           </div>
         </section>
+
+        {/* Orientação do período de teste — antes dos avisos operacionais,
+            porque fala de como usar o sistema, não do que fazer hoje. */}
+        <AvisoBoasVindas uid={profile?.uid} />
 
         <section className="space-y-2">
           <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Avisos</h2>
