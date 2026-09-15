@@ -3226,7 +3226,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   <div className="sub-header-row">2. CONSIDERAÇÕES GERAIS</div>
                   <div
                     className="border border-slate-300 p-4 bg-zinc-50/50"
-                    style={{ fontSize: '10pt', lineHeight: 1.6, textAlign: 'justify', fontWeight: 500, color: '#18181b' }}
+                    style={{ fontSize: '8.5pt', lineHeight: 1.55, textAlign: 'justify', fontWeight: 400, color: '#3f3f46' }}
                     dangerouslySetInnerHTML={{ __html: sanitizeHtml(introducaoHtml) }}
                   />
               </div>
@@ -3236,6 +3236,19 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   {/* No ROI não existem as seções 2 e 4, então as seguintes
                       sobem de número em vez de deixar buraco na sequência. */}
                   <div data-pdf-block className="sub-header-row">{isRoi ? 2 : 3}. NÃO CONFORMIDADES DETECTADAS</div>
+                  {nonConformitiesBySection.length > 0 && (() => {
+                    const totalNc = nonConformitiesBySection.reduce((soma, g) => soma + g.itens.length, 0);
+                    return (
+                      <div data-pdf-block className="border-2 border-zinc-800 bg-white px-4 py-3 mb-4">
+                        <p className="text-[11pt] font-black text-zinc-900 leading-snug">
+                          {totalNc === 1
+                            ? 'O estabelecimento deve providenciar a regularização do item abaixo'
+                            : `O estabelecimento deve providenciar a regularização dos ${totalNc} itens abaixo`}
+                          {idData.prazoDias ? ` no prazo de ${idData.prazoDias} dias` : ''}.
+                        </p>
+                      </div>
+                    );
+                  })()}
                   {nonConformitiesBySection.length > 0 ? (
                       nonConformitiesBySection.map((grupo) => (
                           <div key={grupo.label} className="mt-4 first:mt-0 space-y-2">
@@ -3250,9 +3263,14 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                                               <div className="flex items-start gap-2 mb-2 flex-wrap">
                                                 <span className="font-black text-[8pt] text-zinc-900 bg-zinc-50 h-6 px-2 flex items-center justify-center rounded shrink-0 whitespace-nowrap">ITEM {nonConformityNumber.get(item.id)}</span>
                                                 <span className={cn("text-[7.5pt] font-black uppercase px-2 h-6 flex items-center rounded border shrink-0 whitespace-nowrap", critClasses)}>{critLabel}</span>
-                                                <p className="text-[9.5pt] leading-relaxed text-zinc-800 font-bold flex-1 uppercase basis-full sm:basis-auto">{item.text}</p>
+                                                <div className="flex-1 basis-full sm:basis-auto">
+                                                  <p className="text-[10.5pt] leading-snug text-zinc-900 font-semibold">{partirBaseLegal(item.text).requisito}</p>
+                                                  {partirBaseLegal(item.text).baseLegal && (
+                                                    <p className="text-[8pt] leading-snug text-zinc-500 mt-0.5">{partirBaseLegal(item.text).baseLegal}</p>
+                                                  )}
+                                                </div>
                                               </div>
-                                              {observations[item.id] && (<div className="ml-8 mb-2 p-3 bg-zinc-50 border-l-2 border-zinc-300 rounded-r-lg"><p className="text-[7pt] font-black uppercase text-zinc-400 mb-0.5">Relato do Fiscal:</p><p className="text-[9.5pt] text-slate-600 leading-relaxed italic whitespace-pre-wrap font-sans">{observations[item.id]}</p></div>)}
+                                              {observations[item.id] && (<div className="ml-8 mb-2 p-3 bg-zinc-50 border-l-2 border-zinc-300 rounded-r-lg"><p className="text-[7pt] font-black uppercase text-zinc-400 mb-0.5">Relato do Fiscal:</p><p className="text-[9.5pt] text-zinc-800 leading-relaxed whitespace-pre-wrap font-sans">{observations[item.id]}</p></div>)}
                                               {itemPhotos[item.id] && itemPhotos[item.id].length > 0 && (
                                                 <div className="ml-8 mb-2 grid grid-cols-2 gap-2">
                                                   {itemPhotos[item.id].map((photo, pIdx) => {
@@ -3309,7 +3327,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   <div className="sub-header-row">4. CONCLUSÃO E PRAZO LEGAL</div>
                   <div
                     className="border border-slate-300 p-4 bg-zinc-50/50"
-                    style={{ fontSize: '10pt', lineHeight: 1.6, textAlign: 'justify', fontWeight: 500, color: '#18181b' }}
+                    style={{ fontSize: '8.5pt', lineHeight: 1.55, textAlign: 'justify', fontWeight: 400, color: '#3f3f46' }}
                     dangerouslySetInnerHTML={{ __html: sanitizeHtml(conclusaoHtml) }}
                   />
               </div>
