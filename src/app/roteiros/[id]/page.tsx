@@ -2425,7 +2425,28 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // inspeção (rascunho carregado, ou "Nova inspeção") — não roda a cada
   // resposta, só nessas trocas, pra não brigar com o fechamento manual do
   // fiscal em seguida.
+  // TROCAR de inspeção recolhe tudo; GANHAR um id, não.
+  //
+  // Uma vistoria nova começa sem `currentInspecaoId`, e é a PRIMEIRA resposta
+  // que cria o rascunho e atribui o id. Como este efeito depende desse id, ele
+  // disparava exatamente aí: o fiscal respondia o primeiro item, a seção
+  // recolhia junto com todas as outras e o avanço guiado morria na largada —
+  // `secoesAvancadasRef` também era zerado, então nem o "seção a seção"
+  // voltava a funcionar depois.
+  //
+  // A transição "sem id -> com id" no mesmo roteiro é a continuação da MESMA
+  // vistoria e não pode recolher nada. Trocar de rascunho (id A -> id B) ou
+  // começar do zero (id -> sem id) continua recolhendo, que é o certo.
+  const chaveInspecaoRef = useRef(`${id}|${currentInspecaoId ?? ''}`);
   useEffect(() => {
+    const anterior = chaveInspecaoRef.current;
+    const atual = `${id}|${currentInspecaoId ?? ''}`;
+    if (anterior === atual) return;
+    chaveInspecaoRef.current = atual;
+
+    const [roteiroAnterior, inspecaoAnterior] = anterior.split('|');
+    if (roteiroAnterior === id && !inspecaoAnterior && currentInspecaoId) return;
+
     secoesAvancadasRef.current = new Set();
     // Tudo recolhido ao abrir a tela — inclusive as seções de itens. A
     // vistoria começa pelo botão "Iniciar inspeção", que abre a primeira
