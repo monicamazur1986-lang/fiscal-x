@@ -46,6 +46,7 @@ import { cn, normalizeId } from "@/lib/utils"
 import { useEscalaFolha } from "@/hooks/use-escala-folha"
 import { useDitadoPorVoz } from "@/hooks/use-ditado-por-voz"
 import { baseLegalDoMunicipio } from "@/lib/base-legal-municipal"
+import { conclusaoDoDesfecho, type DesfechoInspecao } from "@/lib/roteiro-textos-padrao"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -2202,6 +2203,9 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     // O campo segue editável: inspeção apoiada em outra legislação é ajustada
     // à mão pelo fiscal.
     baseLegalPrazo: baseLegalDoMunicipio(profile?.municipioId).prazoRegularizacao.citacao,
+    // Desfecho da vistoria — ver DesfechoInspecao. Começa em 'prazo', que é o
+    // caso comum, e a sugestão automática ajusta conforme o preenchimento.
+    desfecho: 'prazo' as DesfechoInspecao,
   }), [id, profile?.municipioId]);
 
   const [idData, setIdData] = useState(buildInitialIdData)
@@ -2666,9 +2670,9 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   useEffect(() => {
     if (isRoi || conclusaoTravadaRef.current) return;
     const base = resolverConclusaoHtml(id, profile?.roteiroTextos, config.roteiroTextos);
-    setConclusaoHtml(fillRoteiroTextoTokens(base, idData));
+    setConclusaoHtml(conclusaoDoDesfecho(idData.desfecho || 'prazo', base));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config, id, isRoi, profile?.roteiroTextos, idData.prazoDias, idData.baseLegalPrazo]);
+  }, [config, id, isRoi, profile?.roteiroTextos, idData.prazoDias, idData.baseLegalPrazo, idData.desfecho]);
 
   const handleIntroducaoChange = (html: string) => {
     introTravadaRef.current = true;
@@ -2720,8 +2724,24 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     introTravadaRef.current = false;
   };
 
+  /**
+   * Trocar o desfecho reescreve a conclusão — é escolha explícita do fiscal,
+   * do mesmo naipe de "Restaurar padrão", e por isso sobrepõe o texto atual.
+   * Fica destravado para os tokens continuarem sendo preenchidos.
+   */
+  const escolherDesfecho = (desfecho: DesfechoInspecao) => {
+    setIdData((atual: any) => ({ ...atual, desfecho }));
+    setConclusaoHtml(
+      conclusaoDoDesfecho(
+        desfecho,
+        resolverConclusaoHtml(id, profile?.roteiroTextos, config.roteiroTextos)
+      )
+    );
+    conclusaoTravadaRef.current = false;
+  };
+
   const restaurarPadraoConclusao = () => {
-    setConclusaoHtml(resolverConclusaoHtml(id, profile?.roteiroTextos, config.roteiroTextos));
+    setConclusaoHtml(conclusaoDoDesfecho(idData.desfecho || 'prazo', resolverConclusaoHtml(id, profile?.roteiroTextos, config.roteiroTextos)));
     conclusaoTravadaRef.current = false;
   };
 
@@ -4059,7 +4079,62 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   />
                 </AccordionTrigger>
                 <AccordionContent className="pt-3 space-y-3">
-                <p className="text-[11px] font-medium text-[#6B6659]">Texto que fecha o relatório final ("Conclusão e Prazo Legal") — editável. Pré-preenchido com o padrão do município e o prazo acima.</p>
+                {/* DESFECHO — a vistoria termina de três maneiras, e cada uma
+                    pede uma conclusão diferente. Antes havia só o texto de
+                    prazo, então o relatório de um estabelecimento regular
+                    afirmava irregularidades que não existiam. */}
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase text-[#6B6659]">Como termina esta inspeção?</Label>
+                  <div className="grid gap-2">
+                    {([
+                      { valor: 'conforme' as const, titulo: 'Está tudo certo', desc: 'Sem não conformidades. Apto ao documento sanitário.', cor: '#1F7A5C' },
+                      { valor: 'prazo' as const, titulo: 'Corrigir dentro do prazo', desc: 'Há itens a regularizar, sem risco iminente.', cor: '#9C7A3C' },
+                      { valor: 'interdicao' as const, titulo: 'Risco iminente — interdição', desc: 'Termo de Interdição com Auto de Infração.', cor: '#A15437' },
+                    ]).map((opcao) => {
+                      const marcada = (idData.desfecho || 'prazo') === opcao.valor;
+                      return (
+                        <button
+                          key={opcao.valor}
+                          type="button"
+                          onClick={() => escolherDesfecho(opcao.valor)}
+                          style={{ ['--tom' as any]: `${opcao.cor}14`, ['--tom-borda' as any]: `${opcao.cor}66`, ['--tom-texto' as any]: darkenHex(opcao.cor, 30) }}
+                          className={cn(
+                            "w-full text-left rounded-xl border px-3.5 py-3 transition-colors",
+                            marcada
+                              ? "border-[var(--tom-borda)] bg-[var(--tom)]"
+                              : "border-[#E4DFD1] bg-white hover:bg-[#FAF8F3]"
+                          )}
+                        >
+                          <p className={cn("text-[13px] font-bold leading-tight", marcada ? "text-[var(--tom-texto)]" : "text-[#3F3B33]")}>{opcao.titulo}</p>
+                          <p className="mt-0.5 text-[11px] leading-snug text-[#6B6659]">{opcao.desc}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* A contagem não escolhe sozinha: quem decide se há risco
+                      iminente é o fiscal. Ela só avisa quando a escolha atual
+                      contradiz o que foi preenchido. */}
+                  {(() => {
+                    const desfecho = idData.desfecho || 'prazo';
+                    const totalNc = nonConformitiesBySection.reduce((soma, g) => soma + g.itens.length, 0);
+                    if (desfecho === 'conforme' && totalNc > 0) {
+                      return (
+                        <p className="rounded-lg bg-[#FBF7EE] px-3 py-2 text-[11px] leading-snug text-[#7A5D2A]">
+                          Atenção: o relatório listará <strong>{totalNc}</strong> {totalNc === 1 ? 'não conformidade' : 'não conformidades'}, mas a conclusão diz que está tudo certo.
+                        </p>
+                      );
+                    }
+                    if (desfecho !== 'conforme' && totalNc === 0) {
+                      return (
+                        <p className="rounded-lg bg-[#FBF7EE] px-3 py-2 text-[11px] leading-snug text-[#7A5D2A]">
+                          Atenção: nenhuma não conformidade foi assinalada, mas a conclusão cobra regularização.
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+                <p className="text-[11px] font-medium text-[#6B6659]">Texto que fecha o relatório — editável. Escolher um desfecho acima reescreve este texto.</p>
                 <div className="p-2 bg-[#FAF8F3] rounded-lg border border-[#E4DFD1] font-serif">
                   <RichTextEditor value={conclusaoExibida} onChange={handleConclusaoChange} fontSize="10.5pt" minHeight="140px" />
                 </div>

@@ -124,6 +124,50 @@ export function fillRoteiroTextoTokens(html: string, idData: IdDataParaTexto): s
     .replaceAll('{{BASE_LEGAL_PRAZO}}', baseLegalPrazo);
 }
 
+/**
+ * DESFECHO DA INSPEÇÃO — a conclusão não é uma só.
+ *
+ * O texto de conclusão presumia sempre o mesmo final: há irregularidades e
+ * corre prazo para corrigir. Mas a vistoria termina de três maneiras, e as
+ * outras duas saíam com o texto errado:
+ *
+ *   CONFORME    nada a corrigir, o estabelecimento está apto ao documento
+ *               sanitário. Com o texto de prazo, o relatório de quem passou
+ *               limpo afirmava irregularidades que não existem.
+ *   PRAZO       o caso comum: corrigir dentro do prazo concedido.
+ *   INTERDIÇÃO  risco iminente à saúde. Não há prazo para corrigir e seguir
+ *               funcionando — o funcionamento para agora, e o prazo que passa
+ *               a correr é o de DEFESA, no auto de infração.
+ *
+ * `prazo` fica com os textos por roteiro que já existiam (DEFAULT_CONCLUSAO_HTML
+ * acima); os outros dois valem para qualquer roteiro, porque o que muda no
+ * desfecho é o rito, não a atividade inspecionada.
+ */
+export type DesfechoInspecao = 'conforme' | 'prazo' | 'interdicao';
+
+export const DESFECHO_CONFORME_HTML = [
+  p('Durante a vistoria não foram identificadas não conformidades. O estabelecimento atende aos requisitos da legislação sanitária aplicável à sua atividade, ficando apto à emissão do documento sanitário correspondente.'),
+  p('A Vigilância Sanitária Municipal permanece à disposição para orientações técnicas.'),
+].join('');
+
+export const DESFECHO_INTERDICAO_HTML = [
+  p('Diante da constatação de risco iminente à saúde da população, será emitido Termo de Interdição acompanhado do respectivo Auto de Infração, contendo informações sobre prazos e direito de defesa.'),
+  p('A Vigilância Sanitária Municipal acompanhará o processo de regularização e permanece à disposição para orientações.'),
+].join('');
+
+/**
+ * Conclusão correspondente ao desfecho. Só `prazo` varia por roteiro — nos
+ * outros dois o que se diz não depende da atividade inspecionada.
+ */
+export function conclusaoDoDesfecho(
+  desfecho: DesfechoInspecao,
+  conclusaoDePrazo: string
+): string {
+  if (desfecho === 'conforme') return DESFECHO_CONFORME_HTML;
+  if (desfecho === 'interdicao') return DESFECHO_INTERDICAO_HTML;
+  return conclusaoDePrazo;
+}
+
 /** Roteiros sem entrada própria caem na chave "default". */
 export function getDefaultIntroHtml(roteiroId: string): string {
   return DEFAULT_INTRO_HTML[roteiroId] || DEFAULT_INTRO_HTML.default;
