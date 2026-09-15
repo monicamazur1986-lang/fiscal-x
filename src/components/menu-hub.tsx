@@ -15,7 +15,7 @@ export type CartaoHub = {
   icon: LucideIcon;
   color: string;
   /** Quantos itens existem naquele destino. `undefined` esconde o contador
-   *  (ex.: "Roteiros de Inspeção", que não é uma lista). */
+   *  (ex.: "Roteiros", que não é uma lista e sim o catálogo). */
   contagem?: number;
   /** Ação principal da tela — ocupa a largura toda, acima das demais. */
   destaque?: boolean;
@@ -34,8 +34,11 @@ export function MenuHub({
   subtitulo,
   cartoes,
 }: {
-  chapeu: string;
-  titulo: string;
+  /** Opcionais: os cartões já dizem onde a pessoa está e o que há para
+   *  fazer. Repetir isso num título e num subtítulo acrescentava três linhas
+   *  de leitura antes da primeira ação. */
+  chapeu?: string;
+  titulo?: string;
   subtitulo?: string;
   cartoes: CartaoHub[];
 }) {
@@ -43,20 +46,22 @@ export function MenuHub({
   const demais = cartoes.filter((c) => !c.destaque);
 
   return (
-    <div className="min-h-screen bg-[#F5F2EA] p-4 sm:p-8">
-      <div className="max-w-3xl mx-auto w-full space-y-8 py-8">
-        <div className="space-y-1.5 text-center">
-          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#9C7A3C]">{chapeu}</p>
-          <h1 className="font-serif text-2xl sm:text-3xl text-[#262420]">{titulo}</h1>
-          {subtitulo && <p className="text-sm text-[#6B6659] max-w-lg mx-auto">{subtitulo}</p>}
-        </div>
+    <div className="min-h-screen bg-[#F5F2EA] px-4 py-6 sm:px-8 sm:py-10">
+      <div className="max-w-2xl mx-auto w-full space-y-6">
+        {(chapeu || titulo) && (
+          <div className="space-y-1.5 text-center">
+            {chapeu && <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#9C7A3C]">{chapeu}</p>}
+            {titulo && <h1 className="font-serif text-2xl sm:text-3xl text-[#262420]">{titulo}</h1>}
+            {subtitulo && <p className="text-sm text-[#6B6659] max-w-lg mx-auto">{subtitulo}</p>}
+          </div>
+        )}
 
         <div className="space-y-3">
           {destaques.map((cartao) => (
             <CartaoMenu key={cartao.href} cartao={cartao} grande />
           ))}
           {demais.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               {demais.map((cartao) => (
                 <CartaoMenu key={cartao.href} cartao={cartao} />
               ))}
@@ -85,7 +90,8 @@ function CartaoMenu({ cartao, grande = false }: { cartao: CartaoHub; grande?: bo
         ['--tom-texto' as any]: darkenHex(cartao.color, 34),
       }}
       className={cn(
-        "group relative flex items-center gap-4 rounded-xl border border-[var(--tom-borda)] bg-[var(--tom)] p-5",
+        "group relative flex items-center gap-4 rounded-2xl border border-[var(--tom-borda)] bg-[var(--tom)] p-5",
+        "shadow-[0_1px_2px_rgba(38,36,32,0.03)]",
         "transition-all duration-200 hover:bg-[var(--tom-hover)] hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-14px_rgba(38,36,32,0.4)] active:scale-[0.99] active:duration-75",
         grande && "sm:p-6"
       )}
@@ -103,7 +109,16 @@ function CartaoMenu({ cartao, grande = false }: { cartao: CartaoHub; grande?: bo
             {cartao.label}
           </p>
           {cartao.contagem !== undefined && (
-            <span className="rounded-full bg-[var(--tom-icone)] px-2 py-[2px] text-[11px] font-bold tabular-nums leading-none text-[var(--tom-texto)]">
+            // Zero em destaque puxava o olho para o que não existe: a lista
+            // vazia fica com o número apagado, no tom do papel.
+            <span
+              className={cn(
+                "rounded-full px-2 py-[2px] text-[11px] font-bold tabular-nums leading-none",
+                cartao.contagem > 0
+                  ? "bg-[var(--tom-icone)] text-[var(--tom-texto)]"
+                  : "bg-[#EEEBE3] text-[#A39D8C]"
+              )}
+            >
               {cartao.contagem}
             </span>
           )}

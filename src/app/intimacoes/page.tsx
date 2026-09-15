@@ -36,7 +36,7 @@ export default function AutuacoesHubPage() {
     },
     {
       href: "/intimacoes/em-andamento",
-      label: "Autuações em Andamento",
+      label: "Em Andamento",
       descricao: "Documentos começados que ainda não foram finalizados.",
       icon: Clock,
       color: "#9C7A3C",
@@ -44,7 +44,7 @@ export default function AutuacoesHubPage() {
     },
     {
       href: "/intimacoes/finalizadas",
-      label: "Autuações Finalizadas",
+      label: "Finalizadas",
       descricao: "Documentos já lavrados, com prazo de defesa em contagem.",
       icon: FileCheck,
       color: "#3D5A73",
@@ -52,12 +52,5 @@ export default function AutuacoesHubPage() {
     },
   ];
 
-  return (
-    <MenuHub
-      chapeu="Autuações"
-      titulo="O que você vai fazer?"
-      subtitulo="Documentos oficiais da fiscalização sanitária."
-      cartoes={cartoes}
-    />
-  );
+  return <MenuHub cartoes={cartoes} />;
 }

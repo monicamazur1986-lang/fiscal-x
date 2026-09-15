@@ -27,7 +27,7 @@ export default function RoteirosHubPage() {
   const cartoes: CartaoHub[] = [
     {
       href: "/roteiros/nova-inspecao",
-      label: "Roteiros de Inspeção",
+      label: "Roteiros",
       descricao: "Escolha o roteiro da atividade e comece a vistoria.",
       icon: ClipboardList,
       color: "#1F7A5C",
@@ -35,7 +35,7 @@ export default function RoteirosHubPage() {
     },
     {
       href: "/roteiros/em-andamento",
-      label: "Inspeções em Andamento",
+      label: "Em Andamento",
       descricao: "Vistorias começadas que ainda não foram concluídas.",
       icon: Clock,
       color: "#9C7A3C",
@@ -43,20 +43,13 @@ export default function RoteirosHubPage() {
     },
     {
       href: "/roteiros/relatorios",
-      label: "Relatórios",
-      descricao: "Relatórios de vistoria já concluídos e arquivados.",
+      label: "Relatórios Finalizados",
+      descricao: "Vistorias concluídas, com relatório pronto e arquivado.",
       icon: FileCheck,
       color: "#6B4C80",
       contagem: contagens.relatorios,
     },
   ];
 
-  return (
-    <MenuHub
-      chapeu="Roteiros"
-      titulo="O que você vai fazer?"
-      subtitulo="Checklists técnicos de inspeção sanitária."
-      cartoes={cartoes}
-    />
-  );
+  return <MenuHub cartoes={cartoes} />;
 }
