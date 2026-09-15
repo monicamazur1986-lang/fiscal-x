@@ -61,7 +61,7 @@ export function MenuHub({
             <CartaoMenu key={cartao.href} cartao={cartao} grande />
           ))}
           {demais.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
               {demais.map((cartao) => (
                 <CartaoMenu key={cartao.href} cartao={cartao} />
               ))}
@@ -90,22 +90,34 @@ function CartaoMenu({ cartao, grande = false }: { cartao: CartaoHub; grande?: bo
         ['--tom-texto' as any]: darkenHex(cartao.color, 34),
       }}
       className={cn(
-        "group relative flex items-center gap-4 rounded-2xl border border-[var(--tom-borda)] bg-[var(--tom)] p-5",
-        "shadow-[0_1px_2px_rgba(38,36,32,0.03)]",
-        "transition-all duration-200 hover:bg-[var(--tom-hover)] hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-14px_rgba(38,36,32,0.4)] active:scale-[0.99] active:duration-75",
-        grande && "sm:p-6"
+        "group relative flex items-center rounded-2xl transition-all duration-200 active:scale-[0.99] active:duration-75",
+        grande
+          // Ação principal: cor de fundo, borda e relevo.
+          ? "gap-4 border border-[var(--tom-borda)] bg-[var(--tom)] p-5 sm:p-6 shadow-[0_1px_2px_rgba(38,36,32,0.03)] hover:bg-[var(--tom-hover)] hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-14px_rgba(38,36,32,0.4)]"
+          // Atalhos: papel branco, sem tom de fundo e sem relevo. Eles levam
+          // ao que já foi feito — não é onde a pessoa deve olhar primeiro.
+          : "gap-3 border border-[#E4DFD1] bg-white px-4 py-3.5 hover:border-[var(--tom-borda)] hover:bg-[#FAF8F3]"
       )}
     >
       <div className={cn(
-        "flex items-center justify-center rounded-xl bg-[var(--tom-icone)] text-[var(--tom-texto)] shrink-0",
-        grande ? "h-14 w-14" : "h-12 w-12"
+        "flex items-center justify-center shrink-0",
+        grande
+          ? "h-14 w-14 rounded-xl bg-[var(--tom-icone)] text-[var(--tom-texto)]"
+          // Sem a caixa colorida: só o traço do ícone, no tom da cor.
+          : "h-8 w-8 text-[var(--tom-texto)] opacity-70"
       )}>
-        <cartao.icon className={cn(grande ? "h-7 w-7" : "h-6 w-6")} />
+        <cartao.icon className={cn(grande ? "h-7 w-7" : "h-[18px] w-[18px]")} />
       </div>
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <p className={cn("font-serif font-bold leading-tight text-[var(--tom-texto)]", grande ? "text-[19px]" : "text-[17px]")}>
+          <p className={cn(
+            "leading-tight",
+            grande
+              ? "font-serif font-bold text-[19px] text-[var(--tom-texto)]"
+              // Fora do destaque, o rótulo é texto de lista, não manchete.
+              : "font-sans font-semibold text-[14px] text-[#3F3B33]"
+          )}>
             {cartao.label}
           </p>
           {cartao.contagem !== undefined && (
@@ -113,10 +125,12 @@ function CartaoMenu({ cartao, grande = false }: { cartao: CartaoHub; grande?: bo
             // vazia fica com o número apagado, no tom do papel.
             <span
               className={cn(
-                "rounded-full px-2 py-[2px] text-[11px] font-bold tabular-nums leading-none",
-                cartao.contagem > 0
-                  ? "bg-[var(--tom-icone)] text-[var(--tom-texto)]"
-                  : "bg-[#EEEBE3] text-[#A39D8C]"
+                "tabular-nums leading-none",
+                grande
+                  ? "rounded-full px-2 py-[2px] text-[11px] font-bold bg-[var(--tom-icone)] text-[var(--tom-texto)]"
+                  // Nos atalhos a contagem vira número solto, sem cápsula —
+                  // ela informa quantos há, não pede clique.
+                  : cn("text-[12px] font-bold", cartao.contagem > 0 ? "text-[var(--tom-texto)]" : "text-[#C9C2AC]")
               )}
             >
               {cartao.contagem}
@@ -145,7 +159,10 @@ function CartaoMenu({ cartao, grande = false }: { cartao: CartaoHub; grande?: bo
         </p>
       </div>
 
-      <ChevronRight className="h-5 w-5 shrink-0 text-[var(--tom-texto)] opacity-40 transition-all group-hover:translate-x-0.5 group-hover:opacity-100" />
+      <ChevronRight className={cn(
+        "shrink-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100",
+        grande ? "h-5 w-5 text-[var(--tom-texto)] opacity-40" : "h-4 w-4 text-[#A39D8C] opacity-50"
+      )} />
     </Link>
   );
 }
