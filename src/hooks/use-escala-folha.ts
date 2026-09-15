@@ -43,7 +43,20 @@ export function useEscalaFolha(options?: { ativo?: boolean; deps?: unknown[] }) 
     const estilo = window.getComputedStyle(wrapperEl);
     const paddingX =
       parseFloat(estilo.paddingLeft || "0") + parseFloat(estilo.paddingRight || "0");
-    const larguraDisponivel = wrapperEl.clientWidth - paddingX;
+
+    // A LARGURA DA JANELA É O TETO, sempre.
+    //
+    // Medir só o wrapper não basta: basta um ancestral em flex deixar o
+    // contêiner crescer junto com a folha para o wrapper reportar os mesmos
+    // 794px da folha. A conta então enxerga "cabe quase tudo", reduz 5% e o
+    // documento sai pela direita — foi exatamente o que aconteceu no
+    // relatório de inspeção. A viewport não mente sobre o tamanho da tela,
+    // então ela entra como limite superior do que existe de espaço.
+    const larguraJanela = document.documentElement.clientWidth || window.innerWidth || 0;
+    const larguraDisponivel = Math.min(
+      wrapperEl.clientWidth - paddingX,
+      larguraJanela - paddingX
+    );
     const larguraNatural = paperEl.offsetWidth;
     const alturaNatural = paperEl.offsetHeight;
     if (!larguraNatural || larguraDisponivel <= 0) return;
@@ -60,6 +73,11 @@ export function useEscalaFolha(options?: { ativo?: boolean; deps?: unknown[] }) 
     if (!wrapperEl || !paperEl) return;
 
     recalcular();
+    // A primeira medição pode pegar a folha ainda sem conteúdo (fontes e
+    // brasão carregando); estas duas repetições cobrem o assentamento sem
+    // depender de o ResizeObserver notar a diferença.
+    const rafId = requestAnimationFrame(recalcular);
+    const timeoutId = setTimeout(recalcular, 400);
 
     // Só reage a mudança de LARGURA do wrapper (rotação do aparelho, sidebar
     // recolhendo) e a qualquer mudança de conteúdo da folha — nunca à mudança
@@ -83,6 +101,8 @@ export function useEscalaFolha(options?: { ativo?: boolean; deps?: unknown[] }) 
     ro.observe(paperEl);
     window.addEventListener("resize", recalcular);
     return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timeoutId);
       ro.disconnect();
       window.removeEventListener("resize", recalcular);
     };

@@ -114,8 +114,12 @@ export function fillRoteiroTextoTokens(html: string, idData: IdDataParaTexto): s
   const baseLegalPrazo = idData.baseLegalPrazo ? `, conforme previsto na ${idData.baseLegalPrazo}` : '';
   return html
     .replaceAll('{{DATA}}', data)
-    .replaceAll('{{ESTABELECIMENTO}}', idData.fantasia || '---')
-    .replaceAll('{{CNPJ}}', idData.cnpj || '---')
+    // Sem dado ainda, o TOKEN FICA. Trocar por '---' aqui era o que
+    // enterrava o problema: o texto seguia para o rascunho com o trecho já
+    // resolvido em traços, e nenhuma digitação posterior tinha mais o que
+    // substituir. Mantendo o token, o nome entra assim que for digitado.
+    .replaceAll('{{ESTABELECIMENTO}}', idData.fantasia || '{{ESTABELECIMENTO}}')
+    .replaceAll('{{CNPJ}}', idData.cnpj || '{{CNPJ}}')
     .replaceAll('{{PRAZO_DIAS}}', idData.prazoDias || '15')
     .replaceAll('{{BASE_LEGAL_PRAZO}}', baseLegalPrazo);
 }
