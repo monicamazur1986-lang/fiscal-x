@@ -2030,6 +2030,23 @@ function partirBaseLegal(texto: string): { requisito: string; baseLegal?: string
   return { requisito: m[1].trim().replace(/[.;]\s*$/, "."), baseLegal: m[2].trim() };
 }
 
+/**
+ * CRITICIDADE DO ITEM.
+ *
+ * Era um selo colorido repetido em toda linha, disputando atenção com a
+ * resposta — que é a informação que muda a cada item. Agora a cor vai para a
+ * barra lateral do card (sempre visível, sem ocupar linha) e o rótulo fica
+ * discreto ao lado do número do item. A palavra continua ali porque
+ * imprescindível/necessário/recomendável entra no cálculo da conformidade —
+ * não é enfeite.
+ */
+const CRITICIDADE: Record<string, { rotulo: string; barra: string }> = {
+  I: { rotulo: 'Imprescindível', barra: 'border-l-red-400' },
+  N: { rotulo: 'Necessário', barra: 'border-l-amber-400' },
+  R: { rotulo: 'Recomendável', barra: 'border-l-sky-400' },
+};
+const criticidadeDoItem = (crit?: string) => CRITICIDADE[crit || 'R'] || CRITICIDADE.R;
+
 const CHECKLISTS: Record<string, ChecklistData> = {
   odontologia: odontologiaChecklist,
   'odontologia-prudentopolis': odontologiaPrudentopolisChecklist,
@@ -3741,16 +3758,15 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                       <div
                         key={item.id}
                         className={cn(
-                          "px-4 py-5 sm:p-6 rounded-xl border space-y-5 transition-colors duration-200 border-l-[3px]",
-                          answers[item.id] !== undefined
-                            ? "bg-white border-[#E4DFD1] border-l-[#1F7A5C]"
-                            : "bg-[#FAF8F3] border-[#E4DFD1] border-l-[#E4DFD1]"
+                          "px-4 py-5 sm:p-6 rounded-xl border space-y-5 transition-colors duration-200 border-l-[3px] border-[#E4DFD1]",
+                          criticidadeDoItem(item.crit).barra,
+                          answers[item.id] !== undefined ? "bg-white" : "bg-[#FAF8F3]"
                         )}
                       >
                         {/* No ROI as alternativas são textos longos: empilha
                             sempre, em vez de dividir em duas colunas. */}
                         <div className={cn("flex gap-6", item.roi ? "flex-col" : "flex-col md:flex-row md:items-start justify-between")}>
-                          <div className="flex-1 space-y-2"><div className="flex items-center gap-3"><Badge className={cn("text-[10px] font-black uppercase px-2", item.crit === 'I' ? "bg-red-100 text-red-600" : item.crit === 'N' ? "bg-amber-100 text-amber-600" : "bg-sky-100 text-sky-600")}>{item.crit === 'I' ? "IMPRESCINDÍVEL" : item.crit === 'N' ? "NECESSÁRIO" : "RECOMENDÁVEL"}</Badge><span className="text-[11px] font-black text-[#A39D8C]">{item.roi ? `INDICADOR ${item.roi.numero}` : `ITEM ${item.id}`}</span></div><p className="text-[15px] font-semibold text-[#262420] leading-relaxed">{item.roi ? item.roi.indicador : partirBaseLegal(item.text).requisito}</p>{(item.roi?.baseLegal || partirBaseLegal(item.text).baseLegal) && <p className="text-[11px] font-medium text-[#A39D8C] leading-snug">{item.roi ? item.roi.baseLegal : partirBaseLegal(item.text).baseLegal}</p>}</div>
+                          <div className="flex-1 space-y-2"><div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wide text-[#A39D8C]"><span>{item.roi ? `Indicador ${item.roi.numero}` : `Item ${item.id}`}</span><span aria-hidden="true">·</span><span>{criticidadeDoItem(item.crit).rotulo}</span></div><p className="text-[15px] font-semibold text-[#262420] leading-relaxed">{item.roi ? item.roi.indicador : partirBaseLegal(item.text).requisito}</p>{(item.roi?.baseLegal || partirBaseLegal(item.text).baseLegal) && <p className="text-[11px] font-medium text-[#A39D8C] leading-snug">{item.roi ? item.roi.baseLegal : partirBaseLegal(item.text).baseLegal}</p>}</div>
                           {item.roi ? (
                             // Escala 0–5: cada nota tem a descrição do que a
                             // caracteriza, então vira uma lista de opções
@@ -3840,7 +3856,27 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                             })}
                           </div>
                         )}
-                        {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => { setObservations(prev => ({ ...prev, [item.id]: e.target.value })); }} onBlur={() => handleSaveDraft(false)} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><div className="flex flex-wrap items-center gap-2"><Button type="button" onClick={() => toggleRecordingObservacao(item.id)} variant="outline" size="sm" className={cn("h-9 w-full sm:w-auto px-4 rounded-xl font-black text-[10px] uppercase gap-2", recordingItemId === item.id ? "bg-red-500 text-white border-red-500 animate-pulse hover:bg-red-500 hover:text-white" : "text-[#6B6659] border-[#E4DFD1]")}>{recordingItemId === item.id ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {recordingItemId === item.id ? "Parar" : "Ditar por voz"}</Button></div></div>)}
+                        {!showObsInput[item.id] && (observations[item.id] || "").trim() && (
+                          <button
+                            type="button"
+                            onClick={() => setShowObsInput(prev => ({ ...prev, [item.id]: true }))}
+                            className="w-full text-left rounded-lg border border-[#E4DFD1] bg-white px-3 py-2.5 transition-colors hover:border-primary/40 hover:bg-[#FAF8F3]"
+                          >
+                            <span className="block text-[9px] font-black uppercase tracking-widest text-primary/70">Relato registrado</span>
+                            <span className="mt-0.5 block text-[13px] leading-snug text-[#3F3B33] line-clamp-2">{observations[item.id]}</span>
+                          </button>
+                        )}
+                        {!showObsInput[item.id] && (observations[item.id] || "").trim() && (
+                        <button
+                          type="button"
+                          onClick={() => setShowObsInput(prev => ({ ...prev, [item.id]: true }))}
+                          className="w-full text-left rounded-lg border border-[#E4DFD1] bg-white px-3 py-2.5 transition-colors hover:border-primary/40 hover:bg-[#FAF8F3]"
+                        >
+                          <span className="block text-[9px] font-black uppercase tracking-widest text-primary/70">Relato registrado</span>
+                          <span className="mt-0.5 block text-[13px] leading-snug text-[#3F3B33] line-clamp-2">{observations[item.id]}</span>
+                        </button>
+                      )}
+                      {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => { setObservations(prev => ({ ...prev, [item.id]: e.target.value })); }} onBlur={() => handleSaveDraft(false)} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><div className="flex flex-wrap items-center gap-2"><Button type="button" onClick={() => toggleRecordingObservacao(item.id)} variant="outline" size="sm" className={cn("h-9 w-full sm:w-auto px-4 rounded-xl font-black text-[10px] uppercase gap-2", recordingItemId === item.id ? "bg-red-500 text-white border-red-500 animate-pulse hover:bg-red-500 hover:text-white" : "text-[#6B6659] border-[#E4DFD1]")}>{recordingItemId === item.id ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {recordingItemId === item.id ? "Parar" : "Ditar por voz"}</Button></div></div>)}
                       </div>
                       )
                     ))}
@@ -3900,10 +3936,10 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
               {customItems.length > 0 && (
                 <div className="space-y-4">
                   {customItems.map((item) => (
-                    <div key={item.id} className={cn("p-6 bg-[#FAF8F3] rounded-lg border space-y-5", editingCustomItemId === item.id ? "border-primary/40 ring-2 ring-primary/20" : "border-[#E4DFD1]")}>
+                    <div key={item.id} className={cn("px-4 py-5 sm:p-6 bg-[#FAF8F3] rounded-lg border border-l-[3px] space-y-5", criticidadeDoItem(item.crit).barra, editingCustomItemId === item.id ? "border-primary/40 ring-2 ring-primary/20" : "border-[#E4DFD1]")}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 space-y-2">
-                          <Badge className={cn("text-[10px] font-black uppercase px-2", item.crit === 'I' ? "bg-red-100 text-red-600" : item.crit === 'N' ? "bg-amber-100 text-amber-600" : "bg-sky-100 text-sky-600")}>{item.crit === 'I' ? "IMPRESCINDÍVEL" : item.crit === 'N' ? "NECESSÁRIO" : "RECOMENDÁVEL"}</Badge>
+                          <p className="text-[11px] font-black uppercase tracking-wide text-[#A39D8C]">{criticidadeDoItem(item.crit).rotulo}</p>
                           <p className="text-[15px] font-bold text-[#262420] leading-relaxed">{item.text}</p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
