@@ -21,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils"
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert"
 import { useAuth } from "@/hooks/use-auth"
+import { useDitadoPorVoz } from "@/hooks/use-ditado-por-voz"
 import { getBaseLawOptions, getIndividualLawOptions, toggleLawPreference as toggleLawPreferenceValue, searchLegislacao, buildFundamentacaoFromArticles, type LawPreference } from "@/lib/legal-search"
 
 interface Props {
@@ -49,11 +50,9 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isUppercase, setIsUppercase] = useState(false)
-  const [isRecording, setIsRecording] = useState(false)
   const [isLegalMenuOpen, setIsLegalMenuOpen] = useState(false)
   const [addArticleQuery, setAddArticleQuery] = useState("")
 
-  const recognitionRef = useRef<any>(null)
   const { profile } = useAuth()
 
   const lawOptions = getBaseLawOptions(profile?.municipioId)
@@ -85,40 +84,10 @@ export function AssistenteIAFormDialog({ onApply }: Props) {
     setAddArticleQuery("");
   };
 
-  useEffect(() => {
-    if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-      recognitionRef.current = new SpeechRecognition()
-      recognitionRef.current.continuous = true
-      recognitionRef.current.interimResults = false
-      recognitionRef.current.lang = 'pt-BR'
-
-      recognitionRef.current.onresult = (event: any) => {
-        let finalTranscript = ''
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript
-          }
-        }
-        if (finalTranscript) {
-          setCaseDescription(prev => (prev ? prev + ' ' : '') + finalTranscript)
-        }
-      }
-
-      recognitionRef.current.onerror = () => setIsRecording(false)
-      recognitionRef.current.onend = () => setIsRecording(false)
-    }
-  }, [])
-
-  const toggleRecording = () => {
-    if (isRecording) {
-      recognitionRef.current?.stop()
-    } else {
-      if (!recognitionRef.current) return
-      recognitionRef.current.start()
-      setIsRecording(true)
-    }
-  }
+  // Ditado que não desliga na pausa do relato — ver use-ditado-por-voz.ts.
+  const { gravando: isRecording, alternar: toggleRecording } = useDitadoPorVoz({
+    aoTranscrever: (texto) => setCaseDescription(prev => (prev ? prev + ' ' : '') + texto),
+  })
 
   const toggleLawPreference = (value: LawPreference) => {
     setLawPreferences(prev => toggleLawPreferenceValue(prev, value));

@@ -144,7 +144,7 @@ async function gerarAcervo(dirManifest: string, municipioId?: string) {
   const manifest = lerManifest(caminhoManifest);
   if (!manifest) {
     console.warn(`Manifest ausente ou inválido, pulando: ${caminhoManifest}`);
-    return;
+    return [];
   }
 
   console.log(`\n${municipioId ? `Município: ${municipioId}` : 'Acervo geral'} (manifest v${manifest.version})`);
@@ -156,7 +156,7 @@ async function gerarAcervo(dirManifest: string, municipioId?: string) {
   // documentos a extrair e TODOS falharam, aí o navegador tenta de novo.
   if (documentos.length === 0 && manifest.documents.length > 0) {
     console.warn('  ! Nenhum documento extraído — acervo.json não será escrito (o app extrai no navegador).');
-    return;
+    return [];
   }
 
   const destino = path.join(dirManifest, 'acervo.json');
@@ -166,6 +166,39 @@ async function gerarAcervo(dirManifest: string, municipioId?: string) {
   fs.writeFileSync(destino, JSON.stringify({ version: manifest.version, documents: documentos }));
   const mb = fs.statSync(destino).size / 1048576;
   console.log(`  -> ${path.relative(ROOT, destino)} (${mb.toFixed(2)} MB, ${documentos.length} documentos)`);
+
+  // O catálogo sai do MANIFESTO, e não dos documentos extraídos: uma norma
+  // cujo PDF não pôde ser lido (escaneado sem OCR, por exemplo) continua
+  // sendo uma norma que o fiscal pode selecionar como base legal.
+  return manifest.documents.map((doc: any) => ({
+    id: doc.id,
+    titulo: doc.titulo,
+    esfera: doc.esfera,
+    categoria: doc.categoria,
+    ...(municipioId ? { municipioId } : {}),
+  }));
+}
+
+/**
+ * CATÁLOGO DE BASE LEGAL — a lista que o fiscal vê ao escolher em que norma
+ * fundamentar (ver getIndividualLawOptions em legal-search.ts).
+ *
+ * Era mantido à mão e só se atualizava quando alguém rodava o script de
+ * embeddings (que exige chave de API e não roda no build). Resultado: norma
+ * nova entrava na Biblioteca e continuava fora do rol de fundamentação —
+ * inclusive TODAS as municipais. Agora sai do mesmo manifesto que alimenta a
+ * Biblioteca, no build, e as duas listas não têm mais como divergir.
+ */
+function gravarCatalogo(catalogo: any[]) {
+  const destino = path.join(ROOT, 'src', 'lib', 'legal-catalog.json');
+  const ordenado = [...catalogo].sort((a, b) =>
+    String(a.titulo || '').localeCompare(String(b.titulo || ''), 'pt-BR')
+  );
+  fs.writeFileSync(destino, JSON.stringify(ordenado, null, 2) + '\n');
+  const municipais = ordenado.filter((d) => d.municipioId).length;
+  console.log(
+    `\n-> ${path.relative(ROOT, destino)} (${ordenado.length} normas selecionáveis, ${municipais} municipais)`
+  );
 }
 
 async function main() {
@@ -174,15 +207,18 @@ async function main() {
     return;
   }
 
-  await gerarAcervo(BIBLIOTECA_DIR);
+  const catalogo: any[] = [];
+  catalogo.push(...(await gerarAcervo(BIBLIOTECA_DIR)));
 
   const dirMunicipios = path.join(BIBLIOTECA_DIR, 'municipios');
   if (fs.existsSync(dirMunicipios)) {
     for (const municipioId of fs.readdirSync(dirMunicipios)) {
       const dir = path.join(dirMunicipios, municipioId);
-      if (fs.statSync(dir).isDirectory()) await gerarAcervo(dir, municipioId);
+      if (fs.statSync(dir).isDirectory()) catalogo.push(...(await gerarAcervo(dir, municipioId)));
     }
   }
+
+  gravarCatalogo(catalogo);
 }
 
 main().catch((e) => {

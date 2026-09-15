@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Send, Loader2, ThumbsUp, ThumbsDown, BookOpen, MessageCircleQuestion } from "lucide-react"
+import { Send, Loader2, ThumbsUp, ThumbsDown, BookOpen, MessageCircleQuestion, Mic, MicOff } from "lucide-react"
+import { useDitadoPorVoz } from "@/hooks/use-ditado-por-voz"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -37,6 +38,13 @@ export function FiscalXChat() {
   const { toast } = useToast();
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [input, setInput] = useState("");
+
+  // Ditado da dúvida por voz. A gravação NÃO para na pausa: o fiscal pensa,
+  // continua falando, e só encerra quando toca em "Parar" ou manda a
+  // pergunta (ver use-ditado-por-voz.ts).
+  const { gravando, suportado: temMicrofone, parar: pararDitado, alternar: alternarDitado } = useDitadoPorVoz({
+    aoTranscrever: (texto) => setInput((atual) => (atual ? atual + " " : "") + texto),
+  });
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -53,6 +61,7 @@ export function FiscalXChat() {
       .map((m) => ({ role: m.role, texto: m.texto }));
 
     setMensagens((prev) => [...prev, { role: 'user', texto: pergunta }]);
+    pararDitado();
     setInput("");
     setLoading(true);
 
@@ -201,10 +210,25 @@ export function FiscalXChat() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Descreva a situação ou digite sua dúvida..."
+          placeholder={gravando ? "Ouvindo... pode falar com calma, a gravação não para nas pausas." : "Descreva a situação ou digite sua dúvida..."}
           className="min-h-[44px] max-h-32 resize-none rounded-xl border-[#E4DFD1] bg-white text-sm"
           disabled={loading}
         />
+        {temMicrofone && (
+          <Button
+            type="button"
+            onClick={alternarDitado}
+            disabled={loading}
+            size="icon"
+            title={gravando ? "Parar de gravar" : "Ditar a dúvida por voz"}
+            aria-label={gravando ? "Parar de gravar" : "Ditar a dúvida por voz"}
+            className={gravando
+              ? "h-11 w-11 shrink-0 rounded-xl bg-red-500 text-white hover:bg-red-600 animate-pulse"
+              : "h-11 w-11 shrink-0 rounded-xl bg-[#F1EEE4] text-[#6B6659] hover:bg-[#E4DFD1]"}
+          >
+            {gravando ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+          </Button>
+        )}
         <Button
           type="button"
           onClick={() => enviar()}

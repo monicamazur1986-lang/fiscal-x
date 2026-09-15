@@ -44,6 +44,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { cn, normalizeId } from "@/lib/utils"
 import { useEscalaFolha } from "@/hooks/use-escala-folha"
+import { useDitadoPorVoz } from "@/hooks/use-ditado-por-voz"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -2205,45 +2206,44 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // adaptado pra várias observações (uma por item do checklist) em vez de um
   // campo só: guarda QUAL item está sendo ditado (não um boolean simples),
   // já que só pode haver um microfone ativo por vez.
+  // Ditado das observações da vistoria. A gravação segue ouvindo nas pausas
+  // (ver use-ditado-por-voz.ts): o fiscal olha o equipamento, volta e
+  // continua falando, sem o microfone desligar sozinho no meio.
   const [recordingItemId, setRecordingItemId] = useState<string | null>(null)
   const recordingItemIdRef = useRef<string | null>(null)
-  const recognitionRef = useRef<any>(null)
 
+  const ditado = useDitadoPorVoz({
+    aoTranscrever: (texto) => {
+      const alvo = recordingItemIdRef.current;
+      if (!alvo) return;
+      setObservations(prev => ({ ...prev, [alvo]: (prev[alvo] ? prev[alvo] + ' ' : '') + texto }));
+    },
+    aoErrar: (mensagem) => {
+      recordingItemIdRef.current = null;
+      setRecordingItemId(null);
+      toast({ variant: 'destructive', title: 'Microfone indisponível', description: mensagem });
+    },
+  });
+
+  // O hook sabe SE está gravando; o item de destino é controle desta tela.
+  // Quando o ditado para por qualquer motivo, o destaque do item some junto.
   useEffect(() => {
-    if (typeof window === 'undefined' || !('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) return;
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = false;
-    recognition.lang = 'pt-BR';
-    recognition.onresult = (event: any) => {
-      let finalTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
-      }
-      const targetId = recordingItemIdRef.current;
-      if (finalTranscript && targetId) {
-        setObservations(prev => ({ ...prev, [targetId]: (prev[targetId] ? prev[targetId] + ' ' : '') + finalTranscript }));
-      }
-    };
-    recognition.onerror = () => { setRecordingItemId(null); recordingItemIdRef.current = null; };
-    recognition.onend = () => { setRecordingItemId(null); recordingItemIdRef.current = null; };
-    recognitionRef.current = recognition;
-    return () => { recognition.stop(); };
-  }, []);
+    if (!ditado.gravando) {
+      recordingItemIdRef.current = null;
+      setRecordingItemId(null);
+    }
+  }, [ditado.gravando]);
 
   const toggleRecordingObservacao = (itemId: string) => {
-    if (!recognitionRef.current) return;
     if (recordingItemIdRef.current === itemId) {
-      recognitionRef.current.stop();
+      ditado.parar();
       return;
     }
-    // Já ditando outro item: para o anterior antes de começar o novo (o
-    // navegador só permite um reconhecimento de voz ativo por vez).
-    if (recordingItemIdRef.current) recognitionRef.current.stop();
+    // Trocar de item no meio do ditado: o navegador só mantém um
+    // reconhecimento ativo, então o destino muda e a sessão segue.
     recordingItemIdRef.current = itemId;
     setRecordingItemId(itemId);
-    recognitionRef.current.start();
+    ditado.iniciar();
   };
   const [itemPhotos, setItemPhotos] = useState<Record<string, PhotoEvidence[]>>({})
   const [customItems, setCustomItems] = useState<CustomItem[]>([])

@@ -38,6 +38,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useToast } from "@/hooks/use-toast"
+import { useDitadoPorVoz } from "@/hooks/use-ditado-por-voz"
 import { useAuth } from "@/hooks/use-auth"
 import { Badge } from "@/components/ui/badge"
 import { EscolherEnquadramento } from "@/components/escolher-enquadramento"
@@ -104,14 +105,14 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [isUppercase, setIsUppercase] = useState(true)
-  const [isRecording, setIsRecording] = useState(false)
+
   const [coolDown, setCoolDown] = useState(0)
   const [isLegalMenuOpen, setIsLegalMenuOpen] = useState(false)
   const [addArticleQuery, setAddArticleQuery] = useState("")
 
   const router = useRouter()
   const { toast } = useToast()
-  const recognitionRef = useRef<any>(null)
+
 
   const lawOptions = getBaseLawOptions(profile?.municipioId)
   const individualLawOptions = getIndividualLawOptions(profile?.municipioId)
@@ -146,26 +147,16 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
   useEffect(() => {
     setError(null);
     setCoolDown(0);
-    if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-      recognitionRef.current = new SpeechRecognition()
-      recognitionRef.current.continuous = true
-      recognitionRef.current.interimResults = false
-      recognitionRef.current.lang = 'pt-BR'
-      recognitionRef.current.onresult = (event: any) => {
-        let finalTranscript = ''
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript
-        }
-        if (finalTranscript) {
-           setCaseDescription(prev => (prev ? prev + ' ' : '') + finalTranscript.toUpperCase());
-           setError(null);
-        }
-      }
-      recognitionRef.current.onerror = () => setIsRecording(false)
-      recognitionRef.current.onend = () => setIsRecording(false)
-    }
   }, [])
+
+  // O ditado continua ouvindo nas pausas do relato — ver use-ditado-por-voz.ts.
+  // Antes, qualquer silêncio encerrava a sessão do navegador e o microfone
+  // desligava sozinho no meio da narração.
+  const { gravando: isRecording, alternar: toggleRecording } = useDitadoPorVoz({
+    maiusculas: true,
+    aoTranscrever: (texto) => { setCaseDescription(prev => (prev ? prev + ' ' : '') + texto); setError(null); },
+    aoErrar: (mensagem) => setError(mensagem),
+  })
 
   useEffect(() => {
     if (coolDown > 0) {
@@ -174,15 +165,6 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
     }
   }, [coolDown])
 
-  const toggleRecording = () => {
-    if (isRecording) recognitionRef.current?.stop()
-    else {
-      if (!recognitionRef.current) return
-      recognitionRef.current.start()
-      setIsRecording(true)
-      setError(null);
-    }
-  }
 
   const toggleLawPreference = (value: LawPreference) => {
     // A partir daqui a escolha é do fiscal — o padrão por município não
