@@ -3304,13 +3304,18 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   <div data-pdf-block className="sub-header-row">{isRoi ? 2 : 3}. NÃO CONFORMIDADES DETECTADAS</div>
                   {nonConformitiesBySection.length > 0 && (() => {
                     const totalNc = nonConformitiesBySection.reduce((soma, g) => soma + g.itens.length, 0);
+                    const interditado = (idData.desfecho || 'prazo') === 'interdicao';
+                    // Na interdição a lista não é um rol de pendências com
+                    // prazo: é a motivação do ato. O prazo que corre é o de
+                    // defesa, e ele vive no auto de infração, não aqui.
+                    const alvo = totalNc === 1 ? 'do item abaixo' : `dos ${totalNc} itens abaixo`;
+                    const motivo = totalNc === 1 ? 'da não conformidade abaixo' : 'das não conformidades abaixo';
                     return (
                       <div data-pdf-block className="border-2 border-zinc-800 bg-white px-4 py-3 mb-4">
                         <p className="text-[11pt] font-black text-zinc-900 leading-snug">
-                          {totalNc === 1
-                            ? 'O estabelecimento deve providenciar a regularização do item abaixo'
-                            : `O estabelecimento deve providenciar a regularização dos ${totalNc} itens abaixo`}
-                          {idData.prazoDias ? ` no prazo de ${idData.prazoDias} dias` : ''}.
+                          {interditado
+                            ? `A interdição decorre ${motivo}. O prazo de defesa consta do Auto de Infração lavrado em conjunto.`
+                            : `O estabelecimento deve providenciar a regularização ${alvo}${idData.prazoDias ? ` no prazo de ${idData.prazoDias} dias` : ''}.`}
                         </p>
                       </div>
                     );
@@ -3714,8 +3719,15 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
 
             {/* ROI da ANVISA: formulario de alimentacao da base da ANVISA,
                 nao gera exigencia de adequacao — logo, nao tem prazo nem
-                base legal de prazo a preencher. */}
-            {!isRoi && (
+                base legal de prazo a preencher.
+
+                O PRAZO TAMBEM SOME NA INTERDICAO: interditar nao e conceder
+                prazo para corrigir e seguir funcionando. O funcionamento para
+                na hora, e o prazo que passa a correr e o de DEFESA, no auto de
+                infracao lavrado em conjunto. Um "prazo para se adequar" num
+                relatorio que interditou o estabelecimento diz o contrario do
+                que o documento faz. */}
+            {!isRoi && (idData.desfecho || 'prazo') !== 'interdicao' && (
             <>
             <div className="h-px bg-[#F1EEE4]" />
 
