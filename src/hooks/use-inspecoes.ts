@@ -20,6 +20,7 @@ import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
 
 import { lerCacheColecao, salvarCacheColecao } from '@/lib/cache-colecao-local';
+import { attemptFirestoreWrite } from '@/lib/firestore-offline';
 const LOCAL_STORAGE_KEY = 'fiscal_x_inspecoes';
 const PENDING_SYNC_KEY = 'fiscal_x_inspecoes_pending_sync';
 
@@ -331,7 +332,11 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
 
     if (db && !configError) {
       const results = await Promise.allSettled(
-        stringIds.map(id => setDoc(doc(db, "inspecoes", id), { folderId: folderValue, deleted: false }, { merge: true }))
+        stringIds.map(id =>
+          attemptFirestoreWrite(
+            setDoc(doc(db, "inspecoes", id), { folderId: folderValue, deleted: false }, { merge: true })
+          )
+        )
       );
       const failed = results.filter(r => r.status === 'rejected').length;
       if (failed > 0) throw new Error(`${failed} de ${stringIds.length} item(ns) não foram movidos no servidor.`);
@@ -351,11 +356,31 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
     });
 
     if (db && !configError) {
+      // attemptFirestoreWrite, igual ao que use-intimacoes já fazia.
+      //
+      // Um setDoc cru só resolve quando o SERVIDOR confirma: sem sinal, a
+      // promessa fica pendente para sempre, o Promise.allSettled nunca
+      // assenta e quem chamou trava — sem confirmação, sem erro, sem nada.
+      // Era o que acontecia ao mandar rascunhos para a lixeira: sumiam da
+      // tela pelo estado local e voltavam no recarregamento, porque a
+      // gravação nunca tinha sido confirmada.
       const results = await Promise.allSettled(
-        stringIds.map(id => setDoc(doc(db, "inspecoes", id), { deleted: toTrash, deletedAt: now }, { merge: true }))
+        stringIds.map(id =>
+          attemptFirestoreWrite(
+            setDoc(doc(db, "inspecoes", id), { deleted: toTrash, deletedAt: now }, { merge: true })
+          )
+        )
       );
-      const failed = results.filter(r => r.status === 'rejected').length;
-      if (failed > 0) throw new Error(`${failed} de ${stringIds.length} item(ns) não foram salvos no servidor.`);
+      const rejeitados = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+      if (rejeitados.length > 0) {
+        // O motivo real (permissão negada, por exemplo) viaja junto: sem
+        // isso, a tela dizia só "Erro ao excluir" e não dava por onde
+        // começar a investigar.
+        const motivo = (rejeitados[0].reason as any)?.code || (rejeitados[0].reason as any)?.message || 'motivo desconhecido';
+        throw new Error(
+          `${rejeitados.length} de ${stringIds.length} item(ns) não foram salvos no servidor (${motivo}).`
+        );
+      }
     }
   }, [db, configError]);
 
@@ -369,9 +394,16 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
     });
 
     if (db && !configError) {
-      const results = await Promise.allSettled(stringIds.map(id => deleteDoc(doc(db, "inspecoes", id))));
-      const failed = results.filter(r => r.status === 'rejected').length;
-      if (failed > 0) throw new Error(`${failed} de ${stringIds.length} item(ns) não foram excluídos no servidor.`);
+      const results = await Promise.allSettled(
+        stringIds.map(id => attemptFirestoreWrite(deleteDoc(doc(db, "inspecoes", id))))
+      );
+      const rejeitados = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+      if (rejeitados.length > 0) {
+        const motivo = (rejeitados[0].reason as any)?.code || (rejeitados[0].reason as any)?.message || 'motivo desconhecido';
+        throw new Error(
+          `${rejeitados.length} de ${stringIds.length} item(ns) não foram excluídos no servidor (${motivo}).`
+        );
+      }
     }
   }, [db, configError]);
 

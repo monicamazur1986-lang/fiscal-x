@@ -539,8 +539,12 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
       ]);
       toast({ title: "Itens movidos para lixeira" });
       setSelectedIds([]);
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro ao excluir" });
+    } catch (e: any) {
+      // O motivo real (permissão negada, sem conexão) precisa aparecer: sem
+      // ele, o fiscal via os itens sumirem, voltarem no recarregamento e
+      // nenhuma pista do porquê.
+      console.error("Falha ao mover para a lixeira:", e);
+      toast({ variant: "destructive", title: "Erro ao excluir", description: e?.message || "Não foi possível concluir. Tente de novo com conexão." });
     }
   };
 
@@ -1015,8 +1019,9 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                                             if (agendaLembreteId) await cancelarLembretePrazo(deleteInspecao, agendaLembreteId);
                                           }
                                           toast({ title: "Movido para lixeira" });
-                                        } catch (e) {
-                                          toast({ variant: "destructive", title: "Erro ao excluir" });
+                                        } catch (e: any) {
+                                          console.error("Falha ao mover para a lixeira:", e);
+                                          toast({ variant: "destructive", title: "Erro ao excluir", description: e?.message || "Não foi possível concluir. Tente de novo com conexão." });
                                         }
                                       }}
                                       className="rounded text-rose-600 text-xs font-medium h-9 px-3 cursor-pointer"
