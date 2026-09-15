@@ -227,6 +227,14 @@
 
     .document-paper-wrapper {
       width: 100%;
+      /* Item de um flex container (.document-container) carrega
+         min-width automatico, que o impede de encolher abaixo do conteudo — e o
+         conteudo aqui e a folha A4, travada em 210mm/794px. Sem esta linha o
+         wrapper assumia 794px mesmo num celular de 360px: a pagina inteira
+         estourava para a direita, a medicao da escala enxergava 794px
+         "disponiveis" e reduzia quase nada, e o relatorio abria cortado. */
+      min-width: 0;
+      max-width: 100%;
       overflow-x: auto;
       padding: 0 20px;
     }

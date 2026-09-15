@@ -51,32 +51,22 @@ export const DEFAULT_INTRO_HTML: Record<string, string> = {
     p('No dia {{DATA}} a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {{ESTABELECIMENTO}}, CNPJ/CPF {{CNPJ}}, com a finalidade de verificar as condições sanitárias do estabelecimento e proceder à renovação da licença sanitária, conforme protocolo.'),
     p('Considerando que se trata de atividade classificada como de alto risco sanitário, nos termos da Resolução SESA nº 1024/2020, o funcionamento está condicionado à posse de licença sanitária válida, cuja renovação deve ser realizada anualmente.'),
     p('A inspeção foi conduzida de acordo com os critérios legais e técnicos estabelecidos pela RDC 1002/25 da Anvisa, além das demais normas sanitárias e protocolos de biossegurança aplicáveis aos serviços de saúde.'),
-    p('Durante a vistoria realizada, foram identificadas algumas inconformidades que necessitam de correção, a fim de garantir o cumprimento da legislação vigente e assegurar a proteção da saúde de usuários e profissionais.'),
-    p('Dessa forma, para que seja possível a emissão da licença sanitária, o estabelecimento deverá promover a regularização integral das recomendações e ajustes apontados, conforme os itens descritos a seguir.'),
   ].join(''),
   alimentacao: [
     p('No dia {{DATA}}, a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {{ESTABELECIMENTO}}, inscrito sob CNPJ/CPF {{CNPJ}}, com a finalidade de verificar as condições sanitárias do local.'),
     p('A inspeção foi conduzida de acordo com os critérios legais e técnicos estabelecidos pela RDC nº 216/2004 e pela RDC nº 275/2002 da Anvisa, além das demais normas sanitárias e protocolos de biossegurança pertinentes.'),
-    p('Durante a vistoria, foram identificadas inconformidades que necessitam de correção, a fim de garantir o cumprimento da legislação vigente e assegurar a proteção da saúde de usuários e profissionais.'),
-    p('Para que seja possível a emissão do documento sanitário correspondente, o estabelecimento deverá promover a regularização integral das recomendações e ajustes apontados, conforme os itens descritos a seguir.'),
   ].join(''),
   farmacia: [
     p('No dia {{DATA}}, a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {{ESTABELECIMENTO}}, inscrito sob CNPJ/CPF {{CNPJ}}, com a finalidade de verificar as condições sanitárias do local.'),
     p('A inspeção foi conduzida de acordo com os critérios legais e técnicos estabelecidos pela RDC nº 44/2009 da Anvisa e, quando aplicável, pela Portaria nº 344/1998, além da Lei Federal nº 5.991/1973 e das demais normas sanitárias e protocolos de biossegurança pertinentes.'),
-    p('Durante a vistoria, foram identificadas inconformidades que necessitam de correção, a fim de garantir o cumprimento da legislação vigente e assegurar a proteção da saúde de usuários e profissionais.'),
-    p('Para que seja possível a emissão do documento sanitário correspondente, o estabelecimento deverá promover a regularização integral das recomendações e ajustes apontados, conforme os itens descritos a seguir.'),
   ].join(''),
   'clinica-estetica-prudentopolis': [
     p('No dia {{DATA}}, a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {{ESTABELECIMENTO}}, inscrito sob CNPJ/CPF {{CNPJ}}, com a finalidade de verificar as condições sanitárias do local.'),
     p('A inspeção foi conduzida de acordo com os critérios legais e técnicos estabelecidos pela RDC nº 63/2011, pela RDC nº 15/2012 e pela RDC nº 222/2018 da Anvisa, além das demais normas sanitárias e protocolos de biossegurança pertinentes a procedimentos invasivos.'),
-    p('Durante a vistoria, foram identificadas inconformidades que necessitam de correção, a fim de garantir o cumprimento da legislação vigente e assegurar a proteção da saúde de usuários, profissionais e pacientes.'),
-    p('Para que seja possível a emissão do documento sanitário correspondente, o estabelecimento deverá promover a regularização integral das recomendações e ajustes apontados, conforme os itens descritos a seguir.'),
   ].join(''),
   default: [
     p('No dia {{DATA}}, a equipe de fiscalização da Vigilância Sanitária Municipal realizou inspeção no estabelecimento {{ESTABELECIMENTO}}, inscrito sob CNPJ/CPF {{CNPJ}}, com a finalidade de verificar as condições sanitárias do local.'),
     p('A inspeção foi conduzida de acordo com os critérios legais e técnicos estabelecidos na legislação sanitária aplicável às atividades do estabelecimento, além das demais normas e protocolos de biossegurança pertinentes.'),
-    p('Durante a vistoria, foram identificadas inconformidades que necessitam de correção, a fim de garantir o cumprimento da legislação vigente e assegurar a proteção da saúde de usuários e profissionais.'),
-    p('Para que seja possível a emissão do documento sanitário correspondente, o estabelecimento deverá promover a regularização integral das recomendações e ajustes apontados, conforme os itens descritos a seguir.'),
   ].join(''),
 };
 

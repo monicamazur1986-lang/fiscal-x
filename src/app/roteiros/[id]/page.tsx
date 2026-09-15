@@ -2579,8 +2579,8 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
       setIntroducaoHtml("");
       setConclusaoHtml("");
     } else {
-      setIntroducaoHtml(cd.introducaoHtml || fillRoteiroTextoTokens(resolverIntroHtml(id, profile?.roteiroTextos, config.roteiroTextos), carregadaIdData));
-      setConclusaoHtml(cd.conclusaoHtml || fillRoteiroTextoTokens(resolverConclusaoHtml(id, profile?.roteiroTextos, config.roteiroTextos), carregadaIdData));
+      setIntroducaoHtml(cd.introducaoHtml || resolverIntroHtml(id, profile?.roteiroTextos, config.roteiroTextos));
+      setConclusaoHtml(cd.conclusaoHtml || resolverConclusaoHtml(id, profile?.roteiroTextos, config.roteiroTextos));
     }
     setCurrentInspecaoId(inspecao.id);
     setInspecaoStatus(inspecao.status === 'concluido' ? 'concluido' : 'rascunho');
@@ -2639,7 +2639,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   useEffect(() => {
     if (isRoi || introTravadaRef.current) return;
     const base = resolverIntroHtml(id, profile?.roteiroTextos, config.roteiroTextos);
-    setIntroducaoHtml(fillRoteiroTextoTokens(base, idData));
+    setIntroducaoHtml(base);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config, id, isRoi, profile?.roteiroTextos, idData.fantasia, idData.cnpj, idData.dataHorario]);
 
@@ -2664,6 +2664,11 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // próprio perfil, e a partir daí toda inspeção nova deste roteiro já nasce
   // com ele. Tem precedência sobre o padrão do município — ver
   // resolverIntroHtml em src/lib/roteiro-textos-padrao.ts.
+  // Versões prontas para leitura — é o que vai para a tela, para o relatório
+  // e para o PDF. Ver comentário sobre tokens mais acima.
+  const introducaoExibida = fillRoteiroTextoTokens(introducaoHtml, idData);
+  const conclusaoExibida = fillRoteiroTextoTokens(conclusaoHtml, idData);
+
   const [salvandoPadrao, setSalvandoPadrao] = useState<'introducaoHtml' | 'conclusaoHtml' | null>(null);
 
   const salvarComoMeuPadrao = async (campo: 'introducaoHtml' | 'conclusaoHtml', html: string) => {
@@ -2691,13 +2696,13 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // porque é uma escolha explícita do fiscal e não deve ser sobrescrita pela
   // sincronização automática depois.
   const restaurarPadraoIntroducao = () => {
-    setIntroducaoHtml(fillRoteiroTextoTokens(resolverIntroHtml(id, profile?.roteiroTextos, config.roteiroTextos), idData));
-    introTravadaRef.current = true;
+    setIntroducaoHtml(resolverIntroHtml(id, profile?.roteiroTextos, config.roteiroTextos));
+    introTravadaRef.current = false;
   };
 
   const restaurarPadraoConclusao = () => {
-    setConclusaoHtml(fillRoteiroTextoTokens(resolverConclusaoHtml(id, profile?.roteiroTextos, config.roteiroTextos), idData));
-    conclusaoTravadaRef.current = true;
+    setConclusaoHtml(resolverConclusaoHtml(id, profile?.roteiroTextos, config.roteiroTextos));
+    conclusaoTravadaRef.current = false;
   };
 
   /**
@@ -3248,7 +3253,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   <div
                     className="border border-slate-300 p-4 bg-zinc-50/50"
                     style={{ fontSize: '8.5pt', lineHeight: 1.55, textAlign: 'justify', fontWeight: 400, color: '#3f3f46' }}
-                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(introducaoHtml) }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(introducaoExibida) }}
                   />
               </div>
               )}
@@ -3349,7 +3354,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   <div
                     className="border border-slate-300 p-4 bg-zinc-50/50"
                     style={{ fontSize: '8.5pt', lineHeight: 1.55, textAlign: 'justify', fontWeight: 400, color: '#3f3f46' }}
-                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(conclusaoHtml) }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(conclusaoExibida) }}
                   />
               </div>
               )}
@@ -3640,7 +3645,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                 <AccordionContent className="pt-3 space-y-3">
                 <p className="text-[11px] font-medium text-[#6B6659]">Texto que abre o relatório final ("Considerações Gerais") — editável. Pré-preenchido com o padrão do município e os dados acima.</p>
                 <div className="p-2 bg-[#FAF8F3] rounded-lg border border-[#E4DFD1] font-serif">
-                  <RichTextEditor value={introducaoHtml} onChange={handleIntroducaoChange} fontSize="10.5pt" minHeight="140px" />
+                  <RichTextEditor value={introducaoExibida} onChange={handleIntroducaoChange} fontSize="10.5pt" minHeight="140px" />
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -4036,7 +4041,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                 <AccordionContent className="pt-3 space-y-3">
                 <p className="text-[11px] font-medium text-[#6B6659]">Texto que fecha o relatório final ("Conclusão e Prazo Legal") — editável. Pré-preenchido com o padrão do município e o prazo acima.</p>
                 <div className="p-2 bg-[#FAF8F3] rounded-lg border border-[#E4DFD1] font-serif">
-                  <RichTextEditor value={conclusaoHtml} onChange={handleConclusaoChange} fontSize="10.5pt" minHeight="140px" />
+                  <RichTextEditor value={conclusaoExibida} onChange={handleConclusaoChange} fontSize="10.5pt" minHeight="140px" />
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button

@@ -49,7 +49,7 @@ export const FolhaEscalada = forwardRef<
   );
 
   return (
-    <div ref={wrapperRef} style={ativo ? estiloWrapper : undefined} className="w-full">
+    <div ref={wrapperRef} style={ativo ? estiloWrapper : undefined} className="w-full min-w-0 max-w-full">
       <div
         ref={refDaFolha}
         style={ativo ? estiloFolha : undefined}
