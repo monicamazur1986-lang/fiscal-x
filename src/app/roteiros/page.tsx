@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { ClipboardList, Clock, FileCheck } from "lucide-react"
+import { ClipboardList, FolderClock, FolderCheck } from "lucide-react"
 
 import { MenuHub, type CartaoHub } from "@/components/menu-hub"
 import { useInspecoes } from "@/hooks/use-inspecoes"
@@ -37,7 +37,7 @@ export default function RoteirosHubPage() {
       href: "/roteiros/em-andamento",
       label: "Em Andamento",
       descricao: "Vistorias começadas que ainda não foram concluídas.",
-      icon: Clock,
+      icon: FolderClock,
       color: "#9C7A3C",
       contagem: contagens.emAndamento,
     },
@@ -45,7 +45,7 @@ export default function RoteirosHubPage() {
       href: "/roteiros/relatorios",
       label: "Relatórios Finalizados",
       descricao: "Vistorias concluídas, com relatório pronto e arquivado.",
-      icon: FileCheck,
+      icon: FolderCheck,
       color: "#6B4C80",
       contagem: contagens.relatorios,
     },

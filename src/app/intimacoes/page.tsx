@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { FilePlus2, Clock, FileCheck } from "lucide-react"
+import { FilePlus2, FolderClock, FolderCheck } from "lucide-react"
 
 import { MenuHub, type CartaoHub } from "@/components/menu-hub"
 import { useIntimacoes } from "@/hooks/use-intimacoes"
@@ -38,7 +38,7 @@ export default function AutuacoesHubPage() {
       href: "/intimacoes/em-andamento",
       label: "Em Andamento",
       descricao: "Documentos começados que ainda não foram finalizados.",
-      icon: Clock,
+      icon: FolderClock,
       color: "#9C7A3C",
       contagem: contagens.emAndamento,
     },
@@ -46,7 +46,7 @@ export default function AutuacoesHubPage() {
       href: "/intimacoes/finalizadas",
       label: "Finalizadas",
       descricao: "Documentos já lavrados, com prazo de defesa em contagem.",
-      icon: FileCheck,
+      icon: FolderCheck,
       color: "#3D5A73",
       contagem: contagens.finalizadas,
     },

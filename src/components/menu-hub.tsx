@@ -25,8 +25,18 @@ export type CartaoHub = {
  * Tela-menu que abre ao entrar em Roteiros ou em Autuações: em vez de cair
  * direto numa lista cheia de filtros, a pessoa escolhe primeiro o que quer
  * fazer (criar, retomar o que ficou pela metade, ou consultar o que já foi
- * concluído). Cada destino tem cor, ícone e uma frase explicando — mesma
- * linguagem visual dos cartões do Dashboard, pra não parecer outro sistema.
+ * concluído).
+ *
+ * São dois pesos de propósito, e não três cartões iguais:
+ *
+ *   A AÇÃO — larga, colorida, com a frase explicando. É o que a tela existe
+ *   para oferecer, e some no meio quando divide o palco.
+ *
+ *   OS ARQUIVOS — dois ladrilhos com cara de pasta, rótulo embaixo e a
+ *   quantidade em cima do ícone. Lugar onde as coisas estão guardadas se
+ *   reconhece pelo desenho antes de se ler o nome; isso tira da tela o ar de
+ *   formulário e deixa a navegação mais parecida com mexer em pastas do que
+ *   com preencher um sistema.
  */
 export function MenuHub({
   chapeu,
@@ -56,14 +66,14 @@ export function MenuHub({
           </div>
         )}
 
-        <div className="space-y-3">
+        <div className="space-y-5">
           {destaques.map((cartao) => (
-            <CartaoMenu key={cartao.href} cartao={cartao} grande />
+            <CartaoPrincipal key={cartao.href} cartao={cartao} />
           ))}
           {demais.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
               {demais.map((cartao) => (
-                <CartaoMenu key={cartao.href} cartao={cartao} />
+                <LadrilhoArquivo key={cartao.href} cartao={cartao} />
               ))}
             </div>
           )}
@@ -73,96 +83,90 @@ export function MenuHub({
   );
 }
 
-function CartaoMenu({ cartao, grande = false }: { cartao: CartaoHub; grande?: boolean }) {
+/** A ação da tela: larga, com cor e com a frase sempre visível. */
+function CartaoPrincipal({ cartao }: { cartao: CartaoHub }) {
   return (
     <Link
       href={cartao.href}
       style={{
-        // Mesma receita do menu de Roteiros e da lista de Nova Autuação: a cor
-        // entra como tom claro de fundo, não como bloco saturado com texto
-        // branco. O contraste vem do texto escurecido, não da saturação — três
-        // blocos fortes empilhados pesavam a tela, e a ação principal acabava
-        // competindo com as secundárias em vez de se destacar.
-        ['--tom' as any]: `${cartao.color}${grande ? '1C' : '12'}`,
-        ['--tom-hover' as any]: `${cartao.color}${grande ? '2B' : '22'}`,
+        // A cor entra como tom claro de fundo, não como bloco saturado com
+        // texto branco: o contraste vem do texto escurecido.
+        ['--tom' as any]: `${cartao.color}1C`,
+        ['--tom-hover' as any]: `${cartao.color}2B`,
         ['--tom-icone' as any]: `${cartao.color}29`,
-        ['--tom-borda' as any]: `${cartao.color}${grande ? '4D' : '33'}`,
+        ['--tom-borda' as any]: `${cartao.color}4D`,
         ['--tom-texto' as any]: darkenHex(cartao.color, 34),
       }}
       className={cn(
-        "group relative flex items-center rounded-2xl transition-all duration-200 active:scale-[0.99] active:duration-75",
-        grande
-          // Ação principal: cor de fundo, borda e relevo.
-          ? "gap-4 border border-[var(--tom-borda)] bg-[var(--tom)] p-5 sm:p-6 shadow-[0_1px_2px_rgba(38,36,32,0.03)] hover:bg-[var(--tom-hover)] hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-14px_rgba(38,36,32,0.4)]"
-          // Atalhos: papel branco, sem tom de fundo e sem relevo. Eles levam
-          // ao que já foi feito — não é onde a pessoa deve olhar primeiro.
-          : "gap-3 border border-[#E4DFD1] bg-white px-4 py-3.5 hover:border-[var(--tom-borda)] hover:bg-[#FAF8F3]"
+        "group relative flex items-center gap-5 rounded-[1.75rem] border border-[var(--tom-borda)] bg-[var(--tom)]",
+        "p-6 sm:p-7 shadow-[0_1px_2px_rgba(38,36,32,0.03)]",
+        "transition-all duration-200 hover:bg-[var(--tom-hover)] hover:-translate-y-0.5",
+        "hover:shadow-[0_14px_30px_-16px_rgba(38,36,32,0.45)] active:scale-[0.99] active:duration-75"
       )}
     >
-      <div className={cn(
-        "flex items-center justify-center shrink-0",
-        grande
-          ? "h-14 w-14 rounded-xl bg-[var(--tom-icone)] text-[var(--tom-texto)]"
-          // Sem a caixa colorida: só o traço do ícone, no tom da cor.
-          : "h-8 w-8 text-[var(--tom-texto)] opacity-70"
-      )}>
-        <cartao.icon className={cn(grande ? "h-7 w-7" : "h-[18px] w-[18px]")} />
+      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-[var(--tom-icone)] text-[var(--tom-texto)] transition-transform duration-200 group-hover:scale-105">
+        <cartao.icon className="h-8 w-8" />
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 flex-wrap">
-          <p className={cn(
-            "leading-tight",
-            grande
-              ? "font-serif font-bold text-[19px] text-[var(--tom-texto)]"
-              // Fora do destaque, o rótulo é texto de lista, não manchete.
-              : "font-sans font-semibold text-[14px] text-[#3F3B33]"
-          )}>
-            {cartao.label}
-          </p>
-          {cartao.contagem !== undefined && (
-            // Zero em destaque puxava o olho para o que não existe: a lista
-            // vazia fica com o número apagado, no tom do papel.
-            <span
-              className={cn(
-                "tabular-nums leading-none",
-                grande
-                  ? "rounded-full px-2 py-[2px] text-[11px] font-bold bg-[var(--tom-icone)] text-[var(--tom-texto)]"
-                  // Nos atalhos a contagem vira número solto, sem cápsula —
-                  // ela informa quantos há, não pede clique.
-                  : cn("text-[12px] font-bold", cartao.contagem > 0 ? "text-[var(--tom-texto)]" : "text-[#C9C2AC]")
-              )}
-            >
-              {cartao.contagem}
-            </span>
-          )}
-        </div>
-        {/* Mesma regra dos cartões do Dashboard (ver dashboard-menu-grid): o
-            nome fica sempre visível e a explicação só aparece ao passar o
-            mouse ou encostar na tela. Continua ocupando o espaço mesmo
-            invisível (opacity, não display), então o cartão não "pula" de
-            tamanho quando a descrição aparece. */}
-        {/* O cartão principal mostra a descrição SEMPRE. Os menores seguem
-            revelando ao passar o mouse ou encostar. Com a saída do cabeçalho
-            da tela, esconder as três descrições deixava quem chega sem uma
-            frase sequer para se situar — e no celular não existe hover para
-            descobrir. Uma frase visível no cartão de destaque resolve isso
-            sem devolver o peso do cabeçalho. */}
-        <p
-          className={cn(
-            "text-[12px] text-[#6B6659] mt-1 leading-snug transition-opacity duration-200",
-            !grande &&
-              "opacity-0 group-hover:opacity-100 group-active:opacity-100 group-focus-visible:opacity-100"
-          )}
-        >
-          {cartao.descricao}
+        <p className="font-serif font-bold text-[21px] sm:text-[23px] leading-tight text-[var(--tom-texto)]">
+          {cartao.label}
         </p>
+        <p className="mt-1 text-[13px] leading-snug text-[#6B6659]">{cartao.descricao}</p>
       </div>
 
-      <ChevronRight className={cn(
-        "shrink-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100",
-        grande ? "h-5 w-5 text-[var(--tom-texto)] opacity-40" : "h-4 w-4 text-[#A39D8C] opacity-50"
-      )} />
+      <ChevronRight className="h-6 w-6 shrink-0 text-[var(--tom-texto)] opacity-40 transition-all group-hover:translate-x-1 group-hover:opacity-100" />
+    </Link>
+  );
+}
+
+/**
+ * Um lugar onde há coisas guardadas — desenhado como pasta, não como linha de
+ * formulário.
+ *
+ * A quantidade fica sobre o canto do ícone, como o número de e-mails não lidos:
+ * lê-se junto com a pasta, sem precisar de uma linha só para ela. Zero fica no
+ * tom do papel, porque não é notícia.
+ */
+function LadrilhoArquivo({ cartao }: { cartao: CartaoHub }) {
+  const vazio = cartao.contagem === 0;
+  return (
+    <Link
+      href={cartao.href}
+      title={cartao.descricao}
+      style={{
+        ['--tom' as any]: `${cartao.color}14`,
+        ['--tom-hover' as any]: `${cartao.color}24`,
+        ['--tom-borda' as any]: `${cartao.color}40`,
+        ['--tom-texto' as any]: darkenHex(cartao.color, 32),
+      }}
+      className={cn(
+        "group flex flex-col items-center justify-center gap-2.5 rounded-2xl border border-[#E4DFD1] bg-white",
+        "px-3 py-6 text-center transition-all duration-200",
+        "hover:border-[var(--tom-borda)] hover:bg-[var(--tom)] hover:-translate-y-0.5",
+        "hover:shadow-[0_12px_26px_-16px_rgba(38,36,32,0.4)] active:scale-[0.98] active:duration-75"
+      )}
+    >
+      <div className="relative">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--tom)] text-[var(--tom-texto)] transition-all duration-200 group-hover:bg-white group-hover:scale-105">
+          <cartao.icon className="h-7 w-7" strokeWidth={1.6} />
+        </div>
+        {cartao.contagem !== undefined && (
+          <span
+            className={cn(
+              "absolute -right-1.5 -top-1.5 flex h-6 min-w-[24px] items-center justify-center rounded-full px-1.5",
+              "text-[11px] font-black tabular-nums leading-none ring-2 ring-white",
+              vazio ? "bg-[#EEEBE3] text-[#A39D8C]" : "bg-[var(--tom-texto)] text-white"
+            )}
+          >
+            {cartao.contagem}
+          </span>
+        )}
+      </div>
+
+      <p className="text-[13px] font-bold leading-tight text-[#3F3B33] group-hover:text-[var(--tom-texto)]">
+        {cartao.label}
+      </p>
     </Link>
   );
 }
