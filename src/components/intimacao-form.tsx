@@ -28,6 +28,7 @@ import { useAppConfig } from "@/hooks/use-app-config"
 import { useAuth } from "@/hooks/use-auth"
 import { addBusinessDays } from "@/lib/prazo"
 import { FolhaEscalada } from "@/components/folha-escalada"
+import { estruturaDoTipo } from "@/lib/autuacao-estrutura"
 import { criarLembretePrazo } from "@/lib/prazo-lembrete"
 import { auth as firebaseAuth } from "@/lib/firebase"
 import { intimacaoSchema, prazoTextoDoTipo, atoTextoDoTipo } from "@/lib/schema"
@@ -448,7 +449,35 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
         }
     };
 
+    /**
+     * BLOQUEIO: documento que abre prazo não se finaliza sem prazo escrito.
+     *
+     * O Termo de Intimação existe para conceder prazo — o Art. 25, §1º, III da
+     * Lei 2.276/2017 e o Art. 66, §1º da Lei 13.331/2001 exigem que ele traga
+     * "o prazo para serem executadas" as determinações. Sem esse campo o termo
+     * é defeituoso: não dá para cobrar descumprimento de prazo que nunca foi
+     * fixado, e o auto de infração lavrado depois fica sem base.
+     *
+     * Vale para todo tipo que tem bloco de prazo (ver estruturaDoTipo): a
+     * intimação e o auto de infração, cujo prazo de defesa é requisito do
+     * Art. 555, VI do Decreto 5.711/2002.
+     */
+    const prazoObrigatorioFaltando = () => {
+        if (!estruturaDoTipo(tipoTermoAtual).prazo) return false;
+        const texto = (watch('prazo') || '').replace(/<[^>]*>/g, '').trim();
+        return texto.length === 0;
+    };
+
     const handleFinalize = async () => {
+        if (prazoObrigatorioFaltando()) {
+            toast({
+                variant: 'destructive',
+                title: 'Falta o prazo',
+                description: 'Este documento concede prazo e a lei exige que ele conste do termo. Preencha o bloco de prazo antes de finalizar.',
+            });
+            setShowFinalizeConfirm(false);
+            return;
+        }
         if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
         if (isPersistingRef.current) return;
         isPersistingRef.current = true;

@@ -2581,6 +2581,11 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // Carrega uma inspeção específica (rascunho ou já finalizada) no
   // formulário — hoje só por ?inspecaoId= na URL, que é como as telas
   // Roteiros › Inspeções em Andamento e › Relatórios abrem uma vistoria.
+  // Declarada antes de carregarInspecao porque os dois se usam: o efeito da
+  // URL arma a trava depois de carregar, e carregarInspecao arma ao ser
+  // chamada por outro caminho.
+  const jaCarregouPorUrlRef = useRef(false);
+
   const carregarInspecao = useCallback((inspecao: Inspecao) => {
     if (!inspecao.checklistData) return;
     const cd = inspecao.checklistData;
@@ -2613,6 +2618,9 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     // formulário de preenchimento.
     setView(inspecao.status === 'concluido' ? 'report' : 'checklist');
     isDirtyRef.current = false;
+    // Esta inspeção acabou de ser carregada aqui: marca a trava para o efeito
+    // da URL não repetir o carregamento quando vir o ?inspecaoId= aparecer.
+    jaCarregouPorUrlRef.current = true;
     router.replace(`/roteiros/${id}?inspecaoId=${inspecao.id}`, { scroll: false });
   }, [config, id, isRoi, profile?.roteiroTextos, router]);
 
@@ -2636,7 +2644,6 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // recarregar a página, ou voltar depois de sair. Só entra em ação uma vez;
   // depois disso quem decide trocar de inspeção é a navegação pelas telas do
   // menu de Roteiros.
-  const jaCarregouPorUrlRef = useRef(false);
   useEffect(() => {
     if (jaCarregouPorUrlRef.current || loadingInspecoes) return;
     const inspecaoId = searchParams.get('inspecaoId');
@@ -2975,7 +2982,16 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         if (resSave?.id) {
           setCurrentInspecaoId(resSave.id);
           setInspecaoStatus(prev => prev ?? 'rascunho');
-          if (!currentInspecaoId) router.replace(`/roteiros/${id}?inspecaoId=${resSave.id}`, { scroll: false });
+          if (!currentInspecaoId) {
+            // Arma a trava ANTES de trocar a URL, igual ao handleSaveDraft.
+            // Sem isto, o ?inspecaoId= recém-criado acorda o efeito que
+            // carrega inspeção pela URL: ele chama carregarInspecao e escreve
+            // por cima o que acabou de ser gravado — inclusive travando a
+            // introdução e a conclusão, que param de acompanhar os dados.
+            // Esta tela já É essa inspeção; não há o que carregar.
+            jaCarregouPorUrlRef.current = true;
+            router.replace(`/roteiros/${id}?inspecaoId=${resSave.id}`, { scroll: false });
+          }
         }
         setIsSavingDraft(false);
       } else {
@@ -3747,6 +3763,25 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                    <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-[#6B6659]">Prazo (dias)</Label><Input type="number" min="1" value={idData.prazoDias} onChange={e => setIdData({...idData, prazoDias: e.target.value})} className="h-10 rounded-xl bg-[#FAF8F3] border-none font-bold" /></div>
                    <div className="space-y-1.5 md:col-span-2"><Label className="text-[10px] font-black uppercase text-[#6B6659]">Base Legal do Prazo</Label><Input value={idData.baseLegalPrazo} onChange={e => setIdData({...idData, baseLegalPrazo: e.target.value})} placeholder="Ex.: Lei Municipal nº 0000/0000" className="h-10 rounded-xl bg-[#FAF8F3] border-none font-bold" /></div>
                 </div>
+                {/* TETO LEGAL DO PRAZO.
+                    O código sanitário fixa o limite do que a autoridade pode
+                    conceder para regularizar: 90 dias, tanto no estadual
+                    (Art. 66, §1º da Lei 13.331/2001) quanto em Prudentópolis
+                    (Art. 25, §2º da Lei 2.276/2017). Prazo acima disso é
+                    concessão sem amparo — avisa, mas não impede: a prorrogação
+                    excepcional existe e quem responde por ela é o fiscal. */}
+                {(() => {
+                  const teto = baseLegalDoMunicipio(profile?.municipioId).prazoRegularizacao.tetoDias;
+                  const dias = parseInt(idData.prazoDias || '0', 10);
+                  if (!Number.isFinite(dias) || dias <= teto) return null;
+                  return (
+                    <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-snug text-amber-900">
+                      <strong>{dias} dias ultrapassa o teto legal de {teto} dias.</strong>{' '}
+                      O prazo de regularização não pode ser maior que isso ({baseLegalDoMunicipio(profile?.municipioId).prazoRegularizacao.citacao}).
+                      Prorrogação além do prazo inicial é excepcional, exige motivo relevante comprovado e pedido do interessado.
+                    </p>
+                  );
+                })()}
                 </AccordionContent>
               </AccordionItem>
             </Accordion>

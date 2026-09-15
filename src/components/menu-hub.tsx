@@ -128,10 +128,17 @@ function CartaoMenu({ cartao, grande = false }: { cartao: CartaoHub; grande?: bo
             mouse ou encostar na tela. Continua ocupando o espaço mesmo
             invisível (opacity, não display), então o cartão não "pula" de
             tamanho quando a descrição aparece. */}
+        {/* O cartão principal mostra a descrição SEMPRE. Os menores seguem
+            revelando ao passar o mouse ou encostar. Com a saída do cabeçalho
+            da tela, esconder as três descrições deixava quem chega sem uma
+            frase sequer para se situar — e no celular não existe hover para
+            descobrir. Uma frase visível no cartão de destaque resolve isso
+            sem devolver o peso do cabeçalho. */}
         <p
           className={cn(
             "text-[12px] text-[#6B6659] mt-1 leading-snug transition-opacity duration-200",
-            "opacity-0 group-hover:opacity-100 group-active:opacity-100 group-focus-visible:opacity-100"
+            !grande &&
+              "opacity-0 group-hover:opacity-100 group-active:opacity-100 group-focus-visible:opacity-100"
           )}
         >
           {cartao.descricao}
