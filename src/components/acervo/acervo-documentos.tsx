@@ -849,7 +849,10 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
               {selectedIds.length > 0 && selectedIds.length === filteredDocumentos.length ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
               {selectedIds.length > 0 ? `${selectedIds.length} selecionados` : "Selecionar tudo"}
             </button>
-            {escopo === 'autuacoes' && (
+            {/* O Relatorio Municipal consolida o que foi EMITIDO no ano.
+                Em rascunho nao ha documento lavrado para consolidar — o
+                botao abria um relatorio que ignorava a lista da tela. */}
+            {escopo === 'autuacoes' && situacao !== 'rascunho' && (
               <button
                 type="button"
                 onClick={handleOpenReport}
