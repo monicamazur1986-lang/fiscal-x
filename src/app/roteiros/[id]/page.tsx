@@ -2023,6 +2023,13 @@ function checklistDoRoi(
   };
 }
 
+/** Separa "requisito" de "Base legal: ..." num enunciado de checklist. */
+function partirBaseLegal(texto: string): { requisito: string; baseLegal?: string } {
+  const m = (texto || "").match(/^([\s\S]*?)\s*base\s+legal\s*:\s*(.+)$/i);
+  if (!m) return { requisito: texto };
+  return { requisito: m[1].trim().replace(/[.;]\s*$/, "."), baseLegal: m[2].trim() };
+}
+
 const CHECKLISTS: Record<string, ChecklistData> = {
   odontologia: odontologiaChecklist,
   'odontologia-prudentopolis': odontologiaPrudentopolisChecklist,
@@ -2708,7 +2715,6 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     }
   }, [profile, idData, answers, observations, itemPhotos, id, saveInspecao, currentInspecaoId, toast, introducaoHtml, conclusaoHtml, foundCnaes, router]);
 
-  const [savingObsItem, setSavingObsItem] = useState<string | null>(null)
   const [isPolishingBatch, setIsPolishingBatch] = useState(false)
   // Guarda uma "foto" das observações no momento da última revisão por IA —
   // o botão de revisão em lote só fica habilitado se algo mudou desde então
@@ -2720,16 +2726,18 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // ficava "aberto" pra sempre depois de digitar (a condição de exibição
   // dependia só de ter texto, não do estado do botão), e não havia nenhuma
   // confirmação de que o relato tinha sido salvo.
-  const handleSaveObservation = async (itemId: string) => {
-    setSavingObsItem(itemId);
-    try {
-      await handleSaveDraft(false);
-      toast({ title: "Observação Salva" });
-      setShowObsInput(prev => ({ ...prev, [itemId]: false }));
-    } finally {
-      setSavingObsItem(null);
-    }
-  }
+  // Responder NAO e descrever o que foi encontrado andam sempre juntos: sem o
+  // relato, a nao conformidade nao vira exigencia no relatorio nem embasa uma
+  // intimacao depois. Em vez de esperar o fiscal lembrar de abrir a nota, a
+  // tela abre — e some de novo se ele voltar atras e nao tiver escrito nada.
+  const abrirNotaSeNaoConforme = (itemId: string, resposta: string) => {
+    const naoConforme = resposta === 'NAO';
+    setShowObsInput(prev => {
+      if (naoConforme) return prev[itemId] ? prev : { ...prev, [itemId]: true };
+      if (prev[itemId] && !(observations[itemId] || '').trim()) return { ...prev, [itemId]: false };
+      return prev;
+    });
+  };
 
   // Revisão em lote — chamada só na tela de revisão final (view === 'report'),
   // depois que o fiscal já preencheu todas as observações. Uma única chamada
@@ -3742,7 +3750,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                         {/* No ROI as alternativas são textos longos: empilha
                             sempre, em vez de dividir em duas colunas. */}
                         <div className={cn("flex gap-6", item.roi ? "flex-col" : "flex-col md:flex-row md:items-start justify-between")}>
-                          <div className="flex-1 space-y-2"><div className="flex items-center gap-3"><Badge className={cn("text-[10px] font-black uppercase px-2", item.crit === 'I' ? "bg-red-100 text-red-600" : item.crit === 'N' ? "bg-amber-100 text-amber-600" : "bg-sky-100 text-sky-600")}>{item.crit === 'I' ? "IMPRESCINDÍVEL" : item.crit === 'N' ? "NECESSÁRIO" : "RECOMENDÁVEL"}</Badge><span className="text-[11px] font-black text-[#A39D8C]">{item.roi ? `INDICADOR ${item.roi.numero}` : `ITEM ${item.id}`}</span></div><p className="text-[15px] font-bold text-[#262420] leading-relaxed uppercase">{item.roi ? item.roi.indicador : item.text}</p>{item.roi && <p className="text-[11px] font-bold text-[#A39D8C]">{item.roi.baseLegal}</p>}</div>
+                          <div className="flex-1 space-y-2"><div className="flex items-center gap-3"><Badge className={cn("text-[10px] font-black uppercase px-2", item.crit === 'I' ? "bg-red-100 text-red-600" : item.crit === 'N' ? "bg-amber-100 text-amber-600" : "bg-sky-100 text-sky-600")}>{item.crit === 'I' ? "IMPRESCINDÍVEL" : item.crit === 'N' ? "NECESSÁRIO" : "RECOMENDÁVEL"}</Badge><span className="text-[11px] font-black text-[#A39D8C]">{item.roi ? `INDICADOR ${item.roi.numero}` : `ITEM ${item.id}`}</span></div><p className="text-[15px] font-semibold text-[#262420] leading-relaxed">{item.roi ? item.roi.indicador : partirBaseLegal(item.text).requisito}</p>{(item.roi?.baseLegal || partirBaseLegal(item.text).baseLegal) && <p className="text-[11px] font-medium text-[#A39D8C] leading-snug">{item.roi ? item.roi.baseLegal : partirBaseLegal(item.text).baseLegal}</p>}</div>
                           {item.roi ? (
                             // Escala 0–5: cada nota tem a descrição do que a
                             // caracteriza, então vira uma lista de opções
@@ -3788,7 +3796,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                               })}
                             </RadioGroup>
                           ) : (
-                          <RadioGroup value={answers[item.id]} onValueChange={(v: any) => { const proximas = { ...answers, [item.id]: v }; setAnswers(proximas); handleSaveDraft(false, proximas); }} className="flex items-center gap-1 bg-[#FAF8F3] p-1 rounded-xl border border-[#E4DFD1]">{['SIM', 'NAO', 'ND'].map(opt => (<label key={opt} className={cn("flex items-center justify-center h-10 px-5 rounded-lg text-[11px] font-black cursor-pointer transition-all duration-150", answers[item.id] !== opt ? "text-[#6B6659] hover:bg-white hover:shadow-sm" : opt === 'SIM' ? "bg-[#1F7A5C] text-white shadow-sm" : opt === 'NAO' ? "bg-[#A15437] text-white shadow-sm" : "bg-[#6B6659] text-white shadow-sm")}><RadioGroupItem value={opt} className="sr-only" /> {opt}</label>))}</RadioGroup>
+                          <RadioGroup value={answers[item.id]} onValueChange={(v: any) => { const proximas = { ...answers, [item.id]: v }; setAnswers(proximas); handleSaveDraft(false, proximas); abrirNotaSeNaoConforme(item.id, v); }} className="flex items-center gap-1 bg-[#FAF8F3] p-1 rounded-xl border border-[#E4DFD1]">{['SIM', 'NAO', 'ND'].map(opt => (<label key={opt} className={cn("flex items-center justify-center h-10 px-5 rounded-lg text-[11px] font-black cursor-pointer transition-all duration-150", answers[item.id] !== opt ? "text-[#6B6659] hover:bg-white hover:shadow-sm" : opt === 'SIM' ? "bg-[#1F7A5C] text-white shadow-sm" : opt === 'NAO' ? "bg-[#A15437] text-white shadow-sm" : "bg-[#6B6659] text-white shadow-sm")}><RadioGroupItem value={opt} className="sr-only" /> {opt}</label>))}</RadioGroup>
                           )}
                         </div>
                         <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-[#E4DFD1]">
@@ -3832,7 +3840,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                             })}
                           </div>
                         )}
-                        {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => { setObservations(prev => ({ ...prev, [item.id]: e.target.value })); }} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><div className="flex flex-wrap items-center gap-2"><Button type="button" onClick={() => toggleRecordingObservacao(item.id)} variant="outline" size="sm" className={cn("h-9 flex-1 min-w-[130px] px-3 rounded-xl font-black text-[10px] uppercase gap-2", recordingItemId === item.id ? "bg-red-500 text-white border-red-500 animate-pulse hover:bg-red-500 hover:text-white" : "text-[#6B6659] border-[#E4DFD1]")}>{recordingItemId === item.id ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {recordingItemId === item.id ? "Parar" : "Ditar por voz"}</Button><Button onClick={() => handleSaveObservation(item.id)} disabled={savingObsItem === item.id} size="sm" className="h-9 flex-1 min-w-[130px] px-3 rounded-xl bg-primary text-white font-black text-[10px] uppercase gap-2">{savingObsItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Salvar</Button></div></div>)}
+                        {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => { setObservations(prev => ({ ...prev, [item.id]: e.target.value })); }} onBlur={() => handleSaveDraft(false)} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><div className="flex flex-wrap items-center gap-2"><Button type="button" onClick={() => toggleRecordingObservacao(item.id)} variant="outline" size="sm" className={cn("h-9 w-full sm:w-auto px-4 rounded-xl font-black text-[10px] uppercase gap-2", recordingItemId === item.id ? "bg-red-500 text-white border-red-500 animate-pulse hover:bg-red-500 hover:text-white" : "text-[#6B6659] border-[#E4DFD1]")}>{recordingItemId === item.id ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {recordingItemId === item.id ? "Parar" : "Ditar por voz"}</Button></div></div>)}
                       </div>
                       )
                     ))}
@@ -3929,7 +3937,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                           })}
                         </div>
                       )}
-                      {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => setObservations(prev => ({ ...prev, [item.id]: e.target.value }))} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><div className="flex flex-wrap items-center gap-2"><Button type="button" onClick={() => toggleRecordingObservacao(item.id)} variant="outline" size="sm" className={cn("h-9 flex-1 min-w-[130px] px-3 rounded-xl font-black text-[10px] uppercase gap-2", recordingItemId === item.id ? "bg-red-500 text-white border-red-500 animate-pulse hover:bg-red-500 hover:text-white" : "text-[#6B6659] border-[#E4DFD1]")}>{recordingItemId === item.id ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {recordingItemId === item.id ? "Parar" : "Ditar por voz"}</Button><Button onClick={() => handleSaveObservation(item.id)} disabled={savingObsItem === item.id} size="sm" className="h-9 flex-1 min-w-[130px] px-3 rounded-xl bg-primary text-white font-black text-[10px] uppercase gap-2">{savingObsItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Salvar</Button></div></div>)}
+                      {showObsInput[item.id] && (<div className="space-y-3 animate-in fade-in slide-in-from-top-2"><Label className="text-[10px] font-black text-primary uppercase">Relato de Irregularidade</Label><Textarea value={observations[item.id] || ""} onChange={e => setObservations(prev => ({ ...prev, [item.id]: e.target.value }))} onBlur={() => handleSaveDraft(false)} placeholder="Descreva a situação..." spellCheck autoCorrect="on" autoCapitalize="sentences" className="min-h-[100px] rounded-lg bg-white border-[#E4DFD1] text-sm font-medium" /><div className="flex flex-wrap items-center gap-2"><Button type="button" onClick={() => toggleRecordingObservacao(item.id)} variant="outline" size="sm" className={cn("h-9 w-full sm:w-auto px-4 rounded-xl font-black text-[10px] uppercase gap-2", recordingItemId === item.id ? "bg-red-500 text-white border-red-500 animate-pulse hover:bg-red-500 hover:text-white" : "text-[#6B6659] border-[#E4DFD1]")}>{recordingItemId === item.id ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {recordingItemId === item.id ? "Parar" : "Ditar por voz"}</Button></div></div>)}
                     </div>
                   ))}
                 </div>
