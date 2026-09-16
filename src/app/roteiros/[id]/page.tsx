@@ -4365,20 +4365,15 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
               um aparelho pequeno, justamente onde a vistoria é preenchida.
               "Salvar" encolhe pra ícone + rótulo curto, já que o rascunho
               também é salvo sozinho a cada 8 segundos. */}
-          {/* Três ações, mesma largura: salvar, visualizar e excluir. Ícone em
-              cima do rótulo pra caber em tela estreita sem abreviar nada. */}
-          <div className="max-w-4xl mx-auto grid grid-cols-3 items-stretch gap-2 sm:gap-3">
-              <Button
-                type="button"
-                onClick={() => handleSaveDraft()}
-                disabled={isSavingDraft}
-                variant="outline"
-                className="h-16 flex-col gap-1 rounded-2xl border-[#E4DFD1] text-[#6B6659] font-black uppercase text-[10px] sm:text-[11px] tracking-widest shadow-md"
-              >
-                {isSavingDraft ? <Loader2 className="animate-spin h-5 w-5" /> : <Save className="h-5 w-5" />}
-                Salvar
-              </Button>
+          {/* Mesmas ações, mesma ordem e mesmos nomes da barra da autuação:
+              Visualizar, Apagar, Salvar. As duas telas fazem a mesma coisa e
+              trocavam de vocabulário ("Excluir" aqui, "Apagar" lá) e de
+              posição, obrigando a reaprender a barra ao mudar de tela.
 
+              "Visualizar" fica cheio por ser a passagem para o relatório —
+              é daqui que se finaliza a vistoria. Na autuação esse peso está
+              no "Finalizar", que nesta tela não existe. */}
+          <div className="max-w-4xl mx-auto grid grid-cols-3 items-stretch gap-2 sm:gap-3">
               <Button
                 type="button"
                 onClick={async () => { await handleSaveDraft(false); setView('report'); window.scrollTo(0,0); }}
@@ -4397,7 +4392,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                     className="h-16 w-full flex-col gap-1 rounded-2xl border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 font-black uppercase text-[10px] sm:text-[11px] tracking-widest shadow-md"
                   >
                     {isDeletingDraft ? <Loader2 className="animate-spin h-5 w-5" /> : <Trash2 className="h-5 w-5" />}
-                    Excluir
+                    Apagar
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent className="rounded-[2rem]">
@@ -4413,6 +4408,17 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+
+              <Button
+                type="button"
+                onClick={() => handleSaveDraft()}
+                disabled={isSavingDraft}
+                variant="outline"
+                className="h-16 flex-col gap-1 rounded-2xl border-[#E4DFD1] text-[#6B6659] font-black uppercase text-[10px] sm:text-[11px] tracking-widest shadow-md"
+              >
+                {isSavingDraft ? <Loader2 className="animate-spin h-5 w-5" /> : <Save className="h-5 w-5" />}
+                Salvar
+              </Button>
           </div>
       </div>
 
