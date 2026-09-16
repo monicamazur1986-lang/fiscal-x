@@ -2331,6 +2331,13 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   const [isSharingPdf, setIsSharingPdf] = useState(false)
   const [isSavingDraft, setIsSavingDraft] = useState(false)
   const [isFinalizing, setIsFinalizing] = useState(false)
+  // Finalizar pela barra do checklist não pode gerar o PDF na hora: a folha
+  // do relatório não está montada (é outra árvore de render), e sem ela a
+  // vistoria seria encerrada sem o arquivo. A confirmação vira esta bandeira,
+  // a tela troca para o relatório e o efeito abaixo finaliza quando a folha
+  // existe de fato.
+  const [finalizarAoAbrirRelatorio, setFinalizarAoAbrirRelatorio] = useState(false)
+  const [confirmarFinalizarAberto, setConfirmarFinalizarAberto] = useState(false)
   const [isDeletingDraft, setIsDeletingDraft] = useState(false)
   // Diálogo de saída (clique em "Início"/logo no cabeçalho com uma vistoria em
   // andamento) — ver registro do guard mais abaixo e src/hooks/use-checklist-exit-guard.ts.
@@ -3155,6 +3162,26 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
       setIsFinalizing(false);
     }
   };
+
+  // Ponte entre o "Finalizar" da barra do checklist e a geração do PDF: só
+  // dispara depois que a folha do relatório entrou no DOM. O respiro de 400ms
+  // é para o brasão e a logo do cabeçalho terminarem de carregar — o
+  // html2canvas fotografa o que estiver na tela, e uma imagem a meio caminho
+  // sairia em branco no documento oficial.
+  const finalizandoPelaBarraRef = useRef(false);
+  useEffect(() => {
+    if (!finalizarAoAbrirRelatorio || view !== 'report' || finalizandoPelaBarraRef.current) return;
+    finalizandoPelaBarraRef.current = true;
+    setFinalizarAoAbrirRelatorio(false);
+    setTimeout(async () => {
+      try { await handleFinalizarRelatorio(); }
+      finally { finalizandoPelaBarraRef.current = false; }
+    }, 400);
+    // Sem função de limpeza de propósito: a linha acima zera a bandeira, o
+    // efeito roda de novo e uma limpeza cancelaria o próprio disparo antes
+    // dos 400ms. Quem impede a repetição é a ref, não a dependência.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finalizarAoAbrirRelatorio, view]);
 
   // Ordem de gravidade usada só pra ordenar itens DENTRO de um mesmo grupo —
   // o agrupamento em si agora é por seção/assunto do roteiro (pedido do
@@ -4420,19 +4447,20 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
               "Salvar" encolhe pra ícone + rótulo curto, já que o rascunho
               também é salvo sozinho a cada 8 segundos. */}
           {/* Mesmas ações, mesma ordem e mesmos nomes da barra da autuação:
-              Visualizar, Apagar, Salvar. As duas telas fazem a mesma coisa e
-              trocavam de vocabulário ("Excluir" aqui, "Apagar" lá) e de
-              posição, obrigando a reaprender a barra ao mudar de tela.
+              Visualizar, Apagar, Salvar, Finalizar. As duas telas fazem a
+              mesma coisa e trocavam de vocabulário ("Excluir" aqui, "Apagar"
+              lá) e de posição, obrigando a reaprender a barra ao mudar de tela.
 
-              "Visualizar" fica cheio por ser a passagem para o relatório —
-              é daqui que se finaliza a vistoria. Na autuação esse peso está
-              no "Finalizar", que nesta tela não existe. */}
-          <div className="max-w-4xl mx-auto grid grid-cols-3 items-stretch gap-2 sm:gap-3">
+              O destaque fica no "Finalizar", como na autuação — "Visualizar"
+              volta a ser secundário, já que agora não é mais o único caminho
+              para encerrar a vistoria. */}
+          <div className="max-w-4xl mx-auto grid grid-cols-4 items-stretch gap-2 sm:gap-3">
               <Button
                 type="button"
                 onClick={async () => { await handleSaveDraft(false); setView('report'); window.scrollTo(0,0); }}
                 disabled={Object.keys(answers).length === 0}
-                className="h-16 flex-col gap-1 bg-primary hover:bg-primary/90 text-white rounded-2xl shadow-2xl transition-all active:scale-95 font-black uppercase text-[10px] sm:text-[11px] tracking-widest"
+                variant="outline"
+                className="h-16 flex-col gap-1 rounded-2xl border-[#E4DFD1] text-[#6B6659] font-black uppercase text-[10px] sm:text-[11px] tracking-widest shadow-md"
               >
                 <FileText className="h-5 w-5" />
                 Visualizar
@@ -4473,6 +4501,38 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                 {isSavingDraft ? <Loader2 className="animate-spin h-5 w-5" /> : <Save className="h-5 w-5" />}
                 Salvar
               </Button>
+
+              {/* Encerra a vistoria sem passar pelo relatorio a mao. A folha
+                  precisa existir no DOM para virar PDF, entao a confirmacao
+                  troca a tela e o efeito finaliza quando ela monta — o fiscal
+                  ve o documento que acabou de fechar, com o "Exportar" a mao. */}
+              <AlertDialog open={confirmarFinalizarAberto} onOpenChange={setConfirmarFinalizarAberto}>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    disabled={Object.keys(answers).length === 0 || isFinalizing || isGeneratingPdf}
+                    className="h-16 w-full flex-col gap-1 rounded-2xl bg-primary text-white font-black uppercase text-[10px] sm:text-[11px] tracking-widest shadow-2xl transition-all hover:bg-primary/90 active:scale-95"
+                  >
+                    {isFinalizing || isGeneratingPdf ? <Loader2 className="animate-spin h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
+                    Finalizar
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="rounded-[2rem]">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="font-black uppercase tracking-tighter text-xl italic">Finalizar este relatório?</AlertDialogTitle>
+                    <AlertDialogDescription>O relatório é aberto, o PDF é baixado no aparelho e a vistoria é encerrada no sistema — só finalizar de fato conta como concluída. Depois ainda dá pra reabrir e exportar de novo pela lista de inspeções deste roteiro, mas não pra continuar editando.</AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={async () => { await handleSaveDraft(false); setView('report'); window.scrollTo(0, 0); setFinalizarAoAbrirRelatorio(true); }}
+                      className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-primary hover:bg-primary/90"
+                    >
+                      Finalizar
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
           </div>
       </div>
 
