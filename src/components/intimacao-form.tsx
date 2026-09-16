@@ -29,6 +29,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { addBusinessDays } from "@/lib/prazo"
 import { FolhaEscalada } from "@/components/folha-escalada"
 import { estruturaDoTipo } from "@/lib/autuacao-estrutura"
+import { montarEnderecoCnpj } from "@/lib/endereco-cnpj"
 import { criarLembretePrazo } from "@/lib/prazo-lembrete"
 import { auth as firebaseAuth } from "@/lib/firebase"
 import { intimacaoSchema, prazoTextoDoTipo, atoTextoDoTipo } from "@/lib/schema"
@@ -462,6 +463,51 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
      * intimação e o auto de infração, cujo prazo de defesa é requisito do
      * Art. 555, VI do Decreto 5.711/2002.
      */
+    /**
+     * Quem ainda não assinou.
+     *
+     * Assinatura em falta não impede finalizar: há caso legítimo de recusa do
+     * autuado (a lei prevê a consignação por duas testemunhas) e de documento
+     * impresso para assinar à mão. Mas finalizar trava a edição, e descobrir
+     * a falta depois obriga a refazer o documento inteiro — por isso o aviso
+     * é nominal, dizendo exatamente quem ficou de fora.
+     */
+    const assinaturasFaltando = (): string[] => {
+        const faltam: string[] = [];
+        const autoridades = watch('autoridades') || [];
+        const semAssinatura = autoridades.filter((a: any) => !a?.signature);
+        if (autoridades.length === 0) {
+            faltam.push('nenhuma autoridade sanitária foi incluída');
+        } else if (semAssinatura.length > 0) {
+            faltam.push(
+                semAssinatura.length === autoridades.length
+                    ? 'a assinatura do fiscal'
+                    : `a assinatura de ${semAssinatura.map((a: any) => a.nome).filter(Boolean).join(', ')}`
+            );
+        }
+        if (!watch('signatureResponsavel')) faltam.push('a ciência do autuado');
+        return faltam;
+    };
+
+    /**
+     * Este tipo costuma andar acompanhado e ainda não tem o par.
+     *
+     * O card que gera o documento vinculado fica depois da folha, e a barra
+     * de finalizar é fixa na tela: dá para finalizar sem nunca ter rolado até
+     * lá. Só que finalizar trava a edição — quem descobre depois precisa
+     * refazer. O aviso aparece no único momento em que ainda dá tempo.
+     */
+    const vinculoFaltando = (): string | null => {
+        if (hasAnexo) return null;
+        if (TIPOS_QUE_GERAM_AUTO_INFRACAO.includes(tipoTermoAtual)) {
+            return 'o Auto de Infração que costuma acompanhar este termo';
+        }
+        if (tipoTermoAtual === TIPO_QUE_GERA_INTERDICAO_OU_APREENSAO) {
+            return 'um Termo de Interdição ou de Apreensão vinculado';
+        }
+        return null;
+    };
+
     const prazoObrigatorioFaltando = () => {
         if (!estruturaDoTipo(tipoTermoAtual).prazo) return false;
         const texto = (watch('prazo') || '').replace(/<[^>]*>/g, '').trim();
@@ -667,7 +713,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             if (res.ok) {
                 const data = await res.json();
                 setValue("autor", data.razao_social);
-                setValue("endereco", `${data.logradouro}, ${data.numero}`);
+                setValue("endereco", montarEnderecoCnpj(data));
                 setValue("bairro", data.bairro);
                 setValue("reu", data.responsavel_legal);
                 setValue("telefone", data.telefone || "");
@@ -721,7 +767,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                     </FolhaEscalada>
 
                     {mostraCardAutoInfracao && (
-                        <div className="no-print max-w-[210mm] mx-auto my-8 p-6 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="no-print max-w-[210mm] mx-auto my-8 p-6 rounded-2xl border-2 border-primary/50 bg-white shadow-[0_10px_28px_-16px_rgba(38,36,32,0.45)] ring-4 ring-primary/10 flex flex-col sm:flex-row items-center justify-between gap-4">
                             {!hasAnexo ? (
                                 tipoTermoAtual === TIPO_QUE_GERA_INTERDICAO_OU_APREENSAO ? (
                                     <>
@@ -838,10 +884,36 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                 <AlertDialogContent className="rounded-lg">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="font-serif text-xl text-[#262420]">Finalizar Documento?</AlertDialogTitle>
-                        <AlertDialogDescription>
+                        <AlertDialogDescription asChild>
+                          <div className="space-y-3">
+                            <p>
                             {hasAnexo
                                 ? `Isso trava a edição do Termo e do ${tipoAnexoAtual} vinculado e sincroniza os dois na nuvem. Depois de finalizar, use "Baixar PDF" ou "Compartilhar" para exportar. Não será possível editar depois.`
                                 : "Isso trava a edição do documento e sincroniza na nuvem. Depois de finalizar, use \"Baixar PDF\" ou \"Compartilhar\" para exportar. Não será possível editar depois."}
+                            </p>
+                            {vinculoFaltando() && (
+                              <div className="rounded-xl border border-[#9C7A3C]/30 bg-[#FBF7EE] p-3.5 text-left">
+                                <p className="text-[13px] font-bold text-[#7A5D2A]">
+                                  Este documento ainda não tem {vinculoFaltando()}.
+                                </p>
+                                <p className="mt-1 text-[12px] leading-snug text-[#4A463D]">
+                                  O botão para gerar fica logo abaixo do documento. Depois de finalizar não é mais possível vincular —
+                                  seria preciso lavrar os dois separadamente.
+                                </p>
+                              </div>
+                            )}
+                            {assinaturasFaltando().length > 0 && (
+                              <div className="rounded-xl border border-[#A15437]/25 bg-[#A15437]/[0.06] p-3.5 text-left">
+                                <p className="text-[13px] font-bold text-[#8A4429]">
+                                  Tem certeza que deseja finalizar sem {assinaturasFaltando().join(" e ")}?
+                                </p>
+                                <p className="mt-1 text-[12px] leading-snug text-[#4A463D]">
+                                  Depois de finalizar não dá para assinar dentro do sistema — seria preciso refazer o documento.
+                                  Se o autuado se recusou a assinar, registre a recusa no corpo do documento com duas testemunhas.
+                                </p>
+                              </div>
+                            )}
+                          </div>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

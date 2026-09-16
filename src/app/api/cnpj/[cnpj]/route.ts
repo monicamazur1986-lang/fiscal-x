@@ -98,6 +98,9 @@ export async function GET(
         razao_social: (data.razao_social || data.nome_fantasia || '').toUpperCase(),
         logradouro: (data.logradouro || '').toUpperCase(),
         numero: (data.numero || '').toUpperCase(),
+        // A BrasilAPI ja devolve o complemento; sem ele, sala/bloco/galpao
+        // sumiam do endereco do documento.
+        complemento: (data.complemento || '').toUpperCase(),
         bairro: (data.bairro || '').toUpperCase(),
         municipio: (data.municipio || 'PRUDENTÓPOLIS').toUpperCase(),
         cnae: cnaes.join('; ').toUpperCase(), 

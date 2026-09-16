@@ -47,6 +47,7 @@ import { useEscalaFolha } from "@/hooks/use-escala-folha"
 import { useDitadoPorVoz } from "@/hooks/use-ditado-por-voz"
 import { baseLegalDoMunicipio } from "@/lib/base-legal-municipal"
 import { conclusaoDoDesfecho, type DesfechoInspecao } from "@/lib/roteiro-textos-padrao"
+import { montarEnderecoCnpj } from "@/lib/endereco-cnpj"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -2961,7 +2962,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
       if (res.ok) {
         const data = await res.json();
         const cnaesDaConsulta: string[] = data.cnaes_list || [];
-        const updated = { ...idData, fantasia: data.razao_social, endereco: `${data.logradouro}, ${data.numero}`, bairro: data.bairro, responsavel: data.responsavel_legal, telefone: data.telefone || "", cnae: data.cnae || "" };
+        const updated = { ...idData, fantasia: data.razao_social, endereco: montarEnderecoCnpj(data), bairro: data.bairro, responsavel: data.responsavel_legal, telefone: data.telefone || "", cnae: data.cnae || "" };
         setIdData(updated);
         setFoundCnaes(cnaesDaConsulta);
         toast({ title: "Empresa Localizada" });
