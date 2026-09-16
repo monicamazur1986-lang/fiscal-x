@@ -2678,7 +2678,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   useEffect(() => {
     if (isRoi || conclusaoTravadaRef.current) return;
     const base = resolverConclusaoHtml(id, profile?.roteiroTextos, config.roteiroTextos);
-    setConclusaoHtml(conclusaoDoDesfecho(idData.desfecho || 'prazo', base));
+    setConclusaoHtml(conclusaoDoDesfecho(idData.desfecho || 'prazo', base, getDefaultConclusaoHtml(id)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config, id, isRoi, profile?.roteiroTextos, idData.prazoDias, idData.baseLegalPrazo, idData.desfecho]);
 
@@ -2742,14 +2742,15 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     setConclusaoHtml(
       conclusaoDoDesfecho(
         desfecho,
-        resolverConclusaoHtml(id, profile?.roteiroTextos, config.roteiroTextos)
+        resolverConclusaoHtml(id, profile?.roteiroTextos, config.roteiroTextos),
+        getDefaultConclusaoHtml(id)
       )
     );
     conclusaoTravadaRef.current = false;
   };
 
   const restaurarPadraoConclusao = () => {
-    setConclusaoHtml(conclusaoDoDesfecho(idData.desfecho || 'prazo', resolverConclusaoHtml(id, profile?.roteiroTextos, config.roteiroTextos)));
+    setConclusaoHtml(conclusaoDoDesfecho(idData.desfecho || 'prazo', resolverConclusaoHtml(id, profile?.roteiroTextos, config.roteiroTextos), getDefaultConclusaoHtml(id)));
     conclusaoTravadaRef.current = false;
   };
 
@@ -4207,6 +4208,12 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   <RichTextEditor value={conclusaoExibida} onChange={handleConclusaoChange} fontSize="10.5pt" minHeight="140px" />
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* "Meu padrão" guarda UM texto de conclusão só, e ele serve
+                      ao desfecho de prazo. Salvar com interdição ou conforme na
+                      tela gravava aquele texto ali, e desde então todo relatório
+                      de prazo abria falando em interdição. O botão some fora do
+                      desfecho a que o padrão pertence. */}
+                  {(idData.desfecho || 'prazo') === 'prazo' && (
                   <button
                     type="button"
                     onClick={() => salvarComoMeuPadrao('conclusaoHtml', conclusaoHtml)}
@@ -4216,6 +4223,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                     {salvandoPadrao === 'conclusaoHtml' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
                     Salvar como meu padrão
                   </button>
+                  )}
                   <button
                     type="button"
                     onClick={restaurarPadraoConclusao}

@@ -159,12 +159,34 @@ export const DESFECHO_INTERDICAO_HTML = [
  * Conclusão correspondente ao desfecho. Só `prazo` varia por roteiro — nos
  * outros dois o que se diz não depende da atividade inspecionada.
  */
+/** Texto que pertence a um desfecho fixo, e não ao modelo de prazo. */
+function ehTextoDeDesfechoFixo(html: string): boolean {
+  const limpo = (html || "").replace(/<[^>]*>/g, " ").replace(/s+/g, " ").trim();
+  if (!limpo) return false;
+  return [DESFECHO_CONFORME_HTML, DESFECHO_INTERDICAO_HTML].some((fixo) => {
+    const alvo = fixo.replace(/<[^>]*>/g, " ").replace(/s+/g, " ").trim();
+    return limpo === alvo;
+  });
+}
+
 export function conclusaoDoDesfecho(
   desfecho: DesfechoInspecao,
-  conclusaoDePrazo: string
+  conclusaoDePrazo: string,
+  /** Texto de prazo do próprio código, usado quando o salvo não serve. */
+  conclusaoDePrazoDoCodigo?: string
 ): string {
   if (desfecho === 'conforme') return DESFECHO_CONFORME_HTML;
   if (desfecho === 'interdicao') return DESFECHO_INTERDICAO_HTML;
+
+  // O "meu padrão" do fiscal e o padrão do município guardam UM texto de
+  // conclusão só, pensado para o desfecho de prazo. Quem clicou em "salvar
+  // como meu padrão" com interdição ou conforme na tela gravou aquele texto
+  // ali — e desde então todo relatório de prazo abria falando em interdição.
+  // Um texto que é palavra por palavra o de outro desfecho não pode servir
+  // de modelo de prazo, então cai no texto do código.
+  if (ehTextoDeDesfechoFixo(conclusaoDePrazo)) {
+    return conclusaoDePrazoDoCodigo || DEFAULT_CONCLUSAO_HTML.default;
+  }
   return conclusaoDePrazo;
 }
 

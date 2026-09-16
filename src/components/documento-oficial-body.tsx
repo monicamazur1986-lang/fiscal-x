@@ -190,8 +190,22 @@ function ItensApreendidosTable({ itens, onChange, colunas, onColunasChange, disa
       </table>
       {!disabled && (
         <>
-          <button type="button" onClick={adicionar} className="no-print mt-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-primary hover:underline">
-            <Plus className="h-3 w-3" /> Adicionar bem
+          {/* Mesmo critério do "Buscar dados" do CNPJ: enquanto a lista está
+              vazia o botão é cheio, porque relacionar os bens é o que dá
+              conteúdo a um termo de apreensão. Com bens já lançados ele volta
+              a ser discreto — vira um "adicionar mais um", não a ação
+              principal da tela. */}
+          <button
+            type="button"
+            onClick={adicionar}
+            className={cn(
+              "no-print mt-2 flex items-center gap-1.5 rounded-lg font-black uppercase tracking-widest transition-colors",
+              itens.length === 0
+                ? "bg-primary px-4 py-2.5 text-[11px] text-white shadow-sm hover:bg-primary/90"
+                : "border border-primary/25 bg-white px-3 py-2 text-[10px] text-primary hover:bg-primary/5"
+            )}
+          >
+            <Plus className={itens.length === 0 ? "h-4 w-4" : "h-3 w-3"} /> Adicionar bem
           </button>
           <datalist id={UNIDADES_DATALIST_ID}>
             {UNIDADES_SUGERIDAS.map((u) => <option key={u} value={u} />)}
