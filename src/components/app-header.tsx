@@ -155,6 +155,25 @@ export function AppHeader() {
     } catch (error) {}
   }, [logout, router])
 
+  // ATENÇÃO: todo hook deste componente precisa ficar ACIMA do return de
+  // saída logo abaixo.
+  //
+  // Este contador foi escrito depois dele e derrubava o app inteiro: sem
+  // sessão resolvida o componente saía cedo e executava menos hooks; quando
+  // a sessão chegava, executava mais, e o React aborta com "Rendered fewer
+  // hooks than expected" — travando a tela na entrada, antes de qualquer
+  // interação.
+  // Quantas telas o usuário percorreu DENTRO do app nesta aba. Serve para o
+  // voltar saber se existe para onde voltar sem sair do sistema.
+  const passosNoApp = useRef(0);
+  const rotaAnteriorRef = useRef(pathname);
+  useEffect(() => {
+    if (rotaAnteriorRef.current !== pathname) {
+      rotaAnteriorRef.current = pathname;
+      passosNoApp.current += 1;
+    }
+  }, [pathname]);
+
   if (!user || pathname === "/login" || isEmbed) return null
 
   // O link de volta pro Início pode ser "segurado" por uma vistoria em
@@ -183,17 +202,6 @@ export function AppHeader() {
     }
     // Sem passo anterior, o href="/dashboard" do link resolve sozinho.
   };
-
-  // Quantas telas o usuário percorreu DENTRO do app nesta aba. Serve para o
-  // voltar saber se existe para onde voltar sem sair do sistema.
-  const passosNoApp = useRef(0);
-  const rotaAnteriorRef = useRef(pathname);
-  useEffect(() => {
-    if (rotaAnteriorRef.current !== pathname) {
-      rotaAnteriorRef.current = pathname;
-      passosNoApp.current += 1;
-    }
-  }, [pathname]);
 
   // Definição clara dos papéis
   const role = profile?.role

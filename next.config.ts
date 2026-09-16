@@ -19,6 +19,11 @@ function versaoPublicada(): string {
 }
 
 const nextConfig: NextConfig = {
+  // Permite compilar num diretorio separado (NEXT_DIST_DIR=.next-check npm
+  // run build) sem sobrescrever o .next que o servidor de desenvolvimento
+  // esta usando. Rodar o build por cima dele deixa o dev server servindo um
+  // estado pela metade, sem BUILD_ID, e a aplicacao responde 500.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   env: {
     NEXT_PUBLIC_BUILD_ID: versaoPublicada(),
   },

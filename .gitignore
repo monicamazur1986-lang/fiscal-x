@@ -15,6 +15,9 @@
 
 # next.js
 /.next/
+# Build de verificacao: NEXT_DIST_DIR=.next-check npm run build, para validar
+# producao sem sobrescrever o .next do servidor de desenvolvimento.
+/.next-check/
 /out/
 
 # production
