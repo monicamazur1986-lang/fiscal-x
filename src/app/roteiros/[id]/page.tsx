@@ -38,6 +38,7 @@ import {
   ScrollText,
   ChevronRight,
   Users,
+  Share2,
   type LucideIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -2328,6 +2329,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   const [signingFiscalIndex, setSigningFiscalIndex] = useState<number | null>(null)
   const [signingResponsavel, setSigningResponsavel] = useState(false)
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
+  const [isSharingPdf, setIsSharingPdf] = useState(false)
   const [isSavingDraft, setIsSavingDraft] = useState(false)
   const [isFinalizing, setIsFinalizing] = useState(false)
   const [isDeletingDraft, setIsDeletingDraft] = useState(false)
@@ -3060,8 +3062,11 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     handleSaveDraft(false);
   };
 
-  const downloadPdf = async () => {
-    if (!reportRef.current) return;
+  // Monta o PDF e devolve sem decidir o destino. Usado por "Baixar PDF" e
+  // por "Compartilhar" — mesma rotina de geração, dois destinos, como já
+  // acontece na autuação.
+  const buildPdf = async (): Promise<{ pdf: any; filename: string } | null> => {
+    if (!reportRef.current) return null;
     setIsGeneratingPdf(true);
     let stagingEl: HTMLDivElement | null = null;
     try {
@@ -3076,10 +3081,44 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
 
       const pdf = new jsPDF('p', 'mm', 'a4');
       await renderReportIntoPdf(pdf, reportRef.current, stagingEl);
-      pdf.save(`RELATÓRIO - ${idData.fantasia || 'INSPEÇÃO'}.pdf`);
+      return { pdf, filename: `RELATÓRIO - ${idData.fantasia || 'INSPEÇÃO'}.pdf` };
     } finally {
       if (stagingEl) document.body.removeChild(stagingEl);
       setIsGeneratingPdf(false);
+    }
+  };
+
+  const downloadPdf = async () => {
+    const result = await buildPdf();
+    if (!result) return;
+    result.pdf.save(result.filename);
+  };
+
+  // Mandar o relatório por WhatsApp ou e-mail só funciona de verdade com o
+  // arquivo anexado pela Web Share API — links wa.me/mailto: pré-preenchem
+  // texto e nunca levam o PDF junto. Onde o navegador não suporta (quase
+  // todo desktop), cai no download com o aviso de anexar à mão.
+  const handleSharePdf = async () => {
+    setIsSharingPdf(true);
+    try {
+      const result = await buildPdf();
+      if (!result) return;
+      const blob = result.pdf.output('blob') as Blob;
+      const file = new File([blob], result.filename, { type: 'application/pdf' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: result.filename });
+          return;
+        } catch (e: any) {
+          if (e?.name === 'AbortError') return; // Fiscal fechou a folha de compartilhamento.
+        }
+      }
+
+      result.pdf.save(result.filename);
+      toast({ title: "PDF baixado", description: "Seu navegador não suporta compartilhamento direto de arquivo — anexe o PDF baixado manualmente." });
+    } finally {
+      setIsSharingPdf(false);
     }
   };
 
@@ -3106,8 +3145,11 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
       const res = await saveInspecao(data, currentInspecaoId || undefined);
       if (res?.id) setCurrentInspecaoId(res.id);
       setInspecaoStatus('concluido');
-      toast({ title: "Relatório Finalizado", description: "O PDF foi baixado e a vistoria foi encerrada." });
-      router.push('/roteiros/relatorios');
+      // Sem redirecionar para a lista: finalizar é justamente quando o
+      // fiscal precisa mandar o relatório ao estabelecimento, e a tela de
+      // lista não tem o "Compartilhar". A inspeção continua acessível pelo
+      // seletor e por ?inspecaoId=, então nada se perde em ficar aqui.
+      toast({ title: "Relatório Finalizado", description: "O PDF foi baixado e a vistoria encerrada. Use \"Compartilhar\" para enviar por WhatsApp ou e-mail." });
     } catch (e) {
       toast({ variant: "destructive", title: "Erro ao finalizar relatório" });
     } finally {
@@ -3246,7 +3288,13 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                 </Button>
               )}
               {inspecaoStatus === 'concluido' ? (
-                <Button onClick={downloadPdf} disabled={isGeneratingPdf} className="bg-primary text-white rounded-xl h-11 px-8 font-black uppercase text-[10px] shadow-xl">{isGeneratingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />} Baixar PDF Novamente</Button>
+                <>
+                  <Button onClick={downloadPdf} disabled={isGeneratingPdf || isSharingPdf} variant="outline" className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-white shadow-sm">{isGeneratingPdf && !isSharingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />} Baixar PDF</Button>
+                  {/* Depois de finalizado, o que falta não é gerar o arquivo de
+                      novo — é fazê-lo chegar ao estabelecimento. Por isso o
+                      destaque passa para o compartilhar, como na autuação. */}
+                  <Button onClick={handleSharePdf} disabled={isGeneratingPdf || isSharingPdf} className="bg-primary text-white rounded-xl h-11 px-8 font-black uppercase text-[10px] shadow-xl">{isSharingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Share2 className="h-4 w-4 mr-2" />} Compartilhar</Button>
+                </>
               ) : (
                 <>
                   <Button onClick={downloadPdf} disabled={isGeneratingPdf || isFinalizing} variant="outline" title="Gera o PDF sem encerrar a vistoria" className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-white shadow-sm">{isGeneratingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />} Baixar Prévia</Button>
