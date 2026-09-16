@@ -18,6 +18,7 @@ import { Textarea } from "./ui/textarea"
 import type { MunicipalityConfig } from "@/hooks/use-app-config"
 import { sanitizeHtml } from "@/lib/sanitize-html"
 import { estruturaDoTipo } from "@/lib/autuacao-estrutura"
+import { cn } from "@/lib/utils"
 
 export type IntimacaoFormValues = z.infer<typeof intimacaoSchema>
 export type SignatureTargetType = 'fiscal' | 'responsavel' | 'responsavelTecnico' | 'testemunha1' | 'testemunha2'
@@ -404,9 +405,31 @@ export function DocumentoOficialBody({
               isGeneratingPdf ? <StaticField value={field.value} className="data-field-input !w-[150pt]" /> : <input value={field.value || ""} onChange={field.onChange} disabled={isFinalized} className="data-field-input !w-[150pt]" />
             )} />
             {showCnpjLookup && !isFinalized && !isGeneratingPdf && (
-              <Button onClick={onCnpjLookup} type="button" disabled={isSearchingCnpj} size="sm" variant="ghost" className="h-7 gap-1.5 px-3 rounded-lg font-black text-[8px] uppercase tracking-widest text-primary border border-primary/20 bg-white no-print">{isSearchingCnpj ? <Loader2 className="animate-spin h-3 w-3" /> : <Search className="h-3 w-3" />} Consultar</Button>
+              <Button
+                onClick={onCnpjLookup}
+                type="button"
+                disabled={isSearchingCnpj}
+                size="sm"
+                className={cn(
+                  "h-8 gap-1.5 px-3.5 rounded-lg font-black text-[9px] uppercase tracking-widest no-print shrink-0",
+                  // Cheio enquanto o campo está vazio — é por onde o
+                  // preenchimento começa, e a lupa apagada no canto não
+                  // dizia isso. Depois de preenchido vira discreto: o
+                  // documento não precisa de um botão gritando nele.
+                  !(watch("cnpj") || "").trim()
+                    ? "bg-primary text-white hover:bg-primary/90 shadow-sm"
+                    : "bg-white text-primary border border-primary/20 hover:bg-primary/5"
+                )}
+              >
+                {isSearchingCnpj ? <Loader2 className="animate-spin h-3 w-3" /> : <Search className="h-3 w-3" />} Buscar dados
+              </Button>
             )}
           </div>
+          {showCnpjLookup && !isFinalized && !isGeneratingPdf && !(watch("cnpj") || "").trim() && (
+            <p className="no-print mt-1 text-[8pt] leading-snug text-primary/80">
+              Comece por aqui: a busca preenche razão social, endereço e atividades.
+            </p>
+          )}
         </div>
       </div>
       <div className="data-row">

@@ -3548,16 +3548,36 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             <div className="space-y-2">
                 <TituloEtapa icone={Building2} titulo="Estabelecimento" descricao="Quem está sendo inspecionado" preenchida={!!idData.fantasia} />
                 <div className="bg-[#FAF8F3] border border-[#E4DFD1] divide-y divide-[#E4DFD1]">
+                   {/* PONTO DE PARTIDA DO PREENCHIMENTO.
+                       Consultar o CNPJ traz razão social, endereço, bairro,
+                       telefone e atividades. O campo vinha DEPOIS da razão
+                       social e com a lupa apagada no canto, convidando a
+                       digitar à mão justamente o que a consulta preenche. */}
+                   <div className={cn(
+                     "flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 px-4 py-2.5 transition-colors",
+                     !idData.cnpj.trim() && "bg-[#E4EEEC]/60 border-l-[3px] border-l-[#0E4A44]"
+                   )}>
+                      <Label className="sm:w-28 shrink-0 text-[10px] font-black uppercase text-[#0E4A44]">CNPJ / CPF</Label>
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <Input value={idData.cnpj} onChange={e => setIdData({...idData, cnpj: e.target.value})} placeholder="Digite o CNPJ e busque" className="h-9 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
+                        <Button
+                          onClick={handleCnpjLookup}
+                          disabled={isSearchingCnpj}
+                          size="sm"
+                          className="h-9 shrink-0 gap-1.5 rounded-lg bg-[#0E4A44] px-4 text-[10px] font-black uppercase tracking-widest text-white hover:bg-[#0B3A35]"
+                        >
+                          {isSearchingCnpj ? <Loader2 className="animate-spin h-3.5 w-3.5" /> : <Search className="h-3.5 w-3.5" />} Buscar
+                        </Button>
+                      </div>
+                   </div>
+                   {!idData.cnpj.trim() && (
+                     <p className="px-4 py-2 text-[11px] leading-snug text-[#0E4A44] bg-[#E4EEEC]/40">
+                       Comece por aqui: com o CNPJ, a busca preenche sozinha razão social, endereço, bairro, telefone e atividades.
+                     </p>
+                   )}
                    <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
                       <Label className="sm:w-28 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Razão Social</Label>
                       <Input value={idData.fantasia} onChange={e => setIdData({...idData, fantasia: e.target.value.toUpperCase()})} className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold uppercase focus-visible:ring-0 focus-visible:ring-offset-0" />
-                   </div>
-                   <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
-                      <Label className="sm:w-28 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">CNPJ / CPF</Label>
-                      <div className="flex items-center gap-1 flex-1 min-w-0">
-                        <Input value={idData.cnpj} onChange={e => setIdData({...idData, cnpj: e.target.value})} placeholder="00.000.000/0000-00" className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
-                        <Button onClick={handleCnpjLookup} disabled={isSearchingCnpj} variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-primary hover:bg-primary/10">{isSearchingCnpj ? <Loader2 className="animate-spin h-4 w-4" /> : <Search className="h-4 w-4" />}</Button>
-                      </div>
                    </div>
                    <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
                       <Label className="sm:w-28 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Telefone</Label>
