@@ -151,8 +151,13 @@ export function AppHeader() {
   const handleLogout = useCallback(async () => {
     try {
       await logout()
+    } catch (error) {
+      // Falhar aqui nao pode prender a pessoa dentro da conta: o signOut ja
+      // pode ter desconectado, e insistir na tela autenticada seria pior.
+      console.error("Falha ao encerrar a sessao:", error)
+    } finally {
       router.push("/login")
-    } catch (error) {}
+    }
   }, [logout, router])
 
   // ATENÇÃO: todo hook deste componente precisa ficar ACIMA do return de

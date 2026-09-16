@@ -129,6 +129,58 @@ function clearLocalAppCache() {
   keysToRemove.forEach((key) => window.localStorage.removeItem(key));
 }
 
+/**
+ * SAIR TEM DE SAIR DE TUDO.
+ *
+ * O login grava a sessão em lugares diferentes conforme o "manter
+ * conectado": marcado usa browserLocalPersistence (IndexedDB, sobrevive a
+ * fechar o navegador); desmarcado usa browserSessionPersistence
+ * (sessionStorage, morre com a aba).
+ *
+ * `signOut` limpa só o armazenamento ATIVO no momento. Num aparelho onde
+ * duas contas já entraram com opções diferentes, sobra registro no outro —
+ * e o SDK o encontra na próxima inicialização e restaura aquela sessão
+ * sozinho. Na prática: sai do root e cai no fiscal, sem ter digitado nada.
+ * Vale para qualquer par de contas na mesma situação, não só essas duas.
+ *
+ * Por isso varremos os dois armazenamentos e o banco onde o SDK guarda a
+ * sessão, em vez de confiar apenas no signOut.
+ */
+async function limparSessoesFirebase() {
+  if (typeof window === "undefined") return;
+
+  for (const store of [window.localStorage, window.sessionStorage]) {
+    try {
+      const remover: string[] = [];
+      for (let i = 0; i < store.length; i++) {
+        const chave = store.key(i);
+        if (chave && chave.startsWith("firebase:")) remover.push(chave);
+      }
+      remover.forEach((chave) => store.removeItem(chave));
+    } catch {
+      // Armazenamento bloqueado pelo navegador: nada a limpar aqui.
+    }
+  }
+
+  // É neste banco que o SDK moderno guarda a sessão "manter conectado".
+  // Não deixamos a saída travar por causa dele: se a exclusão ficar
+  // pendente (outra aba segurando o banco), seguimos em frente — o signOut
+  // já desconectou esta aba.
+  try {
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        const req = window.indexedDB.deleteDatabase("firebaseLocalStorageDb");
+        req.onsuccess = () => resolve();
+        req.onerror = () => resolve();
+        req.onblocked = () => resolve();
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, 1500)),
+    ]);
+  } catch {
+    // IndexedDB indisponível (modo privado, por exemplo).
+  }
+}
+
 function mapAuthError(code: string | undefined): string {
   switch (code) {
     case 'auth/invalid-credential':
@@ -261,6 +313,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     await signOut(auth);
     clearLocalAppCache();
+    // Ver limparSessoesFirebase: sem isto, a sessão de outra conta guardada
+    // no armazenamento que o signOut não tocou volta sozinha no próximo
+    // carregamento.
+    await limparSessoesFirebase();
   };
 
   const updateProfileData = async (data: Partial<UserProfile>) => {
