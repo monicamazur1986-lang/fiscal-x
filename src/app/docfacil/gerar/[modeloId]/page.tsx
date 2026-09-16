@@ -337,7 +337,7 @@ export default function GerarDocumentoPage({ params }: { params: Promise<{ model
             <FolhaEscalada ref={reportRef}>
               <div className="mb-1 pb-2 border-none">
                 <OfficialLetterhead />
-                <p className="text-[14pt] font-black uppercase italic tracking-tighter mt-2 border-y border-zinc-200 py-1 text-center">{TIPO_LABEL[documentoEmitido.tipo]} Nº {documentoEmitido.numero}</p>
+                <p className="text-[14pt] font-black uppercase italic tracking-tighter mt-2 border-y border-zinc-200 py-1 text-center">{TIPO_LABEL[documentoEmitido.tipo]} <span className="whitespace-nowrap">Nº {documentoEmitido.numero}</span></p>
               </div>
 
               <div className="mb-6 mt-6 space-y-1">

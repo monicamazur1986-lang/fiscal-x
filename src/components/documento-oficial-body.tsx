@@ -289,7 +289,7 @@ function LivePageHeader({ pageNumber, totalPages, tipoTermo, numeroProcesso, con
       <div className="my-4 pt-5 border-t-2 border-dashed border-primary/30">
         <HeaderContent config={config} />
         <div className="text-center border-b border-black/20 pb-1.5 mt-2 mb-3">
-          <p className="text-[8pt] font-bold uppercase text-black tracking-wide">{tipoTermo} Nº {numeroProcesso} — continuação</p>
+          <p className="text-[8pt] font-bold uppercase text-black tracking-wide">{tipoTermo} <span className="whitespace-nowrap">Nº {numeroProcesso}</span> — continuação</p>
         </div>
       </div>
     </div>
@@ -373,14 +373,19 @@ export function DocumentoOficialBody({
           )
         )} />
       </div>
-      <div className="flex-1 p-2 flex items-center justify-center">
+      <div className="flex-1 min-w-0 p-2 flex items-center justify-center">
         <FormField control={control} name="numeroProcesso" render={({ field }) => (
-          <div className="flex items-center gap-2">
-            <span className="text-[12pt] md:text-[14pt] font-black uppercase text-black">Nº</span>
+          <div className="flex items-center gap-2 min-w-0 w-full justify-center">
+            {/* `shrink-0` e `whitespace-nowrap` no "Nº": sem eles o navegador
+                encolhe este trecho num contêiner estreito e quebra a linha
+                ENTRE o "N" e o "º" (o indicador ordinal é ponto válido de
+                quebra), deixando o número do documento partido em duas
+                alturas no topo da autuação. */}
+            <span className="shrink-0 whitespace-nowrap text-[12pt] md:text-[14pt] font-black uppercase text-black">Nº</span>
             {isGeneratingPdf ? (
-              <StaticField value={field.value} className="text-[12pt] md:text-[14pt] font-black uppercase text-black" />
+              <StaticField value={field.value} className="whitespace-nowrap text-[12pt] md:text-[14pt] font-black uppercase text-black" />
             ) : (
-              <input value={field.value || ""} onChange={(e) => field.onChange(e.target.value.toUpperCase())} disabled={isFinalized} className="bg-transparent border-none rounded-none text-[12pt] md:text-[14pt] font-black uppercase outline-none w-full text-black" />
+              <input value={field.value || ""} onChange={(e) => field.onChange(e.target.value.toUpperCase())} disabled={isFinalized} className="bg-transparent border-none rounded-none text-[12pt] md:text-[14pt] font-black uppercase outline-none min-w-0 flex-1 text-black" />
             )}
           </div>
         )} />
@@ -727,7 +732,7 @@ export function DocumentoOficialBody({
             <div data-continuation-header className="hidden">
               <HeaderContent config={config} />
               <div className="text-center border-b border-black/20 pb-1.5 mt-2 mb-3">
-                <p className="text-[8pt] font-bold uppercase text-black tracking-wide">{watch('tipoTermo')} Nº {watch('numeroProcesso')} — continuação</p>
+                <p className="text-[8pt] font-bold uppercase text-black tracking-wide">{watch('tipoTermo')} <span className="whitespace-nowrap">Nº {watch('numeroProcesso')}</span> — continuação</p>
               </div>
             </div>
           </td></tr>

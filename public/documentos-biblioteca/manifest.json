@@ -1,5 +1,5 @@
 {
-  "version": "2.12.0",
+  "version": "2.13.0",
   "documents": [
     {
       "id": "codigo-sanitario-estadual-pr",
@@ -240,6 +240,16 @@
       "tema": "Normas Gerais e Institucionais",
       "descricao": "Manual de apoio teórico-prático da Coordenadoria de Vigilância Sanitária da SESA-PR, com orientações aos municípios do Paraná sobre a condução do Processo Administrativo Sanitário — da autuação à decisão final. É a referência que fundamenta os modelos de peça do módulo PAS deste sistema.",
       "keywords": "manual 012 2023, processo administrativo sanitario, pas, sesa, cvis, autuacao, defesa, instrucao, julgamento, penalidade, recurso, termo de juntada, despacho, referencia"
+    },
+    {
+      "id": "resolucao-sesa-465-2013-transporte-alimentos",
+      "titulo": "Resolução SESA nº 465/2013 — Transporte de Alimentos, Matéria-Prima, Ingredientes e Embalagens",
+      "path": "/documentos-biblioteca/resolucao-sesa-465-2013-transporte-alimentos.pdf",
+      "esfera": "estadual",
+      "categoria": "Resolução",
+      "tema": "Alimentos e Bebidas",
+      "descricao": "Regulamento técnico de boas práticas no transporte de alimentos no Paraná: conservação e higienização do veículo, proibição de transportar pessoas, animais e produtos de risco no compartimento de carga, temperaturas obrigatórias por tipo de alimento, transporte de água potável e de alimentos a granel em caminhão-tanque, e exigência de licença sanitária do veículo com placa e chassi. O descumprimento configura infração sanitária nos termos da Lei nº 13.331/2001. Revoga a Resolução SESA nº 413/2013.",
+      "keywords": "resolucao 465, transporte de alimentos, veiculo transportador, caminhao, caminhao tanque, granel, agua potavel, temperatura, congelado, resfriado, refeicao pronta, caixa isotermica, POP, higienizacao, licenca sanitaria do veiculo, placa, chassi, contaminacao cruzada, boas praticas, alimentos"
     }
   ]
 }

@@ -751,7 +751,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                 )
                             ) : (
                                 <>
-                                    <p className="font-serif text-base text-primary">{tipoAnexoAtual} Vinculado Nº {anexoMethods.watch('numeroProcesso')}</p>
+                                    <p className="font-serif text-base text-primary">{tipoAnexoAtual} Vinculado <span className="whitespace-nowrap">Nº {anexoMethods.watch('numeroProcesso')}</span></p>
                                     {!anexoIsFinalized && !isFinalized && (
                                         <Button type="button" variant="outline" onClick={handleRemoverAnexo} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-10 px-4 text-rose-600 border-rose-300 shrink-0">
                                             <Trash2 className="h-4 w-4" /> Remover
