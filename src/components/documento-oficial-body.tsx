@@ -161,7 +161,7 @@ function ItensApreendidosTable({ itens, onChange, colunas, onColunasChange, disa
                 )}
               </td>
               {(['produto', 'marcaLote', 'quantidade', 'unidade'] as const).map((campo) => (
-                <td key={campo} className="border border-black/20 p-1">
+                <td key={campo} className="border border-black/20 p-1" style={{ overflowWrap: 'anywhere' }}>
                   {disabled
                     ? <span>{item[campo]}</span>
                     : <input
@@ -174,7 +174,7 @@ function ItensApreendidosTable({ itens, onChange, colunas, onColunasChange, disa
                 </td>
               ))}
               {colunas.map((col) => (
-                <td key={col} className="border border-black/20 p-1">
+                <td key={col} className="border border-black/20 p-1" style={{ overflowWrap: 'anywhere' }}>
                   {disabled
                     ? <span>{item.extras?.[col] || ''}</span>
                     : <input

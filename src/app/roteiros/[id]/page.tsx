@@ -3242,7 +3242,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     { label: 'ATIVIDADES (CNAE)', valor: idData.cnae, full: true, classe: 'font-bold text-[9pt] leading-tight text-zinc-800 uppercase' },
     { label: 'ENDEREÇO', valor: [idData.endereco, idData.bairro].filter(Boolean).join(' - '), full: true },
     { label: 'RESPONSÁVEL TÉCNICO', valor: idData.responsavelTecnico ? `${idData.responsavelTecnico}${idData.responsavelTecnicoRegistro ? ` — ${idData.responsavelTecnicoRegistro}` : ''}` : '' },
-    { label: 'RESPONSÁVEL LEGAL', valor: idData.responsavel },
+    { label: 'RESPONSÁVEL LEGAL', valor: idData.responsavel ? `${idData.responsavel}${idData.responsavelCpf ? ` — ${idData.responsavelCpf}` : ''}` : '' },
     { label: 'EQUIPE DE FISCALIZAÇÃO', valor: fiscais.length > 0 ? fiscais.map(f => (f as any).nome).join(' e ') : (profile?.displayName || ''), full: true },
   ].filter((campo) => campo.valor && campo.valor.trim());
 
@@ -3341,14 +3341,14 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
 
               <div data-pdf-block className="mb-4">
                   <div className="sub-header-row">1. IDENTIFICAÇÃO DO ESTABELECIMENTO</div>
-                  <table className="w-full border border-slate-300" style={{ borderCollapse: 'collapse' }}>
+                  <table className="w-full border border-slate-300" style={{ borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                       <tbody>
                           {linhasIdentificacao.map((linha, i) => (
                             <tr key={i}>
                               {linha.map((campo) => (
-                                <td key={campo.label} colSpan={linha.length === 1 ? 2 : 1} className="border border-slate-200" style={{ padding: '3pt 8pt' }}>
+                                <td key={campo.label} colSpan={linha.length === 1 ? 2 : 1} className="border border-slate-200 align-top" style={{ padding: '3pt 8pt' }}>
                                   <span className="data-label">{campo.label}:</span>
-                                  <div className={campo.classe || "font-bold text-[10pt]"}>{campo.valor}</div>
+                                  <div className={campo.classe || "font-bold text-[10pt]"} style={{ overflowWrap: 'anywhere' }}>{campo.valor}</div>
                                 </td>
                               ))}
                             </tr>
@@ -3743,15 +3743,17 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                 )}
 
                 <div className="bg-[#FAF8F3] border border-[#E4DFD1] divide-y divide-[#E4DFD1]">
-                   <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr] divide-y sm:divide-y-0 sm:divide-x divide-[#E4DFD1]">
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
-                         <Label className="sm:w-40 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Responsável (acompanhou a inspeção)</Label>
-                         <Input value={idData.responsavel} onChange={e => setIdData({...idData, responsavel: e.target.value.toUpperCase()})} className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold uppercase focus-visible:ring-0 focus-visible:ring-offset-0" />
-                      </div>
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
-                         <Label className="sm:w-20 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">RG/CPF</Label>
-                         <Input value={idData.responsavelCpf} onChange={e => setIdData({...idData, responsavelCpf: e.target.value})} placeholder="000.000.000-00" className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
-                      </div>
+                   {/* Um campo por linha. Nome, RG/CPF e horário dividiam a
+                       largura em duas colunas, mas o rótulo já ocupa 160px: o que
+                       sobrava não cabia um nome completo, e o RG/CPF cortava no
+                       meio. Nenhum dos três é curto o bastante para dividir. */}
+                   <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
+                      <Label className="sm:w-40 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Responsável (acompanhou a inspeção)</Label>
+                      <Input value={idData.responsavel} onChange={e => setIdData({...idData, responsavel: e.target.value.toUpperCase()})} className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold uppercase focus-visible:ring-0 focus-visible:ring-offset-0" />
+                   </div>
+                   <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
+                      <Label className="sm:w-40 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">RG/CPF</Label>
+                      <Input value={idData.responsavelCpf} onChange={e => setIdData({...idData, responsavelCpf: e.target.value})} placeholder="000.000.000-00" className="h-8 flex-1 min-w-0 bg-transparent border-none shadow-none px-0 rounded-none font-bold focus-visible:ring-0 focus-visible:ring-offset-0" />
                    </div>
                    <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 px-4 py-2">
                       <Label className="sm:w-40 shrink-0 text-[10px] font-black uppercase text-[#6B6659]">Data e Horário da Inspeção</Label>
