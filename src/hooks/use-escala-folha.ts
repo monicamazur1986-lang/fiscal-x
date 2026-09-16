@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 
 /**
  * ESCALA DA FOLHA A4 NA TELA
@@ -26,12 +26,40 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * prévias (autuações, DocFácil, PAS) não repitam — nem divirjam — da mesma
  * solução.
  */
+/**
+ * `zoom` encolhe o elemento E a caixa que ele ocupa; `transform: scale()`
+ * encolhe só o desenho e deixa para trás a largura e a ALTURA originais.
+ *
+ * Enquanto a folha era só escalada, essa altura fantasma virava um vão de
+ * centenas de pixels entre o fim do documento e o que vem depois dele — o
+ * botão de gerar o termo vinculado, por exemplo, ficava jogado lá embaixo.
+ * Compensar isso fixando a altura do contêiner funciona, mas depende de uma
+ * medição que precisa acertar todas as vezes, em cada mudança de conteúdo.
+ *
+ * Onde `zoom` existe (Chrome, Edge, Safari e Firefox recente — ou seja, o
+ * celular e o tablet onde a vistoria acontece), o navegador resolve isso
+ * sozinho e não sobra nada. O caminho antigo fica de reserva.
+ */
+function suportaZoom(): boolean {
+  if (typeof window === "undefined" || !window.CSS?.supports) return false;
+  return window.CSS.supports("zoom", "0.5");
+}
+
 export function useEscalaFolha(options?: { ativo?: boolean; deps?: unknown[] }) {
   const ativo = options?.ativo ?? true;
   const wrapperRef = useRef<HTMLDivElement>(null);
   const paperRef = useRef<HTMLDivElement>(null);
   const [escala, setEscala] = useState(1);
   const [alturaVisual, setAlturaVisual] = useState<number | undefined>(undefined);
+  // Resolvido depois da montagem: no servidor não existe window, e assumir
+  // zoom lá produziria marcação diferente da do cliente.
+  const [usaZoom, setUsaZoom] = useState(false);
+  // A folha tem largura fixa (210mm) e nunca muda. Guardamos a primeira
+  // medição porque, sob `zoom`, medir de novo devolveria a largura JÁ
+  // reduzida — e a conta encolheria a folha outra vez a cada passada, até
+  // sumir.
+  const larguraNaturalRef = useRef(0);
+  useEffect(() => setUsaZoom(suportaZoom()), []);
 
   const deps = options?.deps ?? [];
 
@@ -57,7 +85,10 @@ export function useEscalaFolha(options?: { ativo?: boolean; deps?: unknown[] }) 
       wrapperEl.clientWidth - paddingX,
       larguraJanela - paddingX
     );
-    const larguraNatural = paperEl.offsetWidth;
+    if (!larguraNaturalRef.current && paperEl.offsetWidth) {
+      larguraNaturalRef.current = paperEl.offsetWidth;
+    }
+    const larguraNatural = larguraNaturalRef.current;
     const alturaNatural = paperEl.offsetHeight;
     if (!larguraNatural || larguraDisponivel <= 0) return;
 
@@ -130,13 +161,17 @@ export function useEscalaFolha(options?: { ativo?: boolean; deps?: unknown[] }) 
     /** Vai no elemento que embrulha a folha (o de `.document-paper-wrapper`). */
     estiloWrapper: {
       overflowX: escala < 1 ? ("hidden" as const) : ("auto" as const),
-      height: alturaVisual,
+      // Com `zoom` não há altura fantasma a compensar: o contêiner encolhe
+      // junto com a folha e não sobra vão nenhum embaixo dela.
+      height: usaZoom ? undefined : alturaVisual,
     },
     /** Vai na própria folha (`.document-paper`). */
-    estiloFolha: {
-      transform: `scale(${escala})`,
-      transformOrigin: "top left" as const,
-    },
+    estiloFolha: usaZoom
+      ? ({ zoom: escala } as CSSProperties)
+      : {
+          transform: `scale(${escala})`,
+          transformOrigin: "top left" as const,
+        },
     recalcular,
   };
 }
