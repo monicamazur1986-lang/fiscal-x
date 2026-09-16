@@ -839,43 +839,98 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                 </div>
 
                 {!isFinalized ? (
-                    <div className="fixed bottom-3 right-3 z-[100] no-print flex items-center gap-2">
+                    /* QUATRO AÇÕES, MESMA LARGURA — mesmo desenho da barra do
+                       roteiro. Antes era uma pílula flutuante no canto, com
+                       "Apagar Rascunho" e "Salvar Rascunho" por extenso e a
+                       visualização escondida num botão só de ícone: em tela de
+                       celular os rótulos longos espremiam tudo e a lupa não
+                       dizia o que fazia. Ícone em cima do rótulo cabe sem
+                       abreviar. */
+                    <div className="fixed bottom-0 left-0 right-0 z-[100] no-print border-t border-[#E4DFD1] bg-white/95 px-3 py-3 backdrop-blur-xl sm:px-6">
                         {!isPreviewMode && lastAutoSavedAt && (
-                            <span className="hidden sm:inline text-[9px] font-bold uppercase tracking-widest text-[#6B6659] bg-white/90 px-3 py-1.5 rounded-full border border-[#E4DFD1] shadow-sm">
+                            <p className="mx-auto mb-2 max-w-4xl text-center text-[9px] font-bold uppercase tracking-widest text-[#A39D8C]">
                                 Salvo automaticamente às {format(lastAutoSavedAt, "HH:mm")}
-                            </span>
+                            </p>
                         )}
-                        <div className="flex items-center gap-2 bg-white/95 backdrop-blur-xl border border-[#E4DFD1] rounded-2xl shadow-lg p-2">
-                            {isPreviewMode ? (
-                                <Button type="button" onClick={() => setIsPreviewMode(false)} size="sm" className="h-10 px-4 bg-primary hover:bg-primary/90 text-white gap-2 rounded-xl font-black uppercase text-[10px] tracking-widest">
-                                    <Pencil className="h-4 w-4" /> Voltar a Editar
+
+                        {isPreviewMode ? (
+                            <div className="mx-auto max-w-4xl">
+                                <Button type="button" onClick={() => setIsPreviewMode(false)} className="h-14 w-full gap-2 rounded-2xl bg-primary text-[11px] font-black uppercase tracking-widest text-white shadow-lg hover:bg-primary/90">
+                                    <Pencil className="h-5 w-5" /> Voltar a Editar
                                 </Button>
-                            ) : (
-                                <>
-                                    <Button type="button" onClick={() => setIsPreviewMode(true)} variant="outline" size="icon" title="Visualizar" className="h-10 w-10 rounded-xl border-[#E4DFD1] text-[#6B6659]">
-                                        <Eye className="h-4 w-4" />
-                                    </Button>
-                                    <Button type="button" onClick={() => setShowClearDraftConfirm(true)} variant="outline" size="sm" className="h-10 px-4 rounded-xl border-rose-200 text-rose-600 font-black uppercase text-[10px] tracking-widest gap-2">
-                                        <Trash2 className="h-4 w-4" /> Apagar Rascunho
-                                    </Button>
-                                    <Button type="button" onClick={() => handleSaveDraft()} disabled={isSavingDraft || isSaving} variant="outline" size="sm" className="h-10 px-4 rounded-xl border-[#E4DFD1] text-[#6B6659] font-black uppercase text-[10px] tracking-widest gap-2">
-                                        {isSavingDraft ? <Loader2 className="animate-spin h-4 w-4" /> : <Save className="h-4 w-4" />} Salvar Rascunho
-                                    </Button>
-                                    <Button type="button" onClick={() => setShowFinalizeConfirm(true)} disabled={isSaving || isSavingDraft} size="sm" className="h-10 px-4 bg-primary hover:bg-primary/90 text-white gap-2 rounded-xl font-black uppercase text-[10px] tracking-widest">
-                                        {isSaving ? <Loader2 className="animate-spin h-4 w-4" /> : <FileCheck2 className="h-4 w-4" />} Finalizar
-                                    </Button>
-                                </>
-                            )}
-                        </div>
+                            </div>
+                        ) : (
+                            <div className="mx-auto grid max-w-4xl grid-cols-4 items-stretch gap-2 sm:gap-3">
+                                <Button
+                                    type="button"
+                                    onClick={() => setIsPreviewMode(true)}
+                                    variant="outline"
+                                    className="h-16 flex-col gap-1 rounded-2xl border-[#E4DFD1] text-[#6B6659] font-black uppercase text-[10px] sm:text-[11px] tracking-widest shadow-md"
+                                >
+                                    <Eye className="h-5 w-5" />
+                                    Visualizar
+                                </Button>
+
+                                <Button
+                                    type="button"
+                                    onClick={() => setShowClearDraftConfirm(true)}
+                                    variant="outline"
+                                    className="h-16 flex-col gap-1 rounded-2xl border-rose-200 text-rose-600 font-black uppercase text-[10px] sm:text-[11px] tracking-widest shadow-md hover:bg-rose-50 hover:text-rose-700"
+                                >
+                                    <Trash2 className="h-5 w-5" />
+                                    Apagar
+                                </Button>
+
+                                <Button
+                                    type="button"
+                                    onClick={() => handleSaveDraft()}
+                                    disabled={isSavingDraft || isSaving}
+                                    variant="outline"
+                                    className="h-16 flex-col gap-1 rounded-2xl border-[#E4DFD1] text-[#6B6659] font-black uppercase text-[10px] sm:text-[11px] tracking-widest shadow-md"
+                                >
+                                    {isSavingDraft ? <Loader2 className="animate-spin h-5 w-5" /> : <Save className="h-5 w-5" />}
+                                    Salvar
+                                </Button>
+
+                                <Button
+                                    type="button"
+                                    onClick={() => setShowFinalizeConfirm(true)}
+                                    disabled={isSaving || isSavingDraft}
+                                    className="h-16 flex-col gap-1 rounded-2xl bg-primary text-white font-black uppercase text-[10px] sm:text-[11px] tracking-widest shadow-2xl transition-all hover:bg-primary/90 active:scale-95"
+                                >
+                                    {isSaving ? <Loader2 className="animate-spin h-5 w-5" /> : <FileCheck2 className="h-5 w-5" />}
+                                    Finalizar
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 ) : (
-                    <div className="fixed bottom-3 right-3 z-[100] no-print flex items-center gap-2 bg-white/95 backdrop-blur-xl border border-[#E4DFD1] rounded-2xl shadow-lg p-2">
-                        <Button type="button" onClick={handleDownloadPdf} disabled={isGeneratingPdf || isSharingPdf} variant="outline" size="sm" className="h-10 px-4 rounded-xl border-[#E4DFD1] text-[#6B6659] font-black uppercase text-[10px] tracking-widest gap-2">
-                            {isGeneratingPdf && !isSharingPdf ? <Loader2 className="animate-spin h-4 w-4" /> : <Download className="h-4 w-4" />} Baixar PDF
-                        </Button>
-                        <Button type="button" onClick={handleSharePdf} disabled={isGeneratingPdf || isSharingPdf} size="sm" className="h-10 px-4 bg-primary hover:bg-primary/90 text-white gap-2 rounded-xl font-black uppercase text-[10px] tracking-widest">
-                            {isSharingPdf ? <Loader2 className="animate-spin h-4 w-4" /> : <Share2 className="h-4 w-4" />} Compartilhar
-                        </Button>
+                    /* Documento travado: só resta exportar. Mesma barra larga
+                       do modo de edição, para a tela não trocar de desenho ao
+                       finalizar. */
+                    <div className="fixed bottom-0 left-0 right-0 z-[100] no-print border-t border-[#E4DFD1] bg-white/95 px-3 py-3 backdrop-blur-xl sm:px-6">
+                        <div className="mx-auto grid max-w-4xl grid-cols-2 items-stretch gap-2 sm:gap-3">
+                            <Button
+                                type="button"
+                                onClick={handleDownloadPdf}
+                                disabled={isGeneratingPdf || isSharingPdf}
+                                variant="outline"
+                                className="h-16 flex-col gap-1 rounded-2xl border-[#E4DFD1] text-[#6B6659] font-black uppercase text-[10px] sm:text-[11px] tracking-widest shadow-md"
+                            >
+                                {isGeneratingPdf && !isSharingPdf ? <Loader2 className="animate-spin h-5 w-5" /> : <Download className="h-5 w-5" />}
+                                Baixar PDF
+                            </Button>
+
+                            <Button
+                                type="button"
+                                onClick={handleSharePdf}
+                                disabled={isGeneratingPdf || isSharingPdf}
+                                className="h-16 flex-col gap-1 rounded-2xl bg-primary text-white font-black uppercase text-[10px] sm:text-[11px] tracking-widest shadow-2xl transition-all hover:bg-primary/90 active:scale-95"
+                            >
+                                {isSharingPdf ? <Loader2 className="animate-spin h-5 w-5" /> : <Share2 className="h-5 w-5" />}
+                                Compartilhar
+                            </Button>
+                        </div>
                     </div>
                 )}
             </div>
