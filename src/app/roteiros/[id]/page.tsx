@@ -8,7 +8,6 @@ import {
   FileSearch, 
   Loader2, 
   Camera, 
-  Download, 
   PenTool, 
   Check, 
   X, 
@@ -2223,8 +2222,8 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   const [currentInspecaoId, setCurrentInspecaoId] = useState<string | null>(null);
   // Status da inspeção carregada — null enquanto é uma inspeção nova/em
   // branco, ainda sem nenhum save. Controla, na visualização do relatório, se
-  // mostra "Finalizar e Baixar PDF" (rascunho) ou só "Baixar PDF Novamente"
-  // (já concluída, reaberta pra conferir/rebaixar).
+  // mostra "Finalizar e Exportar" (rascunho) ou só "Exportar" (já concluída,
+  // reaberta pra conferir ou reenviar).
   const [inspecaoStatus, setInspecaoStatus] = useState<'rascunho' | 'concluido' | null>(null);
   // Nos roteiros ROI a resposta é a nota da escala, guardada como string
   // ('0'..'5') no mesmo mapa — evita um segundo estado só pra isso e faz o
@@ -3147,9 +3146,9 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
       setInspecaoStatus('concluido');
       // Sem redirecionar para a lista: finalizar é justamente quando o
       // fiscal precisa mandar o relatório ao estabelecimento, e a tela de
-      // lista não tem o "Compartilhar". A inspeção continua acessível pelo
+      // lista não tem o "Exportar". A inspeção continua acessível pelo
       // seletor e por ?inspecaoId=, então nada se perde em ficar aqui.
-      toast({ title: "Relatório Finalizado", description: "O PDF foi baixado e a vistoria encerrada. Use \"Compartilhar\" para enviar por WhatsApp ou e-mail." });
+      toast({ title: "Relatório Finalizado", description: "O PDF foi baixado e a vistoria encerrada. Use \"Exportar\" para enviar por WhatsApp ou e-mail." });
     } catch (e) {
       toast({ variant: "destructive", title: "Erro ao finalizar relatório" });
     } finally {
@@ -3269,10 +3268,15 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     return (
       <div className="document-container font-serif pb-40">
         <header className="flex flex-wrap items-center justify-between no-print mb-10 gap-3 w-full max-w-[210mm] px-4">
-            <Button onClick={() => setView('checklist')} variant="outline" className="rounded-xl h-11 font-black uppercase text-[10px] bg-white shadow-sm"><ArrowLeft className="h-4 w-4 mr-2" /> Voltar à Edição</Button>
+            {/* Tres acoes, sempre: Editar, Revisar com IA e Exportar. O
+                cabecalho tinha quatro botoes e dois deles ("Baixar Previa" e
+                "Finalizar e Baixar PDF") baixavam o mesmo arquivo, mudando so
+                o efeito colateral — a diferenca entre eles nao estava no rotulo,
+                e a barra so era legivel para quem ja sabia o que cada um fazia. */}
+            <Button onClick={() => setView('checklist')} variant="outline" className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-white shadow-sm"><Pencil className="h-4 w-4 mr-2" /> Editar</Button>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               {inspecaoStatus !== 'concluido' && (
-                <Button onClick={handlePolishAllObservations} disabled={isPolishingBatch || !hasUnreviewedObservations} variant="outline" className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-violet-50 text-violet-600 border-violet-100 shadow-sm hover:bg-violet-100">{isPolishingBatch ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />} Revisar Observações com IA</Button>
+                <Button onClick={handlePolishAllObservations} disabled={isPolishingBatch || !hasUnreviewedObservations} variant="outline" className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-violet-50 text-violet-600 border-violet-100 shadow-sm hover:bg-violet-100">{isPolishingBatch ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />} Revisar com IA</Button>
               )}
               {/* Termo de intimação a partir das não conformidades — só depois
                   de finalizar, quando o que é ou não conformidade já está
@@ -3284,36 +3288,36 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   variant="outline"
                   className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-[#E4EEEC] text-[#0E4A44] border-[#0E4A44]/20 shadow-sm hover:bg-[#d5e5e2]"
                 >
-                  <ScrollText className="h-4 w-4 mr-2" /> Gerar Termo de Intimação
+                  <ScrollText className="h-4 w-4 mr-2" /> Gerar Intimação
                 </Button>
               )}
               {inspecaoStatus === 'concluido' ? (
-                <>
-                  <Button onClick={downloadPdf} disabled={isGeneratingPdf || isSharingPdf} variant="outline" className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-white shadow-sm">{isGeneratingPdf && !isSharingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />} Baixar PDF</Button>
-                  {/* Depois de finalizado, o que falta não é gerar o arquivo de
-                      novo — é fazê-lo chegar ao estabelecimento. Por isso o
-                      destaque passa para o compartilhar, como na autuação. */}
-                  <Button onClick={handleSharePdf} disabled={isGeneratingPdf || isSharingPdf} className="bg-primary text-white rounded-xl h-11 px-8 font-black uppercase text-[10px] shadow-xl">{isSharingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Share2 className="h-4 w-4 mr-2" />} Compartilhar</Button>
-                </>
+                /* Um so "Exportar": no celular abre a folha do sistema (WhatsApp,
+                   e-mail, salvar no aparelho); no computador, que nao tem Web Share,
+                   baixa o PDF direto. Sao dois comportamentos de uma unica intencao,
+                   e separa-los em dois botoes obrigava o fiscal a saber de antemao o
+                   que o navegador dele suporta. */
+                <Button onClick={handleSharePdf} disabled={isGeneratingPdf || isSharingPdf} className="bg-primary text-white rounded-xl h-11 px-8 font-black uppercase text-[10px] shadow-xl">{isGeneratingPdf || isSharingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Share2 className="h-4 w-4 mr-2" />} Exportar</Button>
               ) : (
-                <>
-                  <Button onClick={downloadPdf} disabled={isGeneratingPdf || isFinalizing} variant="outline" title="Gera o PDF sem encerrar a vistoria" className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-white shadow-sm">{isGeneratingPdf ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />} Baixar Prévia</Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button disabled={isGeneratingPdf || isFinalizing} className="bg-primary text-white rounded-xl h-11 px-8 font-black uppercase text-[10px] shadow-xl">{isFinalizing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />} Finalizar e Baixar PDF</Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent className="rounded-[2rem]">
-                      <AlertDialogHeader>
-                        <AlertDialogTitle className="font-black uppercase tracking-tighter text-xl italic">Finalizar este relatório?</AlertDialogTitle>
-                        <AlertDialogDescription>O PDF será baixado e a vistoria será encerrada no sistema — só finalizar de fato conta como concluída. Depois disso ainda dá pra reabrir e baixar o PDF de novo pela lista de inspeções deste roteiro, mas não pra continuar editando.</AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleFinalizarRelatorio} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-primary hover:bg-primary/90">Finalizar</AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </>
+                /* "Baixar Previa" saiu: esta tela ja e a previa, em tamanho de
+                   folha, e baixar um PDF so para conferir o que esta na frente do
+                   fiscal criava um arquivo a mais na pasta de downloads para depois
+                   ter que distinguir do definitivo. */
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button disabled={isGeneratingPdf || isFinalizing} className="bg-primary text-white rounded-xl h-11 px-8 font-black uppercase text-[10px] shadow-xl">{isFinalizing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />} Finalizar e Exportar</Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent className="rounded-[2rem]">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="font-black uppercase tracking-tighter text-xl italic">Finalizar este relatório?</AlertDialogTitle>
+                      <AlertDialogDescription>O PDF é baixado no aparelho e a vistoria é encerrada no sistema — só finalizar de fato conta como concluída. Depois ainda dá pra reabrir e exportar de novo pela lista de inspeções deste roteiro, mas não pra continuar editando.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleFinalizarRelatorio} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-primary hover:bg-primary/90">Finalizar</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               )}
             </div>
         </header>
