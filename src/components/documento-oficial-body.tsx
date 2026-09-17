@@ -8,7 +8,7 @@ import type { z } from "zod"
 
 import { Button } from "@/components/ui/button"
 import { FormField } from "@/components/ui/form"
-import { intimacaoSchema } from "@/lib/schema"
+import { intimacaoSchema, modalidadesDeIntimacao, modalidadeDoTexto, type ModalidadeIntimacao } from "@/lib/schema"
 import { Autoridade } from "@/lib/types"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SelecionarAutoridadeParaFormulario } from "./selecionar-autoridade-dialog"
@@ -19,6 +19,8 @@ import type { MunicipalityConfig } from "@/hooks/use-app-config"
 import { sanitizeHtml } from "@/lib/sanitize-html"
 import { estruturaDoTipo } from "@/lib/autuacao-estrutura"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/hooks/use-auth"
+import { useAppConfig } from "@/hooks/use-app-config"
 
 export type IntimacaoFormValues = z.infer<typeof intimacaoSchema>
 export type SignatureTargetType = 'fiscal' | 'responsavel' | 'responsavelTecnico' | 'testemunha1' | 'testemunha2'
@@ -211,6 +213,71 @@ function ItensApreendidosTable({ itens, onChange, colunas, onColunasChange, disa
             {UNIDADES_SUGERIDAS.map((u) => <option key={u} value={u} />)}
           </datalist>
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * AS DUAS MODALIDADES DO TERMO DE INTIMAÇÃO
+ *
+ * "Prazo para sanar" é o de sempre. "Cessar atividade" acrescenta a ordem de
+ * parar de imediato e manter parado até regularizar — continua com prazo,
+ * porque a lei exige que o termo traga o prazo das determinações.
+ *
+ * O aviso sobre perigo iminente não é preciosismo: o Termo de Intimação é o
+ * documento previsto para quando esse perigo NÃO existe (Art. 25 da Lei
+ * Municipal nº 2.276/2017; Art. 66, §1º, da Lei Estadual nº 13.331/2001).
+ * Mandar parar por risco iminente dentro de uma intimação é usar o instrumento
+ * errado, e o lugar de dizer isso é aqui, na hora da escolha.
+ */
+function SeletorModalidadeIntimacao({
+  valorAtual,
+  onEscolher,
+}: {
+  valorAtual?: string;
+  onEscolher: (texto: string) => void;
+}) {
+  const { profile } = useAuth();
+  const { config } = useAppConfig();
+  const municipioId = profile?.municipioId;
+  const opcoes = modalidadesDeIntimacao(municipioId, config.autuacaoTextos);
+  const atual = modalidadeDoTexto(valorAtual, municipioId, config.autuacaoTextos);
+
+  const botoes: { chave: ModalidadeIntimacao; rotulo: string; ajuda: string }[] = [
+    { chave: 'prazo', rotulo: 'Prazo para sanar', ajuda: 'O responsável continua operando e regulariza dentro do prazo.' },
+    { chave: 'cessar', rotulo: 'Cessar atividade', ajuda: 'A atividade para de imediato e só volta depois de regularizada.' },
+  ];
+
+  return (
+    <div className="no-print border-b border-dashed border-[#E4DFD1] bg-[#FAF8F3] px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[9px] font-black uppercase tracking-widest text-[#A39D8C] shrink-0">Modalidade</span>
+        {botoes.map((b) => (
+          <button
+            key={b.chave}
+            type="button"
+            title={b.ajuda}
+            onClick={() => onEscolher(opcoes[b.chave])}
+            className={cn(
+              "rounded-lg border px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-colors",
+              atual === b.chave
+                ? "border-[#0E4A44] bg-[#0E4A44] text-white"
+                : "border-[#E4DFD1] bg-white text-[#6B6659] hover:border-[#0E4A44]/40 hover:bg-white"
+            )}
+          >
+            {b.rotulo}
+          </button>
+        ))}
+        {atual === null && valorAtual && (
+          <span className="text-[10px] text-[#A39D8C] italic">texto editado à mão</span>
+        )}
+      </div>
+      {atual === 'cessar' && (
+        <p className="mt-2 text-[10px] leading-snug text-[#9C7A3C]">
+          Havendo <strong>risco iminente</strong> à saúde, o instrumento não é este: é o Termo de Interdição.
+          A intimação é o documento previsto justamente para quando esse risco não existe.
+        </p>
       )}
     </div>
   );
@@ -669,6 +736,16 @@ export function DocumentoOficialBody({
     ...(estrutura.prazo ? [
       <div key="notificacao" className="section-box" style={{ borderTop: "none" }}>
         <div className="sub-header-row">{numeroDaSecao.prazo}. {estrutura.prazo.titulo}</div>
+      {/* As duas modalidades da intimação. Só aparece na edição e só neste
+          termo — nos demais o texto do prazo não tem variante. Trocar reescreve
+          o campo abaixo, que segue editável: a escolha é um ponto de partida,
+          não uma trava. */}
+      {tipoAutuacaoSelecionado === 'TERMO DE INTIMAÇÃO' && !isFinalized && !isGeneratingPdf && (
+        <SeletorModalidadeIntimacao
+          valorAtual={watch('prazo')}
+          onEscolher={(texto) => setValue('prazo', texto)}
+        />
+      )}
       {/* Na edição o campo reserva 4em para o fiscal ter onde escrever. No PDF,
           se ficou vazio, esse reservado vira uma caixa titulada com um vão de
           quatro linhas no meio do documento — melhor sair rente. */}

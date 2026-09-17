@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { textosLegaisDoMunicipio } from "@/lib/base-legal-municipal";
+import { textosLegaisDoMunicipio, intimacaoCessarDoMunicipio } from "@/lib/base-legal-municipal";
 
 export const autoridadeSchema = z.object({
   id: z.string().default(''),
@@ -49,6 +49,19 @@ export const DEFAULT_PRAZO_TEXT = `O infrator poderá oferecer <strong>defesa ou
  * ATO_TEXT_POR_TIPO, mais abaixo.
  */
 export const INTIMACAO_PRAZO_TEXT = `Fica o responsável <strong>INTIMADO</strong> a proceder a regularização das irregularidades acima apontadas no prazo de <strong><mark>[Nº DE DIAS]</mark> (<mark>[POR EXTENSO]</mark>) dias</strong>, contados do recebimento deste Termo, por não constituir a irregularidade perigo iminente para a saúde, a critério da autoridade sanitária (Art. 66, §1º, da Lei Estadual nº 13.331/2001 e Art. 555, §1º, do Decreto Estadual nº 5.711/2002).<br><br>O prazo fixado pela autoridade sanitária <strong>não pode ultrapassar 90 (noventa) dias</strong>. Alegando motivos relevantes devidamente comprovados, o interessado poderá pleitear prorrogação, que é <strong>excepcional</strong> e, somada ao prazo inicial, <strong>não pode ultrapassar 180 (cento e oitenta) dias no total</strong> (Art. 555, §2º, do Decreto Estadual nº 5.711/2002).<br><br>Persistindo a irregularidade ou infração, terá prosseguimento o processo administrativo sanitário, com a lavratura do respectivo Auto de Infração e aplicação das penalidades do Art. 55 da Lei Estadual nº 13.331/2001 (Art. 66, §3º, da mesma Lei; Art. 555, §4º, do Decreto).<br><br>A expedição deste Termo interrompe a prescrição (Art. 64, §1º, da Lei Estadual nº 13.331/2001).`;
+
+/**
+ * Segunda modalidade do Termo de Intimação: além do prazo para sanar, a
+ * determinação de PARAR a atividade irregular até a regularização.
+ *
+ * Não invoca perigo iminente, e isso é deliberado: onde há perigo iminente o
+ * instrumento é a interdição cautelar (Art. 59 da Lei Estadual nº 13.331/2001;
+ * Art. 547 do Decreto nº 5.711/2002), e a intimação é justamente o documento
+ * previsto para quando esse perigo NÃO existe. O que sustenta a ordem de
+ * cessar aqui é a própria natureza do termo, que descreve "determinações a
+ * serem cumpridas" com prazo — não uma medida cautelar disfarçada.
+ */
+export const INTIMACAO_CESSAR_TEXT = `Fica o responsável <strong>INTIMADO</strong> a <strong>CESSAR IMEDIATAMENTE</strong> a atividade <mark>[ATIVIDADE/SETOR]</mark>, mantendo-a suspensa até a integral regularização das irregularidades acima apontadas.<br><br>A determinação de cessar é <strong>de cumprimento imediato</strong>, a contar do recebimento deste Termo. Para a regularização fica concedido o prazo de <strong><mark>[Nº DE DIAS]</mark> (<mark>[POR EXTENSO]</mark>) dias</strong>, findo o qual a atividade somente poderá ser retomada após nova verificação pela autoridade sanitária (Art. 66, §1º, da Lei Estadual nº 13.331/2001 e Art. 555, §1º, do Decreto Estadual nº 5.711/2002).<br><br>O prazo fixado <strong>não pode ultrapassar 90 (noventa) dias</strong>. Alegando motivos relevantes devidamente comprovados, o interessado poderá pleitear prorrogação, que é <strong>excepcional</strong> e, somada ao prazo inicial, <strong>não pode ultrapassar 180 (cento e oitenta) dias no total</strong> (Art. 555, §2º, do Decreto Estadual nº 5.711/2002).<br><br>Persistindo a irregularidade, ou descumprida a determinação de cessar, terá prosseguimento o processo administrativo sanitário, com a lavratura do respectivo Auto de Infração e aplicação das penalidades do Art. 55 da Lei Estadual nº 13.331/2001 (Art. 66, §3º, da mesma Lei; Art. 555, §4º, do Decreto), sem prejuízo da <strong>interdição cautelar</strong> do estabelecimento (Art. 59 da Lei; Art. 547 do Decreto).<br><br>A expedição deste Termo interrompe a prescrição (Art. 64, §1º, da Lei Estadual nº 13.331/2001).`;
 
 export const PENALIDADE_PRAZO_TEXT = `Fica o autuado <strong>CIENTIFICADO</strong> da penalidade acima imposta, decorrente do processo administrativo sanitário instaurado pelo Auto de Infração nº <strong><mark>[NÚMERO]</mark></strong>.<br><br>Cabe <strong>RECURSO</strong> à autoridade imediatamente superior àquela que proferiu a decisão, no prazo de <strong>10 (dez) dias</strong> contados da ciência desta decisão (Art. 71 e Art. 73 da Lei Estadual nº 13.331/2001; Art. 561, §2º, do Decreto Estadual nº 5.711/2002). Da decisão dessa autoridade cabe recurso em segunda e última instância ao Secretário Municipal ou Estadual da Saúde, conforme a jurisdição (Art. 72 da Lei; Art. 561, §3º, do Decreto).<br><br>Os recursos <strong>não têm efeito suspensivo</strong>, podendo a autoridade a quem forem dirigidos, em cognição sumária e revogável a qualquer tempo, determinar a suspensão da aplicação da penalidade (Art. 74 da Lei; Art. 562 do Decreto).<br><br>Aplicada pena de multa, o recolhimento deve ser feito à conta do respectivo Fundo de Saúde no prazo de <strong>30 (trinta) dias</strong> contados desta ciência; o não recolhimento implica inscrição em dívida ativa e cobrança judicial (Art. 563 e §2º do Decreto Estadual nº 5.711/2002).`;
 
@@ -138,6 +151,47 @@ export function atoTextoDoTipo(
     (tipo && ATO_TEXT_POR_TIPO[tipo]) ||
     ''
   );
+}
+
+/**
+ * AS DUAS MODALIDADES DO TERMO DE INTIMAÇÃO
+ *
+ * `prazo`  — sanar as irregularidades dentro do prazo (o padrão de sempre).
+ * `cessar` — parar a atividade de imediato e mantê-la parada até regularizar,
+ *            com prazo para a regularização.
+ *
+ * Nenhuma das duas invoca perigo iminente: havendo perigo iminente o
+ * instrumento é o Termo de Interdição, e a intimação é exatamente o documento
+ * previsto para quando esse perigo não existe (Art. 25 da Lei Municipal nº
+ * 2.276/2017; Art. 66, §1º, da Lei Estadual nº 13.331/2001).
+ */
+export type ModalidadeIntimacao = 'prazo' | 'cessar';
+
+export function modalidadesDeIntimacao(
+  municipioId?: string | null,
+  textosDoMunicipio?: AutuacaoTextos,
+): Record<ModalidadeIntimacao, string> {
+  return {
+    // O texto que o gestor personalizou na Identidade Municipal tem
+    // precedência sobre o padrão, como em todo o resto do sistema.
+    prazo: prazoTextoDoTipo('TERMO DE INTIMAÇÃO', textosDoMunicipio, municipioId),
+    cessar: intimacaoCessarDoMunicipio(municipioId) || INTIMACAO_CESSAR_TEXT,
+  };
+}
+
+/** Qual modalidade um texto já gravado representa — para a tela reabrir um
+ *  documento com a opção certa marcada. Texto que o fiscal editou à mão não
+ *  casa com nenhuma, e aí nenhuma fica marcada, que é o correto. */
+export function modalidadeDoTexto(
+  prazoHtml: string | undefined,
+  municipioId?: string | null,
+  textosDoMunicipio?: AutuacaoTextos,
+): ModalidadeIntimacao | null {
+  if (!prazoHtml) return null;
+  const opcoes = modalidadesDeIntimacao(municipioId, textosDoMunicipio);
+  if (prazoHtml === opcoes.prazo) return 'prazo';
+  if (prazoHtml === opcoes.cessar) return 'cessar';
+  return null;
 }
 
 /** Tipos cujo texto de ato/prazo o gestor pode personalizar. */

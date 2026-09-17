@@ -106,6 +106,37 @@ const PRUDENTOPOLIS_INTIMACAO_PRAZO =
   `sem prejuízo do enquadramento no Art. 18, CXII (não cumprir com o teor de intimação expedida pela autoridade em Vigilância em Saúde).<br><br>` +
   `A expedição deste Termo interrompe a fluência do prazo prescricional (Art. 17, parágrafo único).`;
 
+
+/**
+ * Segunda modalidade da intimação em Prudentópolis: parar a atividade
+ * irregular até a regularização.
+ *
+ * A ordem de cessar se apoia no Art. 25, §1º, III, que manda o termo descrever
+ * as "determinações a serem cumpridas, bem como o prazo para serem
+ * executadas" — e não em perigo iminente. Isso é deliberado: o caput do Art.
+ * 25 diz que o termo de intimação é lavrado justamente "quando a irregularidade
+ * NÃO constituir perigo iminente para a saúde". Havendo perigo iminente, o
+ * instrumento é o Termo de Interdição (Art. 23 c/c Art. 19, V), não este.
+ *
+ * O prazo continua obrigatório mesmo aqui: é exigência do próprio §1º, III, e o
+ * teto de 90 dias do §2º não deixa de valer por a atividade estar parada.
+ */
+const PRUDENTOPOLIS_INTIMACAO_CESSAR =
+  `Fica o responsável <strong>INTIMADO</strong> a <strong>CESSAR IMEDIATAMENTE</strong> a atividade ` +
+  `<mark>[ATIVIDADE/SETOR]</mark>, mantendo-a suspensa até a integral regularização das irregularidades acima ` +
+  `apontadas, nos termos do <strong>Art. 25, §1º, III</strong>, da Lei Municipal nº 2.276/2017.<br><br>` +
+  `A determinação de cessar é de <strong>cumprimento imediato</strong>, a contar do recebimento deste Termo. Para a ` +
+  `regularização fica concedido o prazo de <strong><mark>[Nº DE DIAS]</mark> (<mark>[POR EXTENSO]</mark>) dias</strong>, ` +
+  `findo o qual a atividade somente poderá ser retomada após nova verificação pela autoridade em Vigilância em Saúde.<br><br>` +
+  `O prazo não pode ultrapassar <strong>90 (noventa) dias</strong> e poderá ser prorrogado por igual período, a critério da ` +
+  `autoridade em Vigilância em Saúde, desde que requerido pelo interessado <strong>até 10 (dez) dias antes do seu término</strong> ` +
+  `e devidamente fundamentado (Art. 25, §2º).<br><br>` +
+  `Vencido o prazo com persistência da irregularidade, ou descumprida a determinação de cessar, será lavrado <strong>Auto de ` +
+  `Infração</strong> e instaurado o competente Processo Administrativo Sanitário (Art. 35), sujeitando-se o responsável às ` +
+  `penalidades do Art. 19 da mesma Lei, sem prejuízo do enquadramento no Art. 18, CXII (não cumprir com o teor de intimação ` +
+  `expedida pela autoridade em Vigilância em Saúde) e da <strong>interdição</strong> do estabelecimento (Art. 19, V, c/c Art. 23).<br><br>` +
+  `A expedição deste Termo interrompe a fluência do prazo prescricional (Art. 17, parágrafo único).`;
+
 /** Interdição — penalidade do Art. 19, V, aplicada preventivamente na forma do
  *  Art. 23; o Art. 27, §3º é o que sustenta a advertência de desobediência. */
 const PRUDENTOPOLIS_INTERDICAO_ATO =
@@ -240,4 +271,18 @@ export function baseLegalDoMunicipio(municipioId?: string | null): BaseLegal {
 /** Textos padrão dos termos no município — vazio onde vale o estadual. */
 export function textosLegaisDoMunicipio(municipioId?: string | null): TextosDeAutuacao {
   return baseLegalDoMunicipio(municipioId).textos;
+}
+
+/**
+ * Texto da modalidade "cessar atividade" do Termo de Intimação NO MUNICÍPIO,
+ * quando ele tem código próprio. `undefined` = usar o estadual.
+ *
+ * Devolve só a parte municipal, de propósito: quem junta as duas modalidades
+ * é schema.ts, que já importa este arquivo. Compor aqui exigiria importar o
+ * texto estadual de lá e fecharia um ciclo entre os dois módulos.
+ */
+export function intimacaoCessarDoMunicipio(municipioId?: string | null): string | undefined {
+  return baseLegalDoMunicipio(municipioId) === PRUDENTOPOLIS
+    ? PRUDENTOPOLIS_INTIMACAO_CESSAR
+    : undefined;
 }
