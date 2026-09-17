@@ -51,6 +51,15 @@
       ]
     },
     {
+      "collectionGroup": "intimacoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "municipioId", "order": "ASCENDING" },
+        { "fieldPath": "compartilhadoCom", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "chamados",
       "queryScope": "COLLECTION",
       "fields": [

@@ -139,17 +139,33 @@ service cloud.firestore {
     }
     
     match /intimacoes/{id} {
+      // compartilhadoCom: colegas que receberam a edição (ver
+      // CompartilharEdicaoDialog). O campo não existe no acervo antigo, daí
+      // o get() com padrão — sem ele a regra rejeitaria todo documento
+      // gravado antes desta versão.
+      function compartilhadaComigo() {
+        return request.auth.uid in resource.data.get('compartilhadoCom', []);
+      }
       allow read: if isAuthenticated() && (
         isRoot() || 
         (isAdmin() && resource.data.municipioId == getUserData().municipioId) ||
-        (resource.data.createdBy == request.auth.uid)
+        (resource.data.createdBy == request.auth.uid) ||
+        compartilhadaComigo()
       );
       allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
       // municipioId travado no update — mesmo motivo de folders/{id} acima:
       // impede o dono (ou um admin) de reatribuir a autuação pra outro
       // município via update, o que furaria o isolamento por tenant.
+      // O colega compartilhado edita e finaliza como o autor. O que ele não
+      // pode é mudar de município (mesma trava do dono, acima) nem herdar a
+      // autoria: createdBy fica travado, para ninguém virar dono salvando.
       allow update: if isAuthenticated() && (
-        isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()) && request.resource.data.municipioId == resource.data.municipioId)
+        isRoot() || (
+          resource.data.municipioId == getUserData().municipioId
+          && (resource.data.createdBy == request.auth.uid || compartilhadaComigo() || isAdmin())
+          && request.resource.data.municipioId == resource.data.municipioId
+          && request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '')
+        )
       );
       allow delete: if isAuthenticated() && (
         isRoot() || (resource.data.municipioId == getUserData().municipioId && (resource.data.createdBy == request.auth.uid || isAdmin()))

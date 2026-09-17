@@ -156,8 +156,13 @@ export type AcervoDocumentosProps = {
    * Recorte por situação:
    *  - autuações: `rascunho` (em andamento) ou `finalizado`;
    *  - vistorias: `rascunho` (inspeção em andamento) ou `concluido` (relatório).
+   *
+   * `compartilhadas` é o recorte por ORIGEM, não por situação: o que um
+   * colega dividiu com você, em qualquer estágio. Elas continuam aparecendo
+   * em "Em Andamento"/"Finalizadas" junto com as suas — esta tela existe para
+   * responder "o que me passaram?" sem garimpar a lista inteira.
    */
-  situacao: 'rascunho' | 'finalizado' | 'concluido';
+  situacao: 'rascunho' | 'finalizado' | 'concluido' | 'compartilhadas';
   /** Botão da ação principal no topo da lista (criar um novo documento). */
   novo?: { href: string; label: string };
   /** Tela-menu a que esta lista pertence — destino do "Voltar". Sem isso, a
@@ -214,8 +219,15 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
     [inspecoes, escopo, situacao]
   );
   const autuacoes = useMemo(
-    () => (escopo === 'autuacoes' ? intimacoes.filter(i => i.status === situacao) : []),
-    [intimacoes, escopo, situacao]
+    () => {
+      if (escopo !== 'autuacoes') return [];
+      if (situacao === 'compartilhadas') {
+        const meuUid = profile?.uid;
+        return meuUid ? intimacoes.filter(i => (i.compartilhadoCom || []).includes(meuUid)) : [];
+      }
+      return intimacoes.filter(i => i.status === situacao);
+    },
+    [intimacoes, escopo, situacao, profile?.uid]
   );
 
   // Formato comum pra intimações e relatórios conviverem na mesma lista,
@@ -852,7 +864,7 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
             {/* O Relatorio Municipal consolida o que foi EMITIDO no ano.
                 Em rascunho nao ha documento lavrado para consolidar — o
                 botao abria um relatorio que ignorava a lista da tela. */}
-            {escopo === 'autuacoes' && situacao !== 'rascunho' && (
+            {escopo === 'autuacoes' && situacao === 'finalizado' && (
               <button
                 type="button"
                 onClick={handleOpenReport}
@@ -955,6 +967,17 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                                 {activeFolderId === 'trash' && (
                                   <Badge variant="outline" className={cn("text-[10px] font-medium h-4 px-1.5 border-none", isFinal ? "bg-[#E3F1EA] text-[#1F7A5C]" : "bg-amber-50 text-amber-700")}>
                                       {isRelatorio ? (situacao === 'rascunho' ? 'Em andamento' : 'Relatório') : (isFinal ? 'Final' : 'Rascunho')}
+                                  </Badge>
+                                )}
+                                {/* Nas listas gerais as compartilhadas aparecem
+                                    misturadas às próprias. Sem a etiqueta, o fiscal
+                                    não tem como saber que aquele documento é de um
+                                    colega e que outra pessoa pode estar mexendo
+                                    nele agora. Na pasta "Compartilhadas Comigo"
+                                    todas são, então a etiqueta seria ruído. */}
+                                {situacao !== 'compartilhadas' && profile?.uid && intimacao?.createdBy && intimacao.createdBy !== profile.uid && (intimacao.compartilhadoCom || []).includes(profile.uid) && (
+                                  <Badge variant="outline" className="text-[10px] font-medium h-4 px-1.5 border-none bg-[#F0E9F7] text-[#7A4F9C] gap-1">
+                                      <Users className="h-2.5 w-2.5" /> {intimacao.createdByName?.split(' ')[0] || 'Colega'}
                                   </Badge>
                                 )}
                             </div>

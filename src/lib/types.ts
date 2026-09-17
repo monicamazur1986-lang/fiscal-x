@@ -26,6 +26,11 @@ export type Intimacao = {
   updatedAt?: string;
   createdBy?: string;
   createdByName?: string; 
+  /** uids dos colegas que podem editar junto — ver schema.ts. */
+  compartilhadoCom?: string[];
+  compartilhadoComNomes?: { uid: string; nome: string }[];
+  updatedBy?: string;
+  updatedByName?: string;
   cnpj?: string;
   endereco?: string;
   bairro?: string;

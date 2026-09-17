@@ -221,6 +221,20 @@ export const intimacaoSchema = z.object({
   createdAt: z.string().optional().default(''),
   createdBy: z.string().optional().default(''),
   createdByName: z.string().optional().default(''),
+  /**
+   * Colegas fiscais com quem a edição foi compartilhada (uid do Auth, não o
+   * id do cadastro de autoridades — são coisas diferentes). Quem criou NÃO
+   * entra aqui; continua identificado por createdBy.
+   *
+   * saveIntimacao nunca grava estes campos num documento que já existe (ver
+   * o comentário lá): o formulário não os carrega, e o default [] daqui
+   * apagaria o compartilhamento a cada salvamento automático.
+   */
+  compartilhadoCom: z.array(z.string()).default([]),
+  compartilhadoComNomes: z.array(z.object({ uid: z.string(), nome: z.string() })).default([]),
+  /** Quem salvou por último — base do aviso de alteração simultânea. */
+  updatedBy: z.string().optional().default(''),
+  updatedByName: z.string().optional().default(''),
   dataDocumento: z.string().optional().default(''),
   horaDocumento: z.string().optional().default(''),
   secretariaOficial: z.string().optional().default(''),

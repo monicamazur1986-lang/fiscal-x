@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Intimacao } from '@/lib/types';
 import { z } from 'zod'; //
 import { intimacaoSchema } from '@/lib/schema'; //
@@ -32,6 +32,12 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
   const [loading, setLoading] = useState(true); //
   const [isOnline, setIsOnline] = useState(true); //
   const [needsMunicipioSelection, setNeedsMunicipioSelection] = useState(false);
+  // Espelho da lista para saveIntimacao consultar o documento que já existe
+  // sem entrar na lista de dependências do useCallback — depender do estado
+  // recriaria a função a cada snapshot, e ela é usada pelo salvamento
+  // automático da autuação.
+  const intimacoesRef = useRef<Intimacao[]>([]);
+  useEffect(() => { intimacoesRef.current = intimacoes; }, [intimacoes]);
 
   // Monitorar estado da conexão
   useEffect(() => {
@@ -78,24 +84,37 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
         ? normalizeId(options!.municipioIdOverride!)
         : profile.municipioId;
 
-      let q;
-      if (profile.role === 'admin' || profile.role === 'root') {
-        q = query(
-          collection(db, "intimacoes"),
-          where("municipioId", "==", targetMunicipioId),
-          orderBy("createdAt", "desc")
-        );
-      } else {
-        q = query(
-          collection(db, "intimacoes"),
-          where("municipioId", "==", targetMunicipioId),
-          where("createdBy", "==", user.uid),
-          orderBy("createdAt", "desc")
-        );
-      }
+      // Gestor e root veem o municipio inteiro numa consulta so. O fiscal
+      // precisa de DUAS: o que ele criou e o que um colega compartilhou com
+      // ele. O Firestore nao tem OR entre campos diferentes, e trocar o
+      // `createdBy ==` por um unico campo de participantes faria sumir da
+      // lista todo o acervo ja gravado, que nao tem esse campo — por isso as
+      // duas convivem, com os resultados unidos aqui no cliente.
+      const base = [collection(db, "intimacoes"), where("municipioId", "==", targetMunicipioId)] as const;
+      const consultas = (profile.role === 'admin' || profile.role === 'root')
+        ? [query(base[0], base[1], orderBy("createdAt", "desc"))]
+        : [
+            query(base[0], base[1], where("createdBy", "==", user.uid), orderBy("createdAt", "desc")),
+            query(base[0], base[1], where("compartilhadoCom", "array-contains", user.uid), orderBy("createdAt", "desc")),
+          ];
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const items = snapshot.docs.map(doc => {
+      // Cada listener guarda o proprio resultado; a lista exibida e a uniao
+      // dos dois. Sem isso o segundo snapshot apagaria o primeiro.
+      const porConsulta: Intimacao[][] = consultas.map(() => []);
+
+      const publicar = () => {
+        const porId = new Map<string, Intimacao>();
+        porConsulta.flat().forEach((item) => porId.set(String(item.id), item));
+        const items = Array.from(porId.values()).sort((a, b) =>
+          String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
+        );
+        salvarCacheColecao(LOCAL_STORAGE_KEY, items);
+        setIntimacoes(items);
+        setLoading(false);
+      };
+
+      const unsubscribes = consultas.map((q, indice) => onSnapshot(q, (snapshot) => {
+        porConsulta[indice] = snapshot.docs.map(doc => {
           const data = doc.data();
           return {
             ...data,
@@ -118,16 +137,12 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
             updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
           } as Intimacao;
         });
-
-        // Sincroniza o Cache Local com a Nuvem
-        salvarCacheColecao(LOCAL_STORAGE_KEY, items);
-        setIntimacoes(items);
-        setLoading(false);
+        publicar();
       }, (err) => {
         console.warn("Firestore offline ou sem permissão, usando local.");
         setLoading(false);
-      });
-      return () => unsubscribe();
+      }));
+      return () => unsubscribes.forEach((u) => u());
     } else {
       setLoading(false);
     }
@@ -175,14 +190,22 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     const now = new Date().toISOString();
     const municipioId = profile?.municipioId || 'geral';
     
+    // A autoria é de quem ABRIU a autuação, não de quem está salvando agora.
+    // Com a edição compartilhada isso deixou de ser detalhe: sobrescrever
+    // createdBy faria a autuação trocar de dono no primeiro salvamento do
+    // colega e sumir da lista de quem a criou.
+    const anterior = id ? intimacoesRef.current.find(i => String(i.id) === String(id)) : undefined;
+
     const docData = {
       ...parsedData,
       dataIntimacao: parsedData.dataIntimacao.toISOString(),
       dataRecebimento: parsedData.dataRecebimento?.toISOString(),
       updatedAt: now,
       municipioId: municipioId,
-      createdBy: profile?.uid,
-      createdByName: profile?.displayName,
+      createdBy: anterior?.createdBy || profile?.uid,
+      createdByName: anterior?.createdByName || profile?.displayName,
+      updatedBy: profile?.uid,
+      updatedByName: profile?.displayName,
     };
 
     // 1. ATUALIZA LOCALSTORAGE IMEDIATAMENTE (GARANTIA TOTAL)
@@ -192,7 +215,13 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     setIntimacoes(prev => {
       const existing = prev.find(i => String(i.id) === String(targetId));
       const newItem = { 
+        // `existing` primeiro: o formulário não carrega compartilhadoCom nem
+        // os nomes, e o default [] do schema apagaria o compartilhamento da
+        // lista a cada salvamento automático.
+        ...existing,
         ...docData, 
+        compartilhadoCom: existing?.compartilhadoCom ?? docData.compartilhadoCom,
+        compartilhadoComNomes: existing?.compartilhadoComNomes ?? docData.compartilhadoComNomes,
         id: targetId, 
         createdAt: existing?.createdAt || now,
         dataIntimacao: new Date(docData.dataIntimacao),
@@ -218,13 +247,23 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     let cloudError: string | undefined;
 
     if (db && !configError) {
-      const fbData = {
+      const fbData: Record<string, any> = {
         ...docData,
         dataIntimacao: Timestamp.fromDate(parsedData.dataIntimacao),
         dataRecebimento: parsedData.dataRecebimento ? Timestamp.fromDate(parsedData.dataRecebimento) : null,
         dataRecebimentoTecnico: parsedData.dataRecebimentoTecnico ? Timestamp.fromDate(parsedData.dataRecebimentoTecnico) : null,
         updatedAt: Timestamp.now()
       };
+
+      // Num documento que já existe, a gravação é merge: não enviar estes
+      // campos é o que preserva o compartilhamento. Enviá-los com o default
+      // [] do schema (o formulário não os conhece) apagaria o acesso do
+      // colega no primeiro salvamento automático — quem altera a lista é
+      // compartilharIntimacao, e só ela.
+      if (id) {
+        delete fbData.compartilhadoCom;
+        delete fbData.compartilhadoComNomes;
+      }
 
       try {
         // attemptFirestoreWrite: com a persistência do Firestore ligada (ver
@@ -351,9 +390,45 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     }
   }, [db, configError]);
 
+  /**
+   * Único lugar que altera a lista de colegas com acesso à edição.
+   *
+   * Grava só os dois campos, em merge, para nunca esbarrar no que o fiscal
+   * estiver digitando: o formulário salva sozinho a cada 8 segundos, e um
+   * salvamento inteiro disparado daqui sobrescreveria o rascunho em curso
+   * com o estado que estava em memória quando a caixa foi aberta.
+   *
+   * Os nomes viajam junto com os uids porque a tela precisa mostrar "com
+   * quem está compartilhado" sem ter de consultar a coleção de usuários a
+   * cada abertura — inclusive offline.
+   */
+  const compartilharIntimacao = useCallback(async (
+    id: string,
+    colegas: { uid: string; nome: string }[],
+  ) => {
+    const uids = colegas.map(c => c.uid);
+
+    setIntimacoes(prev => {
+      const atualizada = prev.map(i => String(i.id) === String(id)
+        ? { ...i, compartilhadoCom: uids, compartilhadoComNomes: colegas }
+        : i);
+      salvarCacheColecao(LOCAL_STORAGE_KEY, atualizada);
+      return atualizada;
+    });
+
+    if (!db || configError) return { synced: false };
+    return attemptFirestoreWrite(
+      setDoc(doc(db, "intimacoes", id), {
+        compartilhadoCom: uids,
+        compartilhadoComNomes: colegas,
+      }, { merge: true })
+    );
+  }, [db, configError]);
+
   return {
     intimacoes,
     saveIntimacao,
+    compartilharIntimacao,
     generateNewNumeroProcesso,
     bulkDelete,
     permanentDelete,

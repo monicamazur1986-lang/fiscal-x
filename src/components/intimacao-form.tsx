@@ -16,6 +16,7 @@ import {
   PackageX,
   Eye,
   Pencil,
+  Users,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
@@ -23,6 +24,7 @@ import { format } from "date-fns"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 import { useIntimacoes } from "@/hooks/use-intimacoes"
+import { CompartilharEdicaoDialog, type ColegaCompartilhado } from "@/components/compartilhar-edicao-dialog"
 import { useInspecoes } from "@/hooks/use-inspecoes"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useAuth } from "@/hooks/use-auth"
@@ -130,7 +132,15 @@ function useLivePagination(containerRef: React.RefObject<HTMLDivElement>, header
 }
 
 function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<Intimacao>, intimacaoId?: string }) {
-    const { generateNewNumeroProcesso, saveIntimacao, updateIntimacaoMeta, loading: loadingIntimacoes } = useIntimacoes();
+    const { generateNewNumeroProcesso, saveIntimacao, updateIntimacaoMeta, compartilharIntimacao, intimacoes, loading: loadingIntimacoes } = useIntimacoes();
+    const [compartilharAberto, setCompartilharAberto] = useState(false);
+    const [abrindoCompartilhar, setAbrindoCompartilhar] = useState(false);
+    // Alteração de um colega chegada pelo snapshot enquanto esta tela está
+    // aberta. Enquanto houver uma, o salvamento automático fica parado: ele
+    // dispara 4 segundos depois da última tecla e mandaria o texto antigo por
+    // cima do que o colega acabou de gravar, sem ninguém perceber.
+    const [alteracaoDoColega, setAlteracaoDoColega] = useState<{ nome: string; quando: string } | null>(null);
+    const bloqueiaAutosaveRef = useRef(false);
     const { saveInspecao } = useInspecoes();
     const { config } = useAppConfig();
     const { profile } = useAuth();
@@ -387,6 +397,10 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
             autosaveTimerRef.current = setTimeout(async () => {
                 if (isPersistingRef.current) return;
+                // Um colega gravou algo enquanto esta tela estava aberta: salvar
+                // agora publicaria o estado anterior por cima do dele. Fica
+                // parado até a pessoa decidir (recarregar ou manter o que digitou).
+                if (bloqueiaAutosaveRef.current) return;
                 const hasContent = !!(getValues('autor')?.trim() || getValues('teor')?.trim() || getValues('reu')?.trim());
                 if (!hasContent) return;
 
@@ -734,6 +748,45 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
     const mostraCardAutoInfracao = !isReadOnlyRender && (hasAnexo || TIPOS_QUE_GERAM_AUTO_INFRACAO.includes(tipoTermoAtual) || tipoTermoAtual === TIPO_QUE_GERA_INTERDICAO_OU_APREENSAO);
     const tipoAnexoAtual = anexoMethods.watch('tipoTermo');
 
+    // O documento como está gravado, não o que o formulário tem em mãos: o
+    // compartilhamento não passa pelo formulário (ver saveIntimacao), então é
+    // da lista que vem a resposta de "com quem isto está compartilhado".
+    const gravada = intimacoes.find(i => String(i.id) === String(mainIdRef.current));
+    const compartilhadoCom: ColegaCompartilhado[] = gravada?.compartilhadoComNomes
+      ?? (gravada?.compartilhadoCom || []).map(uid => ({ uid, nome: 'Fiscal' }));
+    const souOAutor = !gravada?.createdBy || gravada.createdBy === profile?.uid;
+
+    // Vigia de edição simultânea. O snapshot do Firestore chega sozinho; se o
+    // último salvamento foi de outra pessoa, quem está aqui precisa saber
+    // ANTES de continuar digitando — do contrário os dois textos se alternam
+    // a cada salvamento e ninguém entende o que aconteceu.
+    const carimboDoColega = gravada?.updatedBy && gravada.updatedBy !== profile?.uid ? String(gravada.updatedAt || '') : '';
+    useEffect(() => {
+        if (!carimboDoColega || isFinalized) return;
+        const quando = (() => {
+            const d = new Date(carimboDoColega);
+            return isNaN(d.getTime()) ? 'agora há pouco' : `às ${format(d, "HH:mm")}`;
+        })();
+        bloqueiaAutosaveRef.current = true;
+        setAlteracaoDoColega({ nome: gravada?.updatedByName || 'Um colega', quando });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [carimboDoColega, isFinalized]);
+
+    // Compartilhar exige um documento gravado — é o id que vai no acesso do
+    // colega. Num rascunho que nunca foi salvo, salva antes de abrir a caixa
+    // em vez de mandar o fiscal fazer isso sozinho.
+    const abrirCompartilhar = async () => {
+        if (mainIdRef.current) { setCompartilharAberto(true); return; }
+        setAbrindoCompartilhar(true);
+        try {
+            await handleSaveDraft();
+            if (mainIdRef.current) setCompartilharAberto(true);
+            else toast({ variant: "destructive", title: "Salve o rascunho antes de compartilhar" });
+        } finally {
+            setAbrindoCompartilhar(false);
+        }
+    };
+
     return (
         <FormProvider {...methods}>
             <div className="document-container font-serif pb-60">
@@ -765,6 +818,71 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                             livePageBreaks={livePageBreaksMain}
                         />
                     </FolhaEscalada>
+
+                    {alteracaoDoColega && (
+                        <div className="no-print max-w-[210mm] mx-auto my-8 px-5 py-4 rounded-2xl border-2 border-amber-300 bg-amber-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="min-w-0">
+                                <p className="font-serif text-base text-amber-900">{alteracaoDoColega.nome} alterou esta autuação {alteracaoDoColega.quando}</p>
+                                <p className="text-xs text-amber-800 mt-1">
+                                    O salvamento automático está parado para não apagar o que ele escreveu. Recarregue para ver a versão dele — o que você digitou e ainda não salvou será perdido — ou mantenha a sua e salve por cima.
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => { bloqueiaAutosaveRef.current = false; setAlteracaoDoColega(null); }}
+                                    className="rounded-xl font-black uppercase text-[10px] tracking-widest h-11 px-4 border-amber-300 text-amber-900 hover:bg-amber-100"
+                                >
+                                    Manter a minha
+                                </Button>
+                                <Button
+                                    type="button"
+                                    onClick={() => window.location.reload()}
+                                    className="rounded-xl font-black uppercase text-[10px] tracking-widest h-11 px-4 bg-amber-600 hover:bg-amber-700 text-white"
+                                >
+                                    Recarregar
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Edição a quatro mãos: o fiscal que começa o auto em campo
+                        e o colega que termina no escritório. Fica logo abaixo do
+                        documento, não escondido num menu — a vinculação do auto
+                        já tinha esse problema e foi trazida para cá pelo mesmo
+                        motivo. */}
+                    {!isReadOnlyRender && (
+                        <div className="no-print max-w-[210mm] mx-auto my-8 px-5 py-4 rounded-2xl border border-[#E4DFD1] bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="min-w-0">
+                                <p className="font-serif text-base text-[#262420] flex items-center gap-2">
+                                    <Users className="h-4 w-4 text-primary shrink-0" /> Edição compartilhada
+                                </p>
+                                <p className="text-xs text-[#6B6659] mt-1">
+                                    {compartilhadoCom.length === 0
+                                        ? 'Só você edita esta autuação. Compartilhe para um colega fiscal preencher e finalizar junto.'
+                                        : `Editando com ${compartilhadoCom.map(c => c.nome).join(', ')}.`}
+                                </p>
+                                {!souOAutor && (
+                                    <p className="text-[11px] text-[#9C7A3C] mt-1 font-medium">
+                                        Compartilhada com você por {gravada?.createdByName || 'um colega'} — você edita e finaliza, mas quem apaga é o autor.
+                                    </p>
+                                )}
+                            </div>
+                            {souOAutor && (
+                                <Button
+                                    type="button"
+                                    onClick={abrirCompartilhar}
+                                    disabled={abrindoCompartilhar || isFinalized}
+                                    variant="outline"
+                                    className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 h-11 px-5 shrink-0 border-primary/30 text-primary hover:bg-[#E4EEEC]"
+                                >
+                                    {abrindoCompartilhar ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+                                    {compartilhadoCom.length === 0 ? 'Compartilhar' : 'Gerenciar'}
+                                </Button>
+                            )}
+                        </div>
+                    )}
 
                     {mostraCardAutoInfracao && (
                         <div className="no-print max-w-[210mm] mx-auto my-8 p-6 rounded-2xl border-2 border-primary/50 bg-white shadow-[0_10px_28px_-16px_rgba(38,36,32,0.45)] ring-4 ring-primary/10 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -934,6 +1052,26 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                     </div>
                 )}
             </div>
+
+            <CompartilharEdicaoDialog
+                open={compartilharAberto}
+                onOpenChange={setCompartilharAberto}
+                compartilhadoCom={compartilhadoCom}
+                onConfirmar={async (colegas) => {
+                    if (!mainIdRef.current) return;
+                    const { synced } = await compartilharIntimacao(mainIdRef.current, colegas);
+                    // Offline o acesso fica na fila do Firestore e só vale quando
+                    // a conexão voltar — dizer "compartilhado" agora faria o fiscal
+                    // contar com um colega que ainda não recebeu nada.
+                    toast(
+                        !synced
+                            ? { title: "Compartilhamento na fila", description: "Sem conexão agora — o colega recebe o acesso assim que o aparelho sincronizar." }
+                            : colegas.length === 0
+                                ? { title: "Acesso removido", description: "Esta autuação voltou a ser só sua." }
+                                : { title: "Autuação compartilhada", description: `${colegas.map(c => c.nome).join(', ')} já pode editar e finalizar com você.` }
+                    );
+                }}
+            />
 
             <AlertDialog open={showFinalizeConfirm} onOpenChange={setShowFinalizeConfirm}>
                 <AlertDialogContent className="rounded-lg">

@@ -1,10 +1,11 @@
 "use client"
 
 import { useMemo } from "react"
-import { FilePlus2, FolderClock, FolderCheck } from "lucide-react"
+import { FilePlus2, FolderClock, FolderCheck, Users } from "lucide-react"
 
 import { MenuHub, type CartaoHub } from "@/components/menu-hub"
 import { useIntimacoes } from "@/hooks/use-intimacoes"
+import { useAuth } from "@/hooks/use-auth"
 
 /**
  * Tela-menu do módulo Autuações — o mesmo papel que /roteiros faz pras
@@ -16,14 +17,19 @@ import { useIntimacoes } from "@/hooks/use-intimacoes"
  */
 export default function AutuacoesHubPage() {
   const { intimacoes } = useIntimacoes();
+  const { profile } = useAuth();
 
   const contagens = useMemo(() => {
     const vivas = intimacoes.filter((i) => !i.deleted);
+    const meuUid = profile?.uid;
     return {
       emAndamento: vivas.filter((i) => i.status === 'rascunho').length,
       finalizadas: vivas.filter((i) => i.status === 'finalizado').length,
+      // Vindas de colega: recorte por origem, então cruzam os outros dois
+      // (uma compartilhada em rascunho conta aqui e em "Em Andamento").
+      compartilhadas: meuUid ? vivas.filter((i) => (i.compartilhadoCom || []).includes(meuUid)).length : 0,
     };
-  }, [intimacoes]);
+  }, [intimacoes, profile?.uid]);
 
   const cartoes: CartaoHub[] = [
     {
@@ -51,6 +57,19 @@ export default function AutuacoesHubPage() {
       contagem: contagens.finalizadas,
     },
   ];
+
+  // Só aparece para quem tem alguma. Uma pasta permanentemente vazia ocupa
+  // metade da fileira e ensina a ignorar aquele canto da tela.
+  if (contagens.compartilhadas > 0) {
+    cartoes.push({
+      href: "/intimacoes/compartilhadas",
+      label: "Compartilhadas Comigo",
+      descricao: "Autuações que um colega dividiu com você para editar junto.",
+      icon: Users,
+      color: "#7A4F9C",
+      contagem: contagens.compartilhadas,
+    });
+  }
 
   return <MenuHub cartoes={cartoes} />;
 }
