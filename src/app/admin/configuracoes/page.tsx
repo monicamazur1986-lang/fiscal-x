@@ -20,11 +20,13 @@ import {
   Landmark,
   FileText,
   ClipboardList,
-  Gavel
+  Gavel,
+  Hash
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { RecalibrarNumeracao } from "@/components/admin/recalibrar-numeracao"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
@@ -289,6 +291,7 @@ export default function IdentidadeMunicipalPage() {
           <TabsTrigger value="prazos" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><Scale className="h-3.5 w-3.5" /> Prazos</TabsTrigger>
           <TabsTrigger value="roteiros" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><ClipboardList className="h-3.5 w-3.5" /> Roteiros</TabsTrigger>
           <TabsTrigger value="termos" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><Gavel className="h-3.5 w-3.5" /> Termos</TabsTrigger>
+          <TabsTrigger value="numeracao" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><Hash className="h-3.5 w-3.5" /> Numeração</TabsTrigger>
         </TabsList>
 
         <TabsContent value="brasao" className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -393,6 +396,17 @@ export default function IdentidadeMunicipalPage() {
                     </Button>
                 </CardContent>
             </Card>
+        </TabsContent>
+
+        {/* Numeração do livro de autos. Fica atrás de uma aba própria, e não
+            junto dos textos, porque não é um padrão que se ajusta e se
+            reajusta: é o contador de um registro público. */}
+        <TabsContent value="numeracao" className="mt-6">
+            {effectiveMunicipioId ? (
+              <RecalibrarNumeracao municipioId={effectiveMunicipioId} municipioNome={effectiveMunicipioNome} />
+            ) : (
+              <p className="text-sm text-[#6B6659]">Selecione um município para ver a numeração.</p>
+            )}
         </TabsContent>
 
         <TabsContent value="prazos" className="mt-6">

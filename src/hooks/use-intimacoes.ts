@@ -23,6 +23,7 @@ import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
 import { attemptFirestoreWrite } from '@/lib/firestore-offline';
 import { lerCacheColecao, salvarCacheColecao } from '@/lib/cache-colecao-local';
+import { lerContadorLocal, salvarContadorLocal } from '@/lib/contador-autuacoes';
 
 const LOCAL_STORAGE_KEY = 'fiscal_x_intimacoes_v4';
 
@@ -165,18 +166,31 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
           tx.set(counterRef, { seq: next }, { merge: true });
           return next;
         });
+        // Guarda o que a nuvem acabou de confirmar: é o que permite à
+        // estimativa offline continuar de onde o contador oficial parou,
+        // inclusive depois de uma recalibração.
+        salvarContadorLocal(mid, year, nextSeq);
         return `${String(nextSeq).padStart(4, '0')}/${year}`;
       } catch (e) {
         console.warn("Falha ao gerar número atômico, usando estimativa local.", e);
       }
     }
 
-    // Sem conexão (ou falha acima): estimativa a partir da lista já carregada,
-    // só para não travar o preenchimento — o número real é confirmado ao salvar
-    // online. Usa o estado em memória, não o cache do localStorage: aquele
-    // guarda só os mais recentes (ver MAX_ITENS_CACHE), e um recorte parcial
-    // aqui poderia repetir um sequencial já usado. O estado vem do Firestore,
-    // que serve a coleção inteira do próprio cache persistente mesmo offline.
+    // Sem conexão (ou falha acima): estimativa, só para não travar o
+    // preenchimento.
+    //
+    // Primeiro o último valor que este aparelho viu do contador oficial. Ele
+    // é a única fonte que respeita uma RECALIBRAÇÃO: o maior número da lista
+    // ignoraria o acerto e devolveria o sequencial dos documentos de teste
+    // que ainda estiverem guardados (a lista inclui os da lixeira).
+    const doContador = mid ? lerContadorLocal(mid, year) : null;
+    if (doContador !== null) return `${String(doContador + 1).padStart(4, '0')}/${year}`;
+
+    // Nunca esteve online neste aparelho: sobra o maior número da lista. Usa o
+    // estado em memória, não o cache do localStorage: aquele guarda só os mais
+    // recentes (ver MAX_ITENS_CACHE), e um recorte parcial aqui poderia
+    // repetir um sequencial já usado. O estado vem do Firestore, que serve a
+    // coleção inteira do próprio cache persistente mesmo offline.
     const maxSeq = intimacoes.reduce((max: number, i) => {
       const [seqPart, yearPart] = (i.numeroProcesso || '').split('/');
       if (parseInt(yearPart, 10) !== year) return max;
