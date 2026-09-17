@@ -129,6 +129,40 @@ export function RichTextEditor({
     }
   };
 
+  // COLAR ENTRA SEMPRE COMO TEXTO PURO
+  //
+  // Um contentEditable aceita, por padrão, tudo o que estiver no clipboard:
+  // fontes e tamanhos do Word, cores, tabelas, imagens embutidas em base64,
+  // <span> com estilo inline e até <script> vindo de uma página web. Num
+  // documento oficial isso é ruim de três jeitos:
+  //
+  //   - o texto colado sai com tipografia diferente do resto do termo, e o
+  //     fiscal não tem como consertar pelos botões da barra;
+  //   - a marcação vai inteira para o Firestore, e uma imagem colada em
+  //     base64 pode estourar o limite de 1 MiB do documento;
+  //   - o HTML de origem entra no PDF, onde ninguém mais revisa.
+  //
+  // Aqui só o texto atravessa. As quebras de linha são preservadas; qualquer
+  // formatação se aplica depois, pelos botões, sobre o texto já colado.
+  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    e.preventDefault();
+    const texto = e.clipboardData.getData('text/plain');
+    if (!texto) return;
+    // insertText respeita a seleção atual e entra no histórico de desfazer,
+    // diferente de mexer no innerHTML à mão.
+    document.execCommand('insertText', false, texto);
+  };
+
+  // Arrastar e soltar é o mesmo problema por outra porta: solta HTML ou a
+  // própria imagem dentro do editor, sem passar pelo colar.
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    e.preventDefault();
+    const texto = e.dataTransfer.getData('text/plain');
+    if (texto) document.execCommand('insertText', false, texto);
+  };
+
   const handleBlur = () => {
     setTimeout(() => {
         if (document.activeElement !== editorRef.current) {
@@ -278,6 +312,9 @@ export function RichTextEditor({
         ref={editorRef}
         contentEditable={!disabled}
         onInput={handleInput}
+        onPaste={handlePaste}
+        onDrop={handleDrop}
+        onDragOver={(e) => e.preventDefault()}
         onFocus={() => !disabled && setIsFocused(true)}
         onBlur={handleBlur}
         className={cn(
