@@ -56,20 +56,15 @@ export default function AutuacoesHubPage() {
       color: "#3D5A73",
       contagem: contagens.finalizadas,
     },
-  ];
-
-  // Só aparece para quem tem alguma. Uma pasta permanentemente vazia ocupa
-  // metade da fileira e ensina a ignorar aquele canto da tela.
-  if (contagens.compartilhadas > 0) {
-    cartoes.push({
+    {
       href: "/intimacoes/compartilhadas",
       label: "Compartilhadas Comigo",
       descricao: "Autuações que um colega dividiu com você para editar junto.",
       icon: Users,
       color: "#7A4F9C",
       contagem: contagens.compartilhadas,
-    });
-  }
+    },
+  ];
 
   return <MenuHub cartoes={cartoes} />;
 }

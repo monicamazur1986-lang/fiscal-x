@@ -41,8 +41,21 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
+      // Ler os COLEGAS do mesmo município, não só o próprio cadastro.
+      //
+      // Sem isso, um fiscal não conseguia listar ninguém para compartilhar a
+      // edição de uma autuação nem para encaminhar um PAS — as duas telas
+      // voltavam vazias, como se o município não tivesse mais ninguém. Só
+      // gestor e root enxergavam a equipe.
+      //
+      // O que isso expõe: nome, e-mail e papel de quem trabalha na mesma
+      // vigilância. Não há segredo nesses campos (senha nunca fica aqui), e
+      // são exatamente os dados que as duas telas precisam mostrar. O
+      // isolamento que importa continua de pé: município diferente, nada.
       allow read: if isAuthenticated() && (
-        request.auth.uid == userId || isRoot() || (isAdmin() && resource.data.municipioId == getUserData().municipioId)
+        request.auth.uid == userId
+        || isRoot()
+        || resource.data.municipioId == getUserData().municipioId
       );
 
       // Auto-cadastro (solicitar-acesso) grava o próprio doc direto do client

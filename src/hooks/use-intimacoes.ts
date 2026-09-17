@@ -17,7 +17,9 @@ import {
   query,
   orderBy,
   where,
-  runTransaction
+  runTransaction,
+  type Query,
+  type DocumentData,
 } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
@@ -92,12 +94,17 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
       // lista todo o acervo ja gravado, que nao tem esse campo — por isso as
       // duas convivem, com os resultados unidos aqui no cliente.
       const base = [collection(db, "intimacoes"), where("municipioId", "==", targetMunicipioId)] as const;
-      const consultas = (profile.role === 'admin' || profile.role === 'root')
-        ? [query(base[0], base[1], orderBy("createdAt", "desc"))]
-        : [
-            query(base[0], base[1], where("createdBy", "==", user.uid), orderBy("createdAt", "desc")),
-            query(base[0], base[1], where("compartilhadoCom", "array-contains", user.uid), orderBy("createdAt", "desc")),
-          ];
+      // `essencial` separa o que a tela precisa para funcionar do que é
+      // complemento. A consulta das compartilhadas depende de regras e índice
+      // publicados no projeto do Firebase; enquanto não estiverem, ela falha —
+      // e falhar não pode derrubar a lista do próprio fiscal junto.
+      const consultas: { essencial: boolean; q: Query<DocumentData> }[] =
+        (profile.role === 'admin' || profile.role === 'root')
+          ? [{ essencial: true, q: query(base[0], base[1], orderBy("createdAt", "desc")) }]
+          : [
+              { essencial: true, q: query(base[0], base[1], where("createdBy", "==", user.uid), orderBy("createdAt", "desc")) },
+              { essencial: false, q: query(base[0], base[1], where("compartilhadoCom", "array-contains", user.uid), orderBy("createdAt", "desc")) },
+            ];
 
       // Cada listener guarda o proprio resultado; a lista exibida e a uniao
       // dos dois. Sem isso o segundo snapshot apagaria o primeiro.
@@ -114,7 +121,9 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
         setLoading(false);
       };
 
-      const unsubscribes = consultas.map((q, indice) => onSnapshot(q, (snapshot) => {
+      const unsubscribes: (() => void)[] = [];
+      consultas.forEach(({ essencial, q }, indice) => {
+        unsubscribes[indice] = onSnapshot(q, (snapshot) => {
         porConsulta[indice] = snapshot.docs.map(doc => {
           const data = doc.data();
           return {
@@ -140,10 +149,25 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
         });
         publicar();
       }, (err) => {
-        console.warn("Firestore offline ou sem permissão, usando local.");
-        setLoading(false);
-      }));
-      return () => unsubscribes.forEach((u) => u());
+        if (!essencial) {
+          // Regras/índice ainda não publicados (firebase deploy --only
+          // firestore:rules,firestore:indexes). O fiscal continua vendo
+          // normalmente o que é dele; só as autuações que um colega
+          // compartilhou é que não aparecem. Cancela o listener para o erro
+          // não se repetir a cada tentativa de reconexão.
+          console.warn(
+            'Autuações compartilhadas indisponíveis (' + (err?.code || 'erro') + '). Publique as regras e os índices do Firestore para ativar o compartilhamento.'
+          );
+          porConsulta[indice] = [];
+          unsubscribes[indice]?.();
+          publicar();
+          return;
+        }
+          console.warn("Firestore offline ou sem permissão, usando local.");
+          setLoading(false);
+        });
+      });
+      return () => unsubscribes.forEach((u) => u?.());
     } else {
       setLoading(false);
     }

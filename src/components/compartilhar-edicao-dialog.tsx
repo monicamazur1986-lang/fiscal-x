@@ -52,6 +52,10 @@ export function CompartilharEdicaoDialog({
   const [colegas, setColegas] = useState<Colega[]>([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  // "Ninguém cadastrado" e "você não tem permissão para ver" levavam à mesma
+  // tela vazia, e as duas pedem providências opostas: uma é cadastrar o
+  // colega, a outra é publicar as regras do Firestore.
+  const [erroDeAcesso, setErroDeAcesso] = useState(false);
   const [selecionados, setSelecionados] = useState<string[]>([]);
 
   // Ao abrir, parte do que está gravado. Depois disso o estado é da caixa —
@@ -73,8 +77,13 @@ export function CompartilharEdicaoDialog({
         .map((u) => ({ uid: u.uid, nome: u.displayName || u.email || 'Sem nome', role: u.role }))
         .sort((a, b) => a.nome.localeCompare(b.nome));
       setColegas(lista);
+      setErroDeAcesso(false);
       setLoading(false);
-    }, () => setLoading(false));
+    }, (err) => {
+      console.warn('Não foi possível listar os colegas do município:', err?.code || err);
+      setErroDeAcesso(true);
+      setLoading(false);
+    });
     return () => unsubscribe();
   }, [open, profile?.municipioId, profile?.uid]);
 
@@ -119,8 +128,16 @@ export function CompartilharEdicaoDialog({
         <div className="max-h-[50vh] overflow-y-auto space-y-1.5 py-2">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-[#A39D8C]" /></div>
+          ) : erroDeAcesso ? (
+            <div className="rounded-lg border-2 border-amber-200 bg-amber-50 px-4 py-4 text-center space-y-1">
+              <p className="text-sm font-bold text-amber-900">Sem permissão para ver a equipe</p>
+              <p className="text-xs text-amber-800 leading-snug">
+                As regras do Firestore ainda não foram publicadas neste projeto, então o sistema não consegue listar os colegas do município.
+                Peça ao responsável técnico para rodar <code className="font-mono">firebase deploy --only firestore:rules</code>.
+              </p>
+            </div>
           ) : colegas.length === 0 ? (
-            <p className="text-sm text-[#6B6659] text-center py-8">Nenhum colega encontrado no seu município.</p>
+            <p className="text-sm text-[#6B6659] text-center py-8">Nenhum outro fiscal cadastrado no seu município ainda.</p>
           ) : (
             colegas.map((colega) => {
               const marcado = selecionados.includes(colega.uid);

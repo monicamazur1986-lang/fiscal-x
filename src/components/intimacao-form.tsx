@@ -316,6 +316,11 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             municipioId: main.municipioId,
             dataDocumento: main.dataDocumento,
             horaDocumento: main.horaDocumento,
+            // A vistoria de origem acompanha o anexo. O PAS nasce do Auto de
+            // Infração, e é por este campo que ele alcança o relatório de
+            // inspeção do estabelecimento — sem herdar aqui, a trilha se
+            // rompia exatamente no documento que abre o processo.
+            inspecaoId: main.inspecaoId,
             // Auto de Infração herda o relato dos fatos do documento de origem;
             // um termo sem prazo (interdição/apreensão) não — nele esse campo é
             // o texto do próprio ato, não a descrição da infração.
@@ -330,6 +335,58 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
         anexoIdRef.current = undefined;
         setHasAnexo(true);
     };
+
+    // REABRIR UMA AUTUAÇÃO QUE TEM TERMO VINCULADO
+    //
+    // O termo de apreensão/interdição é um documento PRÓPRIO, ligado ao auto
+    // por autoInfracaoVinculadaId. A tela carregava só o documento principal e
+    // nascia com hasAnexo=false, então o vinculado simplesmente sumia da tela
+    // ao dar F5 — parecia preenchimento perdido.
+    //
+    // E não era só sumir: no salvamento seguinte, persistWithAnexo grava
+    // `autoInfracaoVinculadaId: hasAnexo ? ... : ''`. Com hasAnexo falso, o
+    // próprio autosave APAGAVA o vínculo, deixando o termo órfão no banco —
+    // existindo, mas inalcançável a partir do auto que o gerou.
+    const anexoRestauradoRef = useRef(false);
+    useEffect(() => {
+        if (anexoRestauradoRef.current || hasAnexo) return;
+        const idVinculado = defaultValues?.autoInfracaoVinculadaId;
+        if (!idVinculado || intimacoes.length === 0) return;
+
+        const vinculado = intimacoes.find(i => String(i.id) === String(idVinculado));
+        if (!vinculado) return; // ainda carregando a lista, ou foi excluído
+
+        anexoRestauradoRef.current = true;
+        const { autoridades: autoridadesDoAnexo, ...camposDoAnexo } = vinculado as any;
+        anexoMethods.reset({
+            ...intimacaoSchema.parse({}),
+            ...camposDoAnexo,
+            dataIntimacao: vinculado.dataIntimacao ? new Date(vinculado.dataIntimacao) : new Date(),
+            dataRecebimento: vinculado.dataRecebimento ? new Date(vinculado.dataRecebimento) : undefined,
+        });
+        // Mesmo motivo de handleGerarAnexo: as autoridades entram por replace()
+        // do useFieldArray, não pelo reset(), senão o RHF perde os ids internos
+        // de cada linha.
+        anexoReplaceAutoridades((autoridadesDoAnexo || []).map((a: any) => ({
+            ...a,
+            municipioId: a.municipioId || '',
+            signature: a.signature || '',
+        })));
+        anexoIdRef.current = String(vinculado.id);
+        // Já existe o vínculo dos dois lados no banco; não refazer no save.
+        anexoOrigemLinkedRef.current = true;
+        setHasAnexo(true);
+    }, [defaultValues?.autoInfracaoVinculadaId, intimacoes, hasAnexo]);
+
+    // Impede o mesmo fiscal de entrar duas vezes nas autoridades de um
+    // documento. O seletor pode ser reaberto quantas vezes se quiser, e nada
+    // barrava a repetição — o documento saía com o nome duplicado e duas
+    // linhas de assinatura para a mesma pessoa.
+    const jaNaLista = (lista: any[] | undefined, a: any) =>
+        (lista || []).some((x: any) =>
+            (x.id && a.id && x.id === a.id) ||
+            (!!(x.nome || '').trim() && (x.nome || '').trim().toUpperCase() === (a.nome || '').trim().toUpperCase())
+        );
 
     const handleRemoverAnexo = () => {
         setHasAnexo(false);
@@ -803,7 +860,13 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                             setValue={setValue}
                             getValues={getValues}
                             fields={fields}
-                            onAppendAutoridade={(a) => append({ ...a, municipioId: a.municipioId || '', signature: a.signature || '' })}
+                            onAppendAutoridade={(a) => {
+                                if (jaNaLista(getValues('autoridades'), a)) {
+                                    toast({ title: "Fiscal já está na lista", description: `${a.nome} já consta nas autoridades deste documento.` });
+                                    return;
+                                }
+                                append({ ...a, municipioId: a.municipioId || '', signature: a.signature || '' });
+                            }}
                             onRemoveAutoridade={(i) => remove(i)}
                             onEditAutoridade={(i, data) => setEditingFiscal({ doc: 'main', index: i, data })}
                             isFinalized={isFinalized}
@@ -952,7 +1015,13 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                     setValue={anexoMethods.setValue}
                                     getValues={anexoMethods.getValues}
                                     fields={anexoFields}
-                                    onAppendAutoridade={(a) => anexoAppend({ ...a, municipioId: a.municipioId || '', signature: a.signature || '' })}
+                                    onAppendAutoridade={(a) => {
+                                        if (jaNaLista(anexoMethods.getValues('autoridades'), a)) {
+                                            toast({ title: "Fiscal já está na lista", description: `${a.nome} já consta nas autoridades deste termo.` });
+                                            return;
+                                        }
+                                        anexoAppend({ ...a, municipioId: a.municipioId || '', signature: a.signature || '' });
+                                    }}
                                     onRemoveAutoridade={(i) => anexoRemove(i)}
                                     onEditAutoridade={(i, data) => setEditingFiscal({ doc: 'anexo', index: i, data })}
                                     isFinalized={anexoIsFinalized}
