@@ -2526,7 +2526,10 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         });
         if (proxima && !next.includes(proxima.id)) next.push(proxima.id);
       });
-      return next;
+      // Mesma regra do clique: só a seção da vez fica aberta. Sem isto, uma
+      // seção que o fiscal tinha deixado aberta e incompleta continuaria
+      // aberta ao lado da próxima, e voltariam a ser duas.
+      return next.slice(-1);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answers]);
@@ -2543,13 +2546,21 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // deste heartbeat quebrado. isDirtyRef já é mantido corretamente por ref
   // (ver efeito abaixo, que reage a answers/observations/itemPhotos/idData/
   // introducaoHtml/conclusaoHtml), então basta confiar nele.
+  // Trava contra gravações sobrepostas. O heartbeat dispara a cada 8
+  // segundos; se uma gravação demora mais do que isso (conexão ruim), o
+  // tique seguinte começava outra por cima, e o anterior. Numa rede que não
+  // responde, isso empilhava uma escrita do mesmo documento a cada 8
+  // segundos até estourar a fila do SDK.
+  const salvandoPeloHeartbeatRef = useRef(false);
   useEffect(() => {
     if (view === 'report' || !profile) return;
     const timer = setInterval(() => {
-        if (isDirtyRef.current) {
-            handleSaveDraftRef.current?.(false);
-            setLastAutoSave(new Date());
-        }
+        if (!isDirtyRef.current || salvandoPeloHeartbeatRef.current) return;
+        salvandoPeloHeartbeatRef.current = true;
+        Promise.resolve(handleSaveDraftRef.current?.(false))
+          .catch(() => {})
+          .finally(() => { salvandoPeloHeartbeatRef.current = false; });
+        setLastAutoSave(new Date());
     }, 8000);
     return () => clearInterval(timer);
   }, [profile, view]);
@@ -3168,6 +3179,23 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // é para o brasão e a logo do cabeçalho terminarem de carregar — o
   // html2canvas fotografa o que estiver na tela, e uma imagem a meio caminho
   // sairia em branco no documento oficial.
+  // O QUE FALTA PARA O RELATÓRIO SAIR ASSINADO
+  //
+  // Sem nenhum fiscal adicionado, o campo "Equipe de Fiscalização" cai no
+  // nome de login de quem está usando o sistema — no documento isso fica
+  // idêntico a um fiscal do cadastro, e o relatório sai sem bloco de
+  // assinatura nenhum. Foi o que aconteceu no relatório da Lidiane Kuchla.
+  //
+  // Assinar não é obrigatório (há vistoria em que se colhe a assinatura
+  // depois, no papel), então isto avisa — não bloqueia.
+  const semFiscalNaEquipe = fiscais.length === 0;
+  const fiscaisSemAssinar = fiscais.filter((f: any) => !f.signature).length;
+  const avisoDeAssinatura = semFiscalNaEquipe
+    ? 'Nenhum fiscal foi adicionado à equipe. O relatório sairá com o seu nome de login no lugar da equipe e sem bloco de assinatura do fiscal.'
+    : fiscaisSemAssinar > 0
+      ? `${fiscaisSemAssinar === 1 ? 'Um fiscal da equipe ainda não assinou' : `${fiscaisSemAssinar} fiscais da equipe ainda não assinaram`}. O relatório sairá com a linha de assinatura em branco.`
+      : null;
+
   const finalizandoPelaBarraRef = useRef(false);
   useEffect(() => {
     if (!finalizarAoAbrirRelatorio || view !== 'report' || finalizandoPelaBarraRef.current) return;
@@ -3338,6 +3366,12 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                     <AlertDialogHeader>
                       <AlertDialogTitle className="font-black uppercase tracking-tighter text-xl italic">Finalizar este relatório?</AlertDialogTitle>
                       <AlertDialogDescription>O PDF é baixado no aparelho e a vistoria é encerrada no sistema — só finalizar de fato conta como concluída. Depois ainda dá pra reabrir e exportar de novo pela lista de inspeções deste roteiro, mas não pra continuar editando.</AlertDialogDescription>
+                      {avisoDeAssinatura && (
+                        <div className="mt-3 flex gap-2.5 rounded-xl border-2 border-amber-300 bg-amber-50 px-3.5 py-3">
+                          <PenTool className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+                          <p className="text-[13px] leading-snug text-amber-900">{avisoDeAssinatura}</p>
+                        </div>
+                      )}
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
@@ -3428,15 +3462,27 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                                       ) : null;
                                       const itemBody = (
                                           <>
-                                              <div className="flex items-start gap-2 mb-2 flex-wrap">
-                                                <span className="font-black text-[8pt] text-zinc-900 bg-zinc-50 h-6 px-2 flex items-center justify-center rounded shrink-0 whitespace-nowrap">ITEM {nonConformityNumber.get(item.id)}</span>
-                                                <span className={cn("text-[7.5pt] font-black uppercase px-2 h-6 flex items-center rounded border shrink-0 whitespace-nowrap", critClasses)}>{critLabel}</span>
-                                                <div className="flex-1 basis-full sm:basis-auto">
-                                                  <p className="text-[10.5pt] leading-snug text-zinc-900 font-semibold">{partirBaseLegal(item.text).requisito}</p>
-                                                  {partirBaseLegal(item.text).baseLegal && (
-                                                    <p className="text-[8pt] leading-snug text-zinc-500 mt-0.5">{partirBaseLegal(item.text).baseLegal}</p>
-                                                  )}
+                                              {/* Selos numa linha, exigência na seguinte — SEMPRE.
+
+                                                  Com `sm:basis-auto` o texto subia para o lado dos selos
+                                                  quando era curto e caía para baixo quando era longo, então
+                                                  a lista saía com dois desenhos diferentes no mesmo
+                                                  documento (no relatório da Lidiane Kuchla, os itens 7 e 16
+                                                  contra os outros dezesseis). Numa lista que se lê de cima
+                                                  a baixo, o olho usa a margem esquerda como trilho: o item
+                                                  que foge dela parece de outra categoria.
+
+                                                  A exigência também é o que mais importa ler, e ficava
+                                                  espremida no resto da linha justamente nos itens curtos. */}
+                                              <div className="mb-2">
+                                                <div className="flex items-center gap-2 mb-1.5">
+                                                  <span className="font-black text-[8pt] text-zinc-900 bg-zinc-50 h-6 px-2 flex items-center justify-center rounded shrink-0 whitespace-nowrap">ITEM {nonConformityNumber.get(item.id)}</span>
+                                                  <span className={cn("text-[7.5pt] font-black uppercase px-2 h-6 flex items-center rounded border shrink-0 whitespace-nowrap", critClasses)}>{critLabel}</span>
                                                 </div>
+                                                <p className="text-[10.5pt] leading-snug text-zinc-900 font-semibold">{partirBaseLegal(item.text).requisito}</p>
+                                                {partirBaseLegal(item.text).baseLegal && (
+                                                  <p className="text-[8pt] leading-snug text-zinc-500 mt-0.5">{partirBaseLegal(item.text).baseLegal}</p>
+                                                )}
                                               </div>
                                               {observations[item.id] && (<div className="ml-8 mb-2 p-3 bg-zinc-50 border-l-2 border-zinc-300 rounded-r-lg"><p className="text-[7pt] font-black uppercase text-zinc-400 mb-0.5">Observação do fiscal:</p><p className="text-[9.5pt] text-zinc-800 leading-relaxed whitespace-pre-wrap font-sans">{observations[item.id]}</p></div>)}
                                               {itemPhotos[item.id] && itemPhotos[item.id].length > 0 && (
@@ -3962,21 +4008,78 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   </p>
                 )}
               </div>
-              <Accordion type="multiple" value={secoesAbertas} onValueChange={setOpenSections} className="space-y-4">
+              {/* Uma seção aberta por vez. Abrir outra fecha a anterior, mesmo
+                  que ela ainda tenha pergunta sem resposta.
+
+                  Continua `type="multiple"` (e não "single") de propósito: a
+                  busca abre TODAS as seções que casam com o termo, e o modo
+                  "single" do Radix não admite mais de uma. Quem limita a uma é
+                  a regra abaixo, que só vale para o clique do fiscal — a busca
+                  passa por outro caminho (secoesFiltradas).
+
+                  Por que fechar a anterior: numa vistoria o fiscal responde de
+                  seção em seção, e com várias abertas a lista vira uma coluna
+                  longa onde a próxima pergunta some no meio do que já foi
+                  respondido — perde-se o lugar a cada rolagem. */}
+              <Accordion
+                type="multiple"
+                value={secoesAbertas}
+                onValueChange={(valores) => {
+                  const recemAberta = valores.find(v => !openSections.includes(v));
+                  // Abriu uma: fica só ela. Fechou uma: respeita o que sobrou
+                  // (senão fechar a única aberta reabriria alguma coisa).
+                  setOpenSections(recemAberta ? [recemAberta] : valores);
+                }}
+                className="space-y-4"
+              >
               {secoesVisiveis.map((secao) => {
                 // O contador é sempre o da seção INTEIRA, não o do recorte da
                 // busca — senão o distintivo mostraria "1/1" e daria a
                 // impressão de seção concluída.
                 const secaoCompleta = checklist.secoes.find(s => s.id === secao.id) ?? secao;
                 const [respondidos, totalItens] = progressoSecao(secaoCompleta);
+                // Seção vencida. A que já foi respondida inteira se fecha sozinha
+                // (ver o efeito de avanço), e a partir daí ela é só uma faixa
+                // fechada no meio de outras faixas fechadas — idêntica às que
+                // ainda faltam. Rolando uma lista de oito, não havia como saber
+                // onde se parou sem abrir uma por uma; o contador "4/4" só se lê
+                // depois de procurar por ele.
+                const secaoConcluida = totalItens > 0 && respondidos === totalItens;
                 return (
-                <AccordionItem key={secao.id} value={secao.id} ref={(el) => { sectionRefs.current[secao.id] = el; }} className="border border-[#E4DFD1] rounded-xl px-5 bg-white transition-all duration-200 hover:border-[#0E4A44]/30 data-[state=open]:border-[#0E4A44]/40 data-[state=open]:shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
+                <AccordionItem
+                  key={secao.id}
+                  value={secao.id}
+                  ref={(el) => { sectionRefs.current[secao.id] = el; }}
+                  className={cn(
+                    "border rounded-xl px-5 transition-all duration-200",
+                    "data-[state=open]:shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]",
+                    secaoConcluida
+                      // Verde de "pronto", e apagado de propósito: o trabalho que
+                      // resta é nas outras, e a concluída não deve disputar a
+                      // atenção com elas.
+                      ? "border-[#1F7A5C]/35 bg-[#F4F9F6] data-[state=open]:border-[#1F7A5C]/50"
+                      : "border-[#E4DFD1] bg-white hover:border-[#0E4A44]/30 data-[state=open]:border-[#0E4A44]/40"
+                  )}
+                >
                   <AccordionTrigger className="hover:no-underline py-4">
                     <div className="flex items-center gap-3 flex-1 text-left">
-                      <h3 className="text-sm font-black text-[#262420] border-l-4 border-primary pl-4 uppercase">{secao.titulo}</h3>
-                      <Badge className={cn("text-[10px] font-black shrink-0", respondidos === totalItens && totalItens > 0 ? "bg-[#E4EEEC] text-[#0E4A44]" : "bg-[#F1EEE4] text-[#6B6659]")}>
-                        {respondidos}/{totalItens}
-                      </Badge>
+                      <h3 className={cn(
+                        "text-sm font-black border-l-4 pl-4 uppercase",
+                        secaoConcluida ? "text-[#4A6B5E] border-[#1F7A5C]" : "text-[#262420] border-primary"
+                      )}>
+                        {secao.titulo}
+                      </h3>
+                      {secaoConcluida ? (
+                        // O símbolo lê-se antes do número: "esta está pronta" sem
+                        // precisar comparar 4 com 4.
+                        <Badge className="text-[10px] font-black shrink-0 gap-1 bg-[#1F7A5C] text-white hover:bg-[#1F7A5C]">
+                          <CheckCircle2 className="h-3 w-3" /> {respondidos}/{totalItens}
+                        </Badge>
+                      ) : (
+                        <Badge className="text-[10px] font-black shrink-0 bg-[#F1EEE4] text-[#6B6659]">
+                          {respondidos}/{totalItens}
+                        </Badge>
+                      )}
                     </div>
                   </AccordionTrigger>
                   <AccordionContent>
@@ -4521,6 +4624,12 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   <AlertDialogHeader>
                     <AlertDialogTitle className="font-black uppercase tracking-tighter text-xl italic">Finalizar este relatório?</AlertDialogTitle>
                     <AlertDialogDescription>O relatório é aberto, o PDF é baixado no aparelho e a vistoria é encerrada no sistema — só finalizar de fato conta como concluída. Depois ainda dá pra reabrir e exportar de novo pela lista de inspeções deste roteiro, mas não pra continuar editando.</AlertDialogDescription>
+                      {avisoDeAssinatura && (
+                        <div className="mt-3 flex gap-2.5 rounded-xl border-2 border-amber-300 bg-amber-50 px-3.5 py-3">
+                          <PenTool className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+                          <p className="text-[13px] leading-snug text-amber-900">{avisoDeAssinatura}</p>
+                        </div>
+                      )}
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
