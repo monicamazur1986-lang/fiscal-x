@@ -305,4 +305,14 @@ export const intimacaoSchema = z.object({
   fotoDocumento: z.string().optional().default(''),
   documentoOrigemId: z.string().optional().default(''),
   autoInfracaoVinculadaId: z.string().optional().default(''),
+  /**
+   * Vistoria que originou o documento, quando ele nasceu do botão "Gerar Termo
+   * de Intimação" do relatório de inspeção (GerarIntimacaoDialog).
+   *
+   * O diálogo já mandava este campo, mas ele não existia aqui — e z.object()
+   * descarta chave desconhecida em silêncio, então o vínculo nunca chegava ao
+   * banco. É por ele que o PAS alcança o relatório de inspeção do
+   * estabelecimento a partir do Auto de Infração.
+   */
+  inspecaoId: z.string().optional().default(''),
 });

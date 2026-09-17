@@ -60,6 +60,12 @@ export type Intimacao = {
   municipioId?: string;
   documentoOrigemId?: string;
   autoInfracaoVinculadaId?: string;
+  /** Vistoria que originou este documento — ver schema.ts. */
+  inspecaoId?: string;
+  /** Bens alcançados pela medida — só nos termos de apreensão/inutilização.
+   *  Estava no schema e era gravado, mas faltava aqui. */
+  itensApreendidos?: { produto: string; marcaLote: string; quantidade: string; unidade: string; extras?: Record<string, string> }[];
+  itensApreendidosColunas?: string[];
   /** Id do PAS (Processo Administrativo Sanitário) já aberto a partir deste
    * Auto de Infração — evita abrir um segundo PAS pro mesmo AI. */
   pasId?: string | null;
