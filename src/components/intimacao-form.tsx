@@ -23,6 +23,7 @@ import { format } from "date-fns"
 
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
+import { cn } from "@/lib/utils"
 import { useIntimacoes } from "@/hooks/use-intimacoes"
 import { CompartilharEdicaoDialog, type ColegaCompartilhado } from "@/components/compartilhar-edicao-dialog"
 import { useInspecoes } from "@/hooks/use-inspecoes"
@@ -853,29 +854,41 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                         já tinha esse problema e foi trazida para cá pelo mesmo
                         motivo. */}
                     {!isReadOnlyRender && (
-                        <div className="no-print max-w-[210mm] mx-auto my-8 px-5 py-4 rounded-2xl border border-[#E4DFD1] bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div className="min-w-0">
-                                <p className="font-serif text-base text-[#262420] flex items-center gap-2">
-                                    <Users className="h-4 w-4 text-primary shrink-0" /> Edição compartilhada
-                                </p>
-                                <p className="text-xs text-[#6B6659] mt-1">
-                                    {compartilhadoCom.length === 0
-                                        ? 'Só você edita esta autuação. Compartilhe para um colega fiscal preencher e finalizar junto.'
-                                        : `Editando com ${compartilhadoCom.map(c => c.nome).join(', ')}.`}
-                                </p>
-                                {!souOAutor && (
-                                    <p className="text-[11px] text-[#9C7A3C] mt-1 font-medium">
-                                        Compartilhada com você por {gravada?.createdByName || 'um colega'} — você edita e finaliza, mas quem apaga é o autor.
+                        <div className={cn(
+                            "no-print max-w-[210mm] mx-auto my-8 px-5 py-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors",
+                            // Roxo, e não o verde do sistema: o cartão de
+                            // vinculação logo abaixo já usa o verde em destaque, e
+                            // dois blocos gritando na mesma cor deixam de ser
+                            // destaque. O roxo é o mesmo da pasta "Compartilhadas
+                            // Comigo", então a cor já quer dizer "colega".
+                            compartilhadoCom.length > 0
+                                ? "border-2 border-[#7A4F9C]/50 bg-[#F6F1FB] ring-4 ring-[#7A4F9C]/10"
+                                : "border-2 border-[#7A4F9C]/35 bg-white ring-4 ring-[#7A4F9C]/5"
+                        )}>
+                            <div className="min-w-0 flex items-start gap-3">
+                                <div className="h-10 w-10 shrink-0 rounded-xl bg-[#F0E9F7] text-[#7A4F9C] flex items-center justify-center">
+                                    <Users className="h-5 w-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="font-serif text-base text-[#5B3A75]">Edição compartilhada</p>
+                                    <p className="text-xs text-[#6B6659] mt-1">
+                                        {compartilhadoCom.length === 0
+                                            ? 'Só você edita esta autuação. Compartilhe para um colega fiscal preencher e finalizar junto.'
+                                            : `Editando com ${compartilhadoCom.map(c => c.nome).join(', ')}.`}
                                     </p>
-                                )}
+                                    {!souOAutor && (
+                                        <p className="text-[11px] text-[#9C7A3C] mt-1 font-medium">
+                                            Compartilhada com você por {gravada?.createdByName || 'um colega'} — você edita e finaliza, mas quem apaga é o autor.
+                                        </p>
+                                    )}
+                                </div>
                             </div>
                             {souOAutor && (
                                 <Button
                                     type="button"
                                     onClick={abrirCompartilhar}
                                     disabled={abrindoCompartilhar || isFinalized}
-                                    variant="outline"
-                                    className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 h-11 px-5 shrink-0 border-primary/30 text-primary hover:bg-[#E4EEEC]"
+                                    className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 h-12 px-6 shrink-0 bg-[#7A4F9C] text-white shadow-md hover:bg-[#693F8A]"
                                 >
                                     {abrindoCompartilhar ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
                                     {compartilhadoCom.length === 0 ? 'Compartilhar' : 'Gerenciar'}

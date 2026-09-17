@@ -250,32 +250,61 @@ function SeletorModalidadeIntimacao({
   ];
 
   return (
-    <div className="no-print border-b border-dashed border-[#E4DFD1] bg-[#FAF8F3] px-3 py-2.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[9px] font-black uppercase tracking-widest text-[#A39D8C] shrink-0">Modalidade</span>
+    // A faixa fica acesa (anel e fundo em cor) enquanto a escolha não foi
+    // feita: é uma decisão que muda o que o documento determina, e a versão
+    // discreta passava despercebida — o fiscal saía com o texto padrão sem
+    // saber que havia outro. Escolhida, ela se apaga e vira só um registro do
+    // que está valendo, para não competir com o texto do termo.
+    <div className={cn(
+      "no-print px-3 py-3 border-b border-dashed transition-colors",
+      atual === null
+        ? "border-[#0E4A44]/30 bg-[#E4EEEC] ring-2 ring-inset ring-[#0E4A44]/20"
+        : "border-[#E4DFD1] bg-[#FAF8F3]"
+    )}>
+      <p className="text-[9px] font-black uppercase tracking-widest text-[#0E4A44] mb-2">
+        Modalidade da intimação {atual === null && <span className="text-[#9C7A3C]">— escolha uma</span>}
+      </p>
+
+      {/* Cada opção leva a consequência escrita, não escondida num balãozinho:
+          a diferença entre as duas é o estabelecimento continuar aberto ou não. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {botoes.map((b) => (
           <button
             key={b.chave}
             type="button"
-            title={b.ajuda}
             onClick={() => onEscolher(opcoes[b.chave])}
             className={cn(
-              "rounded-lg border px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-colors",
+              "rounded-lg border-2 px-3 py-2.5 text-left transition-all",
               atual === b.chave
-                ? "border-[#0E4A44] bg-[#0E4A44] text-white"
-                : "border-[#E4DFD1] bg-white text-[#6B6659] hover:border-[#0E4A44]/40 hover:bg-white"
+                ? "border-[#0E4A44] bg-[#0E4A44] text-white shadow-md"
+                : "border-[#E4DFD1] bg-white hover:border-[#0E4A44]/50 hover:bg-[#F5F2EA]"
             )}
           >
-            {b.rotulo}
+            <span className={cn(
+              "flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest",
+              atual === b.chave ? "text-white" : "text-[#0E4A44]"
+            )}>
+              {atual === b.chave && <Check className="h-3.5 w-3.5 shrink-0" />}
+              {b.rotulo}
+            </span>
+            <span className={cn(
+              "mt-1 block text-[10px] leading-snug",
+              atual === b.chave ? "text-white/85" : "text-[#6B6659]"
+            )}>
+              {b.ajuda}
+            </span>
           </button>
         ))}
-        {atual === null && valorAtual && (
-          <span className="text-[10px] text-[#A39D8C] italic">texto editado à mão</span>
-        )}
       </div>
+
+      {atual === null && valorAtual && (
+        <p className="mt-2 text-[10px] text-[#6B6659] italic">
+          O texto abaixo foi editado à mão — escolher uma modalidade vai substituí-lo.
+        </p>
+      )}
       {atual === 'cessar' && (
-        <p className="mt-2 text-[10px] leading-snug text-[#9C7A3C]">
-          Havendo <strong>risco iminente</strong> à saúde, o instrumento não é este: é o Termo de Interdição.
+        <p className="mt-2 rounded-md bg-amber-50 border border-amber-200 px-2.5 py-2 text-[10px] leading-snug text-amber-900">
+          Havendo <strong>risco iminente</strong> à saúde, o instrumento não é este: é o <strong>Termo de Interdição</strong>.
           A intimação é o documento previsto justamente para quando esse risco não existe.
         </p>
       )}
