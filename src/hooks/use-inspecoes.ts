@@ -22,7 +22,17 @@ import { normalizeId } from '@/lib/utils';
 import { lerCacheColecao, salvarCacheColecao } from '@/lib/cache-colecao-local';
 import { attemptFirestoreWrite } from '@/lib/firestore-offline';
 const LOCAL_STORAGE_KEY = 'fiscal_x_inspecoes';
-const PENDING_SYNC_KEY = 'fiscal_x_inspecoes_pending_sync';
+// Chave v2. A v1 espelhava a fila do próprio Firestore: toda gravação sem
+// confirmação em 4 segundos entrava aqui, inclusive as que o SDK já tinha
+// aceitado e ia reenviar sozinho. O conteúdo daquela fila é, por construção,
+// duplicata do que o SDK já tem — e reenviá-la a cada abertura do app era o
+// que mantinha a fila de 500 escritas do Firestore permanentemente cheia.
+//
+// Trocar a chave abandona aquele conteúdo de uma vez. Não há perda: o que
+// estava lá ou já foi gravado, ou continua na fila do SDK, que é quem
+// sempre foi o dono do reenvio.
+const PENDING_SYNC_KEY = 'fiscal_x_inspecoes_pending_sync_v2';
+const PENDING_SYNC_KEY_LEGADO = 'fiscal_x_inspecoes_pending_sync';
 
 // Guarda `docData` (datas em string ISO, seguro pra JSON), nunca o `fbData`
 // já convertido em Timestamp do Firestore — um Timestamp vira um objeto comum
@@ -34,6 +44,8 @@ type PendingWrite = { id: string; docData: any };
 
 function loadPendingWrites(): Record<string, PendingWrite> {
   try {
+    // Descarta a fila v1 na primeira leitura, para ela parar de ser reenviada.
+    localStorage.removeItem(PENDING_SYNC_KEY_LEGADO);
     return JSON.parse(localStorage.getItem(PENDING_SYNC_KEY) || '{}');
   } catch (e) {
     return {};
@@ -91,23 +103,57 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
   const [needsMunicipioSelection, setNeedsMunicipioSelection] = useState(false);
   const [pendingSyncIds, setPendingSyncIds] = useState<string[]>(() => Object.keys(loadPendingWrites()));
   const pendingWritesRef = useRef<Record<string, PendingWrite>>(loadPendingWrites());
+  const reenviandoRef = useRef(false);
+  // Liga quando o SDK recusa por fila cheia; desliga o reenvio local até o
+  // app ser recarregado.
+  const sdkSobrecarregadoRef = useRef(false);
+  const ultimoReenvioRef = useRef(0);
 
   const tentarReenviarPendentes = useCallback(async () => {
     if (!db) return;
+    // Duas guardas contra reenvio em rajada: uma execução por vez, e nunca
+    // mais de uma por minuto. Sem elas, abrir/navegar várias telas disparava
+    // o reenvio de toda a fila a cada montagem.
+    if (reenviandoRef.current || sdkSobrecarregadoRef.current) return;
+    if (Date.now() - ultimoReenvioRef.current < 60000) return;
+
     const pending = pendingWritesRef.current;
     const ids = Object.keys(pending);
     if (ids.length === 0) return;
 
+    reenviandoRef.current = true;
+    ultimoReenvioRef.current = Date.now();
+    try {
+
+    // Mesmo motivo de saveInspecao: com `await setDoc` puro, um servidor que
+    // não responde travava este laço no primeiro id — os demais nunca eram
+    // reenviados e a fila nunca esvaziava.
     for (const id of ids) {
       try {
-        await setDoc(doc(db, "inspecoes", id), buildFirestorePayload(pending[id].docData), { merge: true });
-        delete pendingWritesRef.current[id];
-      } catch (e) {
-        // Continua offline/com erro — mantém na fila pra tentar de novo depois.
+        const r = await attemptFirestoreWrite(setDoc(doc(db, "inspecoes", id), buildFirestorePayload(pending[id].docData), { merge: true }));
+        // Só sai da fila caseira com confirmação do servidor. Enfileirado no
+        // SDK não é o mesmo que gravado.
+        if (r.synced) delete pendingWritesRef.current[id];
+      } catch (e: any) {
+        // A fila do SDK está cheia (500 gravações não confirmadas). Insistir
+        // só produz o mesmo erro no console a cada tentativa e atrasa ainda
+        // mais o que já está na fila — desiste pelo resto da sessão.
+        if (e?.code === 'resource-exhausted') {
+          sdkSobrecarregadoRef.current = true;
+          console.warn(
+            'Fila de gravações do Firestore cheia. O reenvio local foi suspenso nesta sessão. ' +
+            'Para destravar: DevTools > Application > Storage > Clear site data (as gravações ainda não confirmadas se perdem).'
+          );
+          break;
+        }
+        // Offline ou erro passageiro — mantém na fila pra tentar depois.
       }
     }
-    savePendingWrites(pendingWritesRef.current);
-    setPendingSyncIds(Object.keys(pendingWritesRef.current));
+      savePendingWrites(pendingWritesRef.current);
+      setPendingSyncIds(Object.keys(pendingWritesRef.current));
+    } finally {
+      reenviandoRef.current = false;
+    }
   }, []);
 
   useEffect(() => {
@@ -268,18 +314,52 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
     const fbData = buildFirestorePayload(docData);
 
     let synced = false;
+    // Entregue ao SDK do Firestore? Então ele é o dono do reenvio. Isto é
+    // diferente de `synced`: entregue mas sem confirmação ainda é dele.
+    let entregueAoSdk = false;
     if (db && !configError && navigator.onLine) {
       try {
-        await setDoc(doc(db, "inspecoes", targetId), fbData, { merge: true });
-        synced = true;
+        // attemptFirestoreWrite, e não `await setDoc` puro.
+        //
+        // Com a persistência ligada, a Promise do setDoc só resolve quando o
+        // SERVIDOR confirma — e `navigator.onLine` não ajuda, porque ele diz
+        // que há Wi-Fi, não que o Firestore está alcançável. Quando o servidor
+        // não responde, o await ficava pendente para sempre, quem chamou nunca
+        // marcava o rascunho como salvo, e o heartbeat de 8 segundos do roteiro
+        // disparava OUTRA gravação do mesmo documento. A cada 8 segundos mais
+        // uma, até estourar a fila de 500 escritas do SDK:
+        // "Write stream exhausted maximum allowed queued writes".
+        //
+        // Passados 4 segundos sem confirmação, a gravação é dada como
+        // enfileirada (synced: false) — ela continua guardada em IndexedDB e o
+        // próprio SDK reenvia. Erro de verdade (permissão, validação) chega bem
+        // antes disso e continua caindo no catch.
+        const promessa = setDoc(doc(db, "inspecoes", targetId), fbData, { merge: true });
+        // A partir daqui a gravação já está em IndexedDB, na fila do próprio
+        // SDK. Mesmo que a confirmação demore ou nunca venha nesta sessão, ela
+        // será reenviada sozinha — não pode ser reenviada por nós também.
+        entregueAoSdk = true;
+        const r = await attemptFirestoreWrite(promessa);
+        synced = r.synced;
       } catch (e) {
+        // Rejeição de verdade (permissão, validação): o SDK descartou a
+        // gravação, então ela volta a ser nossa.
+        entregueAoSdk = false;
         console.warn("Falha ao persistir inspeção no Firebase:", e);
       }
     }
 
-    if (!synced) {
-      // Guarda pra reenviar assim que a conexão voltar — sem isso, o
-      // agendamento ficaria só neste aparelho e sumiria no próximo snapshot.
+    // A FILA CASEIRA SÓ GUARDA O QUE O SDK NUNCA RECEBEU
+    //
+    // Antes, toda gravação sem confirmação em 4 segundos entrava aqui —
+    // inclusive as que o SDK já tinha aceitado e ia reenviar sozinho. O
+    // resultado era uma segunda fila espelhando a primeira, e
+    // tentarReenviarPendentes reenfileirava TODAS a cada carregamento da
+    // página. Com a fila do SDK cheia nada confirmava, nada saía daqui, e
+    // cada abertura do app somava mais N escritas: a fila de 500 nunca
+    // esvaziava e o Firestore passava a recusar tudo com
+    // "Write stream exhausted maximum allowed queued writes".
+    if (!synced && !entregueAoSdk) {
       pendingWritesRef.current[targetId] = { id: targetId, docData };
       savePendingWrites(pendingWritesRef.current);
       setPendingSyncIds(Object.keys(pendingWritesRef.current));
