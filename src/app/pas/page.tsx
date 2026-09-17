@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Suspense } from "react"
-import { Scale, Plus, Loader2, Inbox, ChevronRight, Timer, Building2 } from "lucide-react"
+import { Plus, Loader2, ChevronRight, Building2 } from "lucide-react"
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
@@ -12,8 +12,7 @@ import { usePas } from "@/hooks/use-pas"
 import { useIntimacoes } from "@/hooks/use-intimacoes"
 import { useAuth } from "@/hooks/use-auth"
 import { useToast } from "@/hooks/use-toast"
-import { calculateDeadline } from "@/lib/prazo"
-import { PAS_FASE_LABEL, PAS_FASE_COR } from "@/lib/pas-textos-padrao"
+import { agruparProcessos, CartaoPas, SecaoPas, VazioPas } from "@/components/pas/lista-pas"
 import { cn } from "@/lib/utils"
 import municipiosPR from "@/lib/municipios-pr.json"
 
@@ -34,6 +33,12 @@ function PasPageInner() {
 
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+
+  // A lista era cronológica e plana: num município com trinta processos
+  // abertos, descobrir de qual cuidar exigia abrir um por um. O que decide a
+  // ordem num PAS não é a data — é prazo vencido, é estar encaminhado para
+  // você, é estar parado esperando julgamento.
+  const grupos = useMemo(() => agruparProcessos(processos, profile?.uid), [processos, profile?.uid]);
 
   // Autos de Infração finalizados que ainda não têm PAS aberto — candidatos
   // a virar processo novo (o PAS, no manual, sempre nasce de um AI).
@@ -118,48 +123,16 @@ function PasPageInner() {
         ) : loading ? (
           <div className="flex items-center justify-center py-20 text-[#A39D8C]"><Loader2 className="h-5 w-5 animate-spin" /></div>
         ) : processos.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-20 text-center border border-dashed border-[#E4DFD1] rounded-lg bg-white">
-            <Inbox className="h-8 w-8 text-[#A39D8C]" />
-            <p className="text-sm text-[#6B6659]">
-              {isRoot ? "Nenhum PAS aberto neste município." : 'Nenhum PAS aberto ainda. Toque em "Abrir PAS" pra iniciar um a partir de um Auto de Infração já finalizado.'}
-            </p>
-          </div>
+          <VazioPas isRoot={isRoot} />
         ) : (
-          <div className="space-y-2">
-            {processos.map((p) => {
-              const deadline = p.prazoDefesaData ? calculateDeadline({ status: 'finalizado', dataIntimacao: p.dataCienciaAI, prazoDias: 15 }) : null;
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => router.push(`/pas/${p.id}`)}
-                  className="w-full flex items-center gap-3 bg-white border border-[#E4DFD1] rounded-lg p-4 shadow-[0_1px_2px_rgba(38,36,32,0.04)] hover:border-[#7A2E3B]/30 hover:shadow-md transition-all text-left"
-                >
-                  <div className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0 bg-[#7A2E3B]/10 text-[#7A2E3B]">
-                    <Scale className="h-5 w-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-serif text-[15px] text-[#262420]">PAS — AI nº {p.numeroProcesso}</p>
-                      <Badge variant="outline" className={cn("text-[10px] font-medium h-5 px-2 border-none", PAS_FASE_COR[p.fase])}>{PAS_FASE_LABEL[p.fase]}</Badge>
-                    </div>
-                    <p className="text-xs text-[#8A8474] truncate">
-                      {p.estabelecimento.fantasia}
-                      {p.responsavelAtualNome && <span className="text-violet-700"> — encaminhado para {p.responsavelAtualNome}</span>}
-                    </p>
-                  </div>
-                  {deadline && p.fase === 'instrucao' && !p.defesa && (
-                    <div className={cn(
-                      "flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded shrink-0",
-                      deadline.status === 'vencido' ? "bg-rose-50 text-rose-700" : deadline.status === 'alerta' ? "bg-amber-50 text-amber-700" : "bg-[#E4EEEC] text-[#0E4A44]"
-                    )}>
-                      <Timer className="h-3 w-3" />
-                      {deadline.remaining < 0 ? `Prazo vencido há ${Math.abs(deadline.remaining)}d` : `Defesa: ${deadline.remaining}d`}
-                    </div>
-                  )}
-                  <ChevronRight className="h-4 w-4 text-[#C4BEAC] shrink-0" />
-                </button>
-              );
-            })}
+          <div className="space-y-8">
+            {grupos.map((grupo) => (
+              <SecaoPas key={grupo.chave} grupo={grupo}>
+                {grupo.processos.map((p) => (
+                  <CartaoPas key={p.id} pas={p} onAbrir={() => router.push(`/pas/${p.id}`)} />
+                ))}
+              </SecaoPas>
+            ))}
           </div>
         )}
       </div>

@@ -7,7 +7,9 @@ import { ptBR } from "date-fns/locale"
 import {
   Loader2, Timer, FileStack, Send, Paperclip, CheckCircle2,
   AlertTriangle, ChevronDown, Download, X, FileDown, Landmark, Pencil, Trash2,
+  Sparkles, MoreHorizontal,
 } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -96,13 +98,130 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const { profile } = useAuth();
   const { processos, loading: loadingPas, atualizarPas, excluirPas } = usePas();
   const { pecas, loading: loadingPecas, adicionarPeca, adicionarPecas, excluirPeca } = usePasPecas(id);
-  const { saveInspecao, deleteInspecao } = useInspecoes();
-  const { updateIntimacaoMeta } = useIntimacoes();
+  const { inspecoes, saveInspecao, deleteInspecao } = useInspecoes();
+  const { intimacoes, updateIntimacaoMeta } = useIntimacoes();
   const { config } = useAppConfig({ municipioIdOverride: profile?.municipioId });
 
   const pas = useMemo(() => processos.find(p => p.id === id), [processos, id]);
   const isGestor = profile?.role === 'admin' || profile?.role === 'root';
   const isAutuante = pas?.autuanteUid === profile?.uid;
+
+  // A TRILHA ATÉ A VISTORIA
+  //
+  // O PAS nasce do Auto de Infração; o Auto guarda o id da inspeção que o
+  // originou (campo inspecaoId, herdado do Termo de Intimação gerado pelo
+  // relatório). É por aqui que o processo alcança os itens não conformes
+  // apurados em campo, em vez de depender do fiscal redigitá-los.
+  const autoInfracao = useMemo(
+    () => intimacoes.find(i => String(i.id) === String(pas?.autoInfracaoId)),
+    [intimacoes, pas?.autoInfracaoId]
+  );
+  const termoVinculado = useMemo(() => {
+    const idVinculado = autoInfracao?.documentoOrigemId || autoInfracao?.autoInfracaoVinculadaId;
+    if (!idVinculado) return undefined;
+    const t = intimacoes.find(i => String(i.id) === String(idVinculado));
+    if (!t) return undefined;
+    return {
+      tipo: t.tipoTermo || 'Termo vinculado',
+      numero: t.numeroProcesso,
+      teor: (t.teor || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(),
+      itens: (t.itensApreendidos || [])
+        .map((b: any) => [b.produto, b.marcaLote, b.quantidade && `${b.quantidade} ${b.unidade || ''}`.trim()].filter(Boolean).join(' — '))
+        .filter(Boolean),
+    };
+  }, [intimacoes, autoInfracao?.documentoOrigemId, autoInfracao?.autoInfracaoVinculadaId]);
+
+  const inspecaoOrigem = useMemo(() => {
+    const idInspecao = autoInfracao?.inspecaoId;
+    return idInspecao ? inspecoes.find(i => String(i.id) === String(idInspecao)) : undefined;
+  }, [inspecoes, autoInfracao?.inspecaoId]);
+
+  // Itens reprovados do roteiro, já no formato que o flow espera. O relatório
+  // guarda as respostas em checklistData; "NAO" é a reprovação.
+  const naoConformidades = useMemo(() => {
+    const dados: any = inspecaoOrigem?.checklistData;
+    if (!dados?.answers) return [] as { requisito: string; observacao?: string }[];
+    return Object.entries(dados.answers as Record<string, any>)
+      .filter(([, resposta]) => resposta === 'NAO')
+      .map(([itemId]) => ({
+        requisito: itemId,
+        observacao: typeof dados.observations?.[itemId] === 'string' ? dados.observations[itemId] : undefined,
+      }));
+  }, [inspecaoOrigem]);
+
+  const [isGerandoIa, setIsGerandoIa] = useState(false);
+  // Lembra se o conteúdo atual do campo saiu da IA, para não realimentá-la
+  // com a própria saída na tentativa seguinte.
+  const geradoPelaIaRef = useRef(false);
+
+  // Redação assistida. Compõe a partir do que o sistema já sabe — auto de
+  // infração, itens não conformes da vistoria, peças dos autos, prazos — e
+  // devolve rascunho: nada é gravado aqui, o texto cai nos campos da tela
+  // para a autoridade ler, corrigir e só então emitir.
+  const handleGerarComIa = async (etapa: 'instrucao' | 'julgamento') => {
+    if (!pas || !profile) return;
+    setIsGerandoIa(true);
+    try {
+      const { gerarInstrucaoPas } = await import('@/ai/flows/gerar-instrucao-pas');
+      const dados: any = inspecaoOrigem?.checklistData;
+      const r = await gerarInstrucaoPas({
+        uid: profile.uid,
+        etapa,
+        numeroProcesso: pas.numeroProcesso,
+        estabelecimento: pas.estabelecimento.fantasia,
+        cnpj: pas.estabelecimento.cnpj,
+        endereco: pas.estabelecimento.endereco,
+        teorAutoInfracao: (autoInfracao?.teor || '').replace(/<[^>]*>/g, ' ').replace(/s+/g, ' ').trim(),
+        legislacaoBase: autoInfracao?.legislacaoBase,
+        dataCiencia: pas.dataCienciaAI ? format(new Date(pas.dataCienciaAI), "dd/MM/yyyy") : undefined,
+        naoConformidades,
+        conclusaoInspecao: (dados?.conclusaoHtml || '').replace(/<[^>]*>/g, ' ').replace(/s+/g, ' ').trim() || undefined,
+        defesa: {
+          apresentada: !!pas.defesa,
+          tempestividade: pas.defesa?.tempestividade,
+          recebidaEm: pas.defesa?.recebidaEm ? format(new Date(pas.defesa.recebidaEm), "dd/MM/yyyy") : undefined,
+        },
+        termoVinculado,
+        antecedentes: antecedentes.trim() || undefined,
+        quantidadeProvas: provasSelecionadas.length,
+        pecas: pecas.map(pc => pc.titulo),
+        // Só entra como nota se o fiscal escreveu algo À MÃO. Depois de uma
+        // geração, o campo guarda o próprio rascunho da IA — reenviá-lo faria
+        // o modelo reescrever em cima do que ele mesmo produziu, acumulando
+        // desvios a cada nova tentativa.
+        notasDoFiscal: geradoPelaIaRef.current ? undefined : (fatos.trim() || undefined),
+      });
+
+      if (r.error) {
+        toast({ variant: "destructive", title: "Não foi possível gerar", description: r.error });
+        return;
+      }
+
+      // O rascunho vem em HTML; os campos da tela são textarea. A conversão
+      // preserva as quebras de parágrafo e descarta o resto da marcação — a
+      // formatação de verdade acontece depois, no editor da revisão.
+      const comoTexto = (html?: string) => (html || '')
+        .replace(/<\/p>|<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]*>/g, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+
+      if (etapa === 'julgamento') {
+        if (r.julgamentoFundamentacaoHtml) setJulgamentoFundamentacao(comoTexto(r.julgamentoFundamentacaoHtml));
+        if (r.julgamentoDecisaoHtml) setJulgamentoDecisao(comoTexto(r.julgamentoDecisaoHtml));
+        toast({ title: "Rascunho do julgamento gerado", description: "Revise cada afirmação antes de emitir — a decisão é ato seu, não da IA." });
+      } else {
+        setFatos(comoTexto(r.relatorioInstrucaoHtml));
+        geradoPelaIaRef.current = true;
+        toast({ title: "Rascunho do relatório gerado", description: "Confira os fatos e os artigos citados antes de registrar." });
+      }
+    } catch (e) {
+      console.error('Erro na redação assistida do PAS:', e);
+      toast({ variant: "destructive", title: "Erro ao gerar o rascunho" });
+    } finally {
+      setIsGerandoIa(false);
+    }
+  };
 
   const [isSalvandoRelatorio, setIsSalvandoRelatorio] = useState(false);
   const [isDefesaDialogOpen, setIsDefesaDialogOpen] = useState(false);
@@ -637,9 +756,19 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         const url = await uploadArquivoPas(pas.id, file);
         itensProva.push({ tipo: 'termo_juntada' as const, titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: textoTermoJuntadaProva(file.name), anexoUrl: url });
       }
+      // O texto já chega estruturado (a IA escreve as seções, ou o fiscal
+      // escreve como quiser). Embrulhar em "1. DOS FATOS" duplicava o
+      // cabeçalho que o próprio texto traz. Os antecedentes continuam como
+      // seção à parte porque são digitados num campo à parte.
+      const comoParagrafos = (texto: string) => texto
+        .split(/\n{2,}/)
+        .map(bloco => bloco.trim())
+        .filter(Boolean)
+        .map(bloco => `<p>${bloco.replace(/\n/g, '<br>')}</p>`)
+        .join('');
       const relatorioHtml = [
-        `<p><strong>1. DOS FATOS</strong></p><p>${fatos.replace(/\n/g, '<br>')}</p>`,
-        antecedentes.trim() ? `<p><strong>2. DOS ANTECEDENTES</strong></p><p>${antecedentes.replace(/\n/g, '<br>')}</p>` : '',
+        comoParagrafos(fatos),
+        antecedentes.trim() ? `<p><strong>DOS ANTECEDENTES</strong></p>${comoParagrafos(antecedentes)}` : '',
       ].filter(Boolean).join('');
 
       setRevisao({
@@ -858,31 +987,51 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         <div className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2 px-1">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Autos do processo</h2>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Button type="button" variant="outline" size="sm" onClick={handleBaixarEtiquetaCapa} disabled={isBaixandoCapa} className="h-7 rounded-md text-[11px] gap-1.5 text-[#6B6659]">
-                {isBaixandoCapa ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />} Etiqueta de Capa
-              </Button>
-              {pecas.length > 0 && (
-                <Button type="button" variant="outline" size="sm" onClick={handleBaixarProcessoCompleto} disabled={isBaixandoPdf} className="h-7 rounded-md text-[11px] gap-1.5 text-[#6B6659]">
-                  {isBaixandoPdf && nomeArquivoBaixar === "Processo Completo" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />} Processo Completo
-                </Button>
-              )}
-              {etapasParaDownload.map((etapa) => (
-                <Button
-                  key={etapa.key}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => iniciarDownload(etapa.pecas, etapa.label)}
-                  disabled={isBaixandoPdf}
-                  className="h-7 rounded-md text-[11px] gap-1.5 text-[#6B6659]"
-                >
-                  {isBaixandoPdf && nomeArquivoBaixar === etapa.label ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />} {etapa.label}
-                </Button>
-              ))}
+            {/* UMA ação à vista, o resto atrás de um menu.
+
+                Eram até seis botões iguais em fileira — "Processo Completo"
+                tinha o mesmo peso visual de "Etapa 2", e a linha virava uma
+                parede de retângulos idênticos. Baixar o processo completo é o
+                que se faz quase sempre; baixar uma etapa isolada é exceção.
+
+                A "Etiqueta de Capa" saiu da linha de frente: é a folha para
+                colar na pasta FÍSICA, e este módulo existe para a tramitação
+                ser online. Segue no menu, para quem ainda monta a pasta. */}
+            <div className="flex items-center gap-2">
               {isBaixandoPdf && progressoPdf && (
                 <span className="text-[11px] text-[#6B6659] tabular-nums">folha {progressoPdf}</span>
               )}
+              {pecas.length > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleBaixarProcessoCompleto}
+                  disabled={isBaixandoPdf}
+                  className="h-9 rounded-lg gap-2 text-xs font-bold bg-[#0E4A44] hover:bg-[#0B3A35]"
+                >
+                  {isBaixandoPdf && nomeArquivoBaixar === "Processo Completo" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+                  Baixar processo
+                </Button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="outline" size="sm" className="h-9 w-9 rounded-lg p-0 shrink-0" title="Outros downloads">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  {etapasParaDownload.map((etapa) => (
+                    <DropdownMenuItem key={etapa.key} disabled={isBaixandoPdf} onClick={() => iniciarDownload(etapa.pecas, etapa.label)} className="gap-2 text-xs">
+                      <FileDown className="h-4 w-4 shrink-0 text-[#A39D8C]" /> {etapa.label}
+                    </DropdownMenuItem>
+                  ))}
+                  {etapasParaDownload.length > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuItem disabled={isBaixandoCapa} onClick={handleBaixarEtiquetaCapa} className="gap-2 text-xs">
+                    {isBaixandoCapa ? <Loader2 className="h-4 w-4 animate-spin" /> : <Landmark className="h-4 w-4 shrink-0 text-[#A39D8C]" />}
+                    Etiqueta de capa (pasta física)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
           {pecas.length === 0 ? (
@@ -913,18 +1062,18 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleBaixarPeca(peca); }}
                       disabled={isBaixandoPdf}
                       title="Baixar PDF desta peça"
-                      className="h-7 w-7 rounded-md flex items-center justify-center text-[#6B6659] hover:text-[#0E4A44] hover:bg-[#E4EEEC] transition-colors shrink-0 disabled:opacity-50"
+                      className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC] hover:border-[#0E4A44]/40 transition-colors shrink-0 disabled:opacity-50"
                     >
-                      {isBaixandoPdf && pecasParaBaixar?.length === 1 && pecasParaBaixar[0].id === peca.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+                      {isBaixandoPdf && pecasParaBaixar?.length === 1 && pecasParaBaixar[0].id === peca.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <FileDown className="h-5 w-5" />}
                     </button>
                     {podeExcluirPeca && (
                       <button
                         type="button"
                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPecaParaExcluir(peca); }}
                         title="Excluir esta peça dos autos"
-                        className="h-7 w-7 rounded-md flex items-center justify-center text-[#A39D8C] hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0"
+                        className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-rose-500 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-colors shrink-0"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-5 w-5" />
                       </button>
                     )}
                     <ChevronDown className="h-4 w-4 text-[#C4BEAC] shrink-0 transition-transform group-open:rotate-180" />
@@ -1028,9 +1177,55 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                   {!temRelatorioInstrucao && (
                     <div className="space-y-3 mt-2">
                       <p className="text-xs text-[#A39D8C]">Pode preencher a qualquer momento — não precisa esperar o despacho de instrução.</p>
+
+                      {/* Redação assistida. Fica acima do campo porque é por onde
+                          a maioria vai começar; quem prefere escrever do zero
+                          simplesmente ignora e digita abaixo. */}
+                      <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3 space-y-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-violet-900">Redigir com IA</p>
+                            <p className="text-[11px] text-violet-800/80 leading-snug mt-0.5">
+                              {inspecaoOrigem
+                                ? `Usa o auto de infração e os ${naoConformidades.length} ${naoConformidades.length === 1 ? 'item não conforme' : 'itens não conformes'} do relatório de inspeção.`
+                                : 'Usa o auto de infração e o que você escrever abaixo. Esta autuação não está vinculada a um relatório de inspeção.'}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isGerandoIa}
+                            onClick={() => handleGerarComIa('instrucao')}
+                            className="shrink-0 h-9 gap-1.5 border-violet-300 bg-white text-violet-700 hover:bg-violet-100 text-xs font-bold"
+                          >
+                            {isGerandoIa ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                            Gerar rascunho
+                          </Button>
+                        </div>
+                        <p className="text-[10px] text-violet-800/70 leading-snug">
+                          A IA não lê os arquivos anexados aos autos — ela compõe pelo que está cadastrado. Confira os fatos e os artigos citados antes de registrar.
+                        </p>
+                      </div>
+
                       <div className="space-y-1.5">
-                        <Label className="text-xs text-[#6B6659]">Dos Fatos</Label>
-                        <Textarea value={fatos} onChange={(e) => setFatos(e.target.value)} rows={5} placeholder="Contexto da inspeção, o que foi constatado, e por que isso configura risco sanitário..." className="rounded-md border-[#E4DFD1] resize-none" />
+                        <div className="flex items-center justify-between gap-2">
+                          <Label className="text-xs text-[#6B6659]">Texto do relatório</Label>
+                          {fatos.trim() && (
+                            <button type="button" onClick={() => setFatos("")} className="text-[10px] font-bold uppercase tracking-widest text-[#A39D8C] hover:text-rose-600 transition-colors">
+                              Limpar
+                            </button>
+                          )}
+                        </div>
+                        <Textarea
+                          value={fatos}
+                          onChange={(e) => setFatos(e.target.value)}
+                          rows={10}
+                          placeholder="Gere o rascunho acima e revise aqui — ou escreva o relatório do zero."
+                          className="rounded-md border-[#E4DFD1] resize-y text-[13px] leading-relaxed"
+                        />
+                        <p className="text-[11px] text-[#A39D8C] leading-snug">
+                          Os fatos não precisam ser redigitados: eles já constam do Auto de Infração e do termo vinculado, e é de lá que o rascunho é montado.
+                        </p>
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs text-[#6B6659]">Antecedentes (opcional)</Label>
@@ -1135,6 +1330,24 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                   {!podeEmitirJulgamento && (
                     <p className="text-xs text-[#A39D8C]">Pode redigir desde já — a emissão só libera depois de relatório técnico e defesa (ou termo de informação) prontos.</p>
                   )}
+                  <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-violet-900">Rascunho da decisão com IA</p>
+                      <p className="text-[11px] text-violet-800/80 leading-snug mt-0.5">
+                        Propõe fundamentação e dispositivo a partir dos autos. <strong>O julgamento é ato seu</strong> — a IA não arbitra valor de multa e deixa entre colchetes o que exige seu juízo.
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isGerandoIa}
+                      onClick={() => handleGerarComIa('julgamento')}
+                      className="shrink-0 h-9 gap-1.5 border-violet-300 bg-white text-violet-700 hover:bg-violet-100 text-xs font-bold"
+                    >
+                      {isGerandoIa ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                      Gerar rascunho
+                    </Button>
+                  </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs text-[#6B6659]">Fundamentação</Label>
                     <Textarea value={julgamentoFundamentacao} onChange={(e) => setJulgamentoFundamentacao(e.target.value)} rows={5} placeholder="Análise dos fatos, das provas e do enquadramento legal..." className="rounded-md border-[#E4DFD1] resize-none" />
