@@ -273,13 +273,29 @@ export async function renderPasIntoPdf(
      *  Se não couber nem sozinho numa folha vazia, quebra pelos filhos
      *  mantendo uma "casca" do container em cada folha (preserva fonte,
      *  alinhamento e recuo do bloco original). */
+    /** Margem de cima não vale quando o bloco abre a folha.
+     *
+     *  No meio do texto ela é o respiro que separa do bloco anterior; no
+     *  alto de uma folha nova não há nada acima para se afastar, e ela vira
+     *  uma faixa em branco no topo. O bloco de assinatura, por exemplo,
+     *  carrega 64px de margem: empurrados para a folha seguinte, viravam
+     *  uma tarja vazia antes da data.
+     *
+     *  Isso também faz o bloco caber mais vezes na folha que já está aberta,
+     *  que é o que evita a folha extra quase vazia. */
+    const semMargemNoTopo = (el: HTMLElement) => {
+      if (atual.childElementCount === 0) el.style.marginTop = "0";
+    };
+
     const colocar = (el: HTMLElement) => {
+      semMargemNoTopo(el);
       atual.appendChild(el);
       if (atual.offsetHeight <= alturaUtilPx) return;
       atual.removeChild(el);
 
       if (atual.childElementCount > 0) {
         fecharFolha();
+        semMargemNoTopo(el);
         atual.appendChild(el);
         if (atual.offsetHeight <= alturaUtilPx) return;
         atual.removeChild(el);
@@ -296,7 +312,16 @@ export async function renderPasIntoPdf(
         return;
       }
 
-      let casca = el.cloneNode(false) as HTMLElement;
+      // A casca repete o container em cada folha. Herdar a margem de topo do
+      // original faria o vao aparecer de novo no alto de cada continuacao —
+      // mesmo motivo do padding vertical, ja evitado na marcacao.
+      const novaCasca = () => {
+        const c = el.cloneNode(false) as HTMLElement;
+        c.style.marginTop = "0";
+        return c;
+      };
+
+      let casca = novaCasca();
       atual.appendChild(casca);
       for (const filho of filhos) {
         casca.appendChild(filho);
@@ -306,20 +331,20 @@ export async function renderPasIntoPdf(
         if (casca.childElementCount === 0) {
           atual.removeChild(casca);
           colocar(filho);
-          casca = el.cloneNode(false) as HTMLElement;
+          casca = novaCasca();
           atual.appendChild(casca);
           continue;
         }
 
         fecharFolha();
-        casca = el.cloneNode(false) as HTMLElement;
+        casca = novaCasca();
         atual.appendChild(casca);
         casca.appendChild(filho);
         if (atual.offsetHeight > alturaUtilPx) {
           casca.removeChild(filho);
           atual.removeChild(casca);
           colocar(filho);
-          casca = el.cloneNode(false) as HTMLElement;
+          casca = novaCasca();
           atual.appendChild(casca);
         }
       }

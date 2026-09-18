@@ -1618,7 +1618,12 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                 dangerouslySetInnerHTML={{ __html: sanitizeHtml(peca.conteudoHtml) }}
               />
 
-              <div data-pdf-block className="mt-16 mb-10 text-center space-y-6" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+              {/* O vão antes da assinatura era de 64px + 40px embaixo. Numa
+                  peça curta — um termo de juntada tem três linhas — isso
+                  respondia por boa parte da folha em branco, e numa peça longa
+                  era o que fazia o bloco não caber e migrar sozinho para a
+                  folha seguinte. */}
+              <div data-pdf-block className="mt-10 mb-6 text-center space-y-5" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
                 <p className="text-[10pt]">{nomeMunicipioExibicao.toUpperCase()}, {format(new Date(peca.criadoEm), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.</p>
                 {peca.assinaturaUrl && (
                   <img src={peca.assinaturaUrl} alt="Assinatura" className="h-16 mx-auto object-contain" />
