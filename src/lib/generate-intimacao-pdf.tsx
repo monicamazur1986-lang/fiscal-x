@@ -43,6 +43,8 @@ const PT_PARA_MM = 25.4 / 72;
  * A margem é lida do CSS, e não fixada em 20mm, para acompanhar qualquer
  * mudança em globals.css sem quebrar a paginação de novo.
  */
+import { garantirEstiloDaFolha, zerarEspacamentoInline, CLASSE_FOLHA_PDF } from '@/lib/pdf-letter-spacing';
+
 export function alturaUtilDaFolha(paperEl: HTMLElement): { pxPerMm: number; alturaUtilPx: number } {
   const pxPerMm = paperEl.offsetWidth / 210;
   const estilo = window.getComputedStyle(paperEl);
@@ -264,7 +266,13 @@ export async function renderDocumentIntoPdf(
     pageEl.appendChild(pageForm);
 
     staging.innerHTML = '';
+    // A regra vai no staging a cada volta porque o innerHTML acima a apaga,
+    // e precisa existir ANTES da captura para o espaçamento já estar
+    // neutralizado quando o html2canvas medir o texto.
+    garantirEstiloDaFolha(staging);
+    pageEl.classList.add(CLASSE_FOLHA_PDF);
     staging.appendChild(pageEl);
+    zerarEspacamentoInline(pageEl);
 
     const canvas = await html2canvas(pageEl, {
       scale: 3.0,

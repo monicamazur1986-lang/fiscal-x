@@ -11,6 +11,8 @@
  * qualquer profundidade (cada um tratado como uma unidade que nunca é
  * dividida entre duas páginas).
  */
+import { garantirEstiloDaFolha, zerarEspacamentoInline, CLASSE_FOLHA_PDF } from '@/lib/pdf-letter-spacing';
+
 export async function renderReportIntoPdf(pdf: any, sourceEl: HTMLElement, staging: HTMLDivElement): Promise<void> {
   const html2canvas = (await import('html2canvas')).default;
 
@@ -91,7 +93,12 @@ export async function renderReportIntoPdf(pdf: any, sourceEl: HTMLElement, stagi
     }
 
     staging.innerHTML = '';
+    // Idem autuação: a regra é recriada a cada folha (o innerHTML acima a
+    // apaga) e precede a captura.
+    garantirEstiloDaFolha(staging);
+    pageEl.classList.add(CLASSE_FOLHA_PDF);
     staging.appendChild(pageEl);
+    zerarEspacamentoInline(pageEl);
 
     // windowWidth precisa bater exatamente com a largura usada para medir a
     // altura dos blocos acima (pxPerMm/contentWindowPx) — um valor fixo
