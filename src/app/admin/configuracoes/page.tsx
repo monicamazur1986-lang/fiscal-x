@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { RecalibrarNumeracao } from "@/components/admin/recalibrar-numeracao"
+import { LimparFilaFirestore } from "@/components/admin/limpar-fila-firestore"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
@@ -402,11 +403,17 @@ export default function IdentidadeMunicipalPage() {
             junto dos textos, porque não é um padrão que se ajusta e se
             reajusta: é o contador de um registro público. */}
         <TabsContent value="numeracao" className="mt-6">
-            {effectiveMunicipioId ? (
-              <RecalibrarNumeracao municipioId={effectiveMunicipioId} municipioNome={effectiveMunicipioNome} />
-            ) : (
-              <p className="text-sm text-[#6B6659]">Selecione um município para ver a numeração.</p>
-            )}
+            <div className="space-y-8">
+              {effectiveMunicipioId ? (
+                <RecalibrarNumeracao municipioId={effectiveMunicipioId} municipioNome={effectiveMunicipioNome} />
+              ) : (
+                <p className="text-sm text-[#6B6659]">Selecione um município para ver a numeração.</p>
+              )}
+              {/* Ferramenta de emergência: não depende de município nenhum, é
+                  do aparelho. Fica aqui por ser a aba que já trata de
+                  encanamento do sistema, e não de conteúdo de documento. */}
+              <LimparFilaFirestore />
+            </div>
         </TabsContent>
 
         <TabsContent value="prazos" className="mt-6">

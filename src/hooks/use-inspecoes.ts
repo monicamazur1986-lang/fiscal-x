@@ -66,6 +66,41 @@ function savePendingWrites(pending: Record<string, PendingWrite>) {
   }
 }
 
+/**
+ * O DOCUMENTO CABE NO FIRESTORE?
+ *
+ * O limite é 1 MiB por documento. Uma vistoria estoura isso com facilidade
+ * quando as fotos entram embutidas em base64 — o que acontece sempre que o
+ * envio ao Storage falha (ver o fallback blobToDataUrl no roteiro): cada foto
+ * comprimida vira algo entre 100 e 300 KB de texto dentro do próprio
+ * documento, e quatro ou cinco já passam do teto.
+ *
+ * Por que isso é grave e não apenas "essa gravação falha": a fila de
+ * gravações do SDK é FIFO. Uma gravação que o servidor nunca aceita fica na
+ * frente e SEGURA TODAS AS OUTRAS. Nada atrás dela commita, a fila enche até
+ * as 500 permitidas, e a partir daí o aparelho inteiro para de salvar:
+ * "Write stream exhausted maximum allowed queued writes", com o stream em
+ * backoff máximo. Um único rascunho com fotos demais trava o app todo.
+ *
+ * Melhor recusar aqui, avisando, do que entregar ao SDK uma gravação que vai
+ * envenenar a fila para sempre.
+ */
+const LIMITE_FIRESTORE_BYTES = 1048576;
+// Margem para os metadados que o Firestore soma por conta própria (nomes de
+// campo, índices, overhead do documento) — o cálculo abaixo é do JSON, não do
+// formato interno dele.
+const TETO_SEGURO_BYTES = Math.floor(LIMITE_FIRESTORE_BYTES * 0.85);
+
+function tamanhoAproximadoEmBytes(payload: any): number {
+  try {
+    // Timestamp não serializa em JSON; só precisamos da ordem de grandeza, e
+    // o peso está nas fotos em base64, que são texto puro.
+    return new Blob([JSON.stringify(payload, (_k, v) => (v instanceof Timestamp ? "" : v))]).size;
+  } catch {
+    return 0;
+  }
+}
+
 function buildFirestorePayload(docData: any) {
   return {
     ...docData,
@@ -317,7 +352,17 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
     // Entregue ao SDK do Firestore? Então ele é o dono do reenvio. Isto é
     // diferente de `synced`: entregue mas sem confirmação ainda é dele.
     let entregueAoSdk = false;
-    if (db && !configError && navigator.onLine) {
+    const bytes = tamanhoAproximadoEmBytes(fbData);
+    const cabeNoFirestore = bytes <= TETO_SEGURO_BYTES;
+
+    if (!cabeNoFirestore) {
+      console.warn(
+        `Vistoria ${targetId} tem ~${Math.round(bytes / 1024)} KB e não cabe no limite de 1 MiB do Firestore. ` +
+        'Não foi enviada, para não travar a fila de gravações. Causa provável: fotos guardadas dentro do documento (base64) porque o envio ao Storage falhou.'
+      );
+    }
+
+    if (db && !configError && navigator.onLine && cabeNoFirestore) {
       try {
         // attemptFirestoreWrite, e não `await setDoc` puro.
         //
@@ -369,7 +414,14 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
       setPendingSyncIds(Object.keys(pendingWritesRef.current));
     }
 
-    return { id: targetId, synced };
+    return {
+      id: targetId,
+      synced,
+      // Distingue "ainda não confirmou" de "nunca vai caber" — a segunda pede
+      // ação do fiscal (tirar fotos), não paciência.
+      excedeuTamanho: !cabeNoFirestore,
+      tamanhoKb: Math.round(bytes / 1024),
+    };
   }, [db, user, profile, configError]);
 
   const deleteInspecao = useCallback(async (id: string) => {
