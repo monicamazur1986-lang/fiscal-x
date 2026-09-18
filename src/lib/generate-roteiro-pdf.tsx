@@ -28,16 +28,43 @@ export async function renderReportIntoPdf(pdf: any, sourceEl: HTMLElement, stagi
   const footerHeightPx = footerEl?.offsetHeight || 0;
   const contentWindowPx = Math.max(pageHeightPx - headerHeightPx - footerHeightPx, 1);
 
+  /**
+   * Altura real do bloco na folha.
+   *
+   * `offsetHeight` é conteúdo + padding + borda e deixa a MARGEM de fora. Os
+   * blocos do relatório são espaçados por margem, então medir só por
+   * offsetHeight subestimava cada um: a conta dizia que cabiam mais blocos do
+   * que cabem e a folha transbordava, empurrando texto para fora da área útil.
+   *
+   * A margem de cima não conta quando o bloco abre a folha — não há nada acima
+   * de que se afastar, e ela viraria faixa em branco no topo. O desenho zera
+   * essa margem de verdade, logo abaixo, para medida e folha continuarem
+   * batendo.
+   */
+  // Margens de irmãos adjacentes COLAPSAM: entre dois blocos vale a maior
+  // das duas, não a soma. Somar superestimaria cada par e quebraria a página
+  // antes da hora — mais folhas e mais espaço vazio, o oposto do objetivo.
+  const alturaOcupada = (el: HTMLElement, abreAFolha: boolean, margemBaseAnterior: number) => {
+    const estilo = getComputedStyle(el);
+    const margemTopo = parseFloat(estilo.marginTop) || 0;
+    const margemBase = parseFloat(estilo.marginBottom) || 0;
+    const topoEfetivo = abreAFolha ? 0 : Math.max(0, margemTopo - margemBaseAnterior);
+    return { altura: el.offsetHeight + topoEfetivo + margemBase, margemBase };
+  };
+
   const pages: HTMLElement[][] = [[]];
   let usedHeight = 0;
+  let margemBaseAnterior = 0;
   blocks.forEach((block) => {
-    const h = block.offsetHeight;
-    if (usedHeight > 0 && usedHeight + h > contentWindowPx) {
+    let medida = alturaOcupada(block, pages[pages.length - 1].length === 0, margemBaseAnterior);
+    if (usedHeight > 0 && usedHeight + medida.altura > contentWindowPx) {
       pages.push([]);
       usedHeight = 0;
+      medida = alturaOcupada(block, true, 0);
     }
     pages[pages.length - 1].push(block);
-    usedHeight += h;
+    usedHeight += medida.altura;
+    margemBaseAnterior = medida.margemBase;
   });
 
   for (let i = 0; i < pages.length; i++) {
@@ -49,7 +76,13 @@ export async function renderReportIntoPdf(pdf: any, sourceEl: HTMLElement, stagi
     pageEl.style.height = 'auto';
 
     pageEl.appendChild(headerEl.cloneNode(true));
-    pages[i].forEach((block) => pageEl.appendChild(block.cloneNode(true)));
+    pages[i].forEach((block, indice) => {
+      const clone = block.cloneNode(true) as HTMLElement;
+      // A medição descontou esta margem; zerar aqui evita a faixa em branco
+      // no topo e o transbordo embaixo.
+      if (indice === 0) clone.style.marginTop = "0";
+      pageEl.appendChild(clone);
+    });
     if (footerEl) {
       const footerClone = footerEl.cloneNode(true) as HTMLElement;
       const pageNumEl = footerClone.querySelector('[data-pdf-pagenum]');

@@ -55,6 +55,42 @@ export function alturaUtilDaFolha(paperEl: HTMLElement): { pxPerMm: number; altu
   };
 }
 
+/**
+ * Altura que o bloco REALMENTE ocupa na folha.
+ *
+ * `offsetHeight` é conteúdo + padding + borda, e deixa a MARGEM de fora. Os
+ * blocos do documento são espaçados por margem (mb-4, mt-16 no bloco de
+ * assinatura), então medir por offsetHeight subestimava cada um: a conta dizia
+ * que cabiam mais blocos do que cabem, a folha transbordava, e a quebra saía
+ * no lugar errado — na tela e no PDF, que usam esta mesma função.
+ *
+ * A margem de cima não conta quando o bloco ABRE a folha: ali não há nada
+ * acima de que se afastar, e ela viraria uma faixa em branco no topo. Quem
+ * desenha a folha zera essa margem de verdade (ver renderDocumentIntoPdf),
+ * então medida e desenho continuam batendo.
+ *
+ * MARGENS QUE COLAPSAM. Entre dois blocos irmãos, o espaço final não é a
+ * soma da margem de baixo do primeiro com a de cima do segundo: o CSS deixa
+ * valer a MAIOR das duas. Somar superestimaria cada par e provocaria quebra
+ * de página antes da hora — mais folhas, mais espaço vazio, exatamente o que
+ * esta correção existe para evitar. Por isso a margem de cima entra só pelo
+ * que ela excede a margem de baixo do bloco anterior.
+ *
+ * Devolve também a margem de baixo, para o bloco seguinte saber contra o
+ * que colapsar.
+ */
+function alturaOcupada(
+  el: HTMLElement,
+  abreAFolha: boolean,
+  margemBaseAnterior: number
+): { altura: number; margemBase: number } {
+  const estilo = getComputedStyle(el);
+  const margemTopo = parseFloat(estilo.marginTop) || 0;
+  const margemBase = parseFloat(estilo.marginBottom) || 0;
+  const topoEfetivo = abreAFolha ? 0 : Math.max(0, margemTopo - margemBaseAnterior);
+  return { altura: el.offsetHeight + topoEfetivo + margemBase, margemBase };
+}
+
 export function computePageGroups(
   children: HTMLElement[],
   firstPageWindowPx: number,
@@ -62,15 +98,20 @@ export function computePageGroups(
 ): HTMLElement[][] {
   const pages: HTMLElement[][] = [[]];
   let usedHeight = 0;
+  let margemBaseAnterior = 0;
   children.forEach((child) => {
-    const h = child.offsetHeight;
     const windowPx = pages.length === 1 ? firstPageWindowPx : continuationWindowPx;
-    if (usedHeight > 0 && usedHeight + h > windowPx) {
+    let medida = alturaOcupada(child, pages[pages.length - 1].length === 0, margemBaseAnterior);
+    if (usedHeight > 0 && usedHeight + medida.altura > windowPx) {
       pages.push([]);
       usedHeight = 0;
+      // Passou a abrir a folha: a margem de cima deixa de contar, e não há
+      // bloco anterior contra o qual colapsar.
+      medida = alturaOcupada(child, true, 0);
     }
     pages[pages.length - 1].push(child);
-    usedHeight += h;
+    usedHeight += medida.altura;
+    margemBaseAnterior = medida.margemBase;
   });
   return pages;
 }
@@ -196,7 +237,14 @@ export async function renderDocumentIntoPdf(
     }
     const corpoEl = document.createElement('div');
     corpoEl.style.flex = '1';
-    pages[i].forEach(child => corpoEl.appendChild(child.cloneNode(true)));
+    // Zera a margem de cima do primeiro bloco da folha — a medição já a
+     // descontou (ver alturaOcupada). Sem isto a folha ganharia de volta uma
+     // faixa em branco no topo e voltaria a transbordar embaixo.
+    pages[i].forEach((child, indice) => {
+      const clone = child.cloneNode(true) as HTMLElement;
+      if (indice === 0) clone.style.marginTop = "0";
+      corpoEl.appendChild(clone);
+    });
     pageForm.appendChild(corpoEl);
     if (sourceFooter) pageForm.appendChild(sourceFooter.cloneNode(true));
 
