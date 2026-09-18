@@ -7,7 +7,7 @@ import { ptBR } from "date-fns/locale"
 import {
   Loader2, Timer, FileStack, Send, Paperclip, CheckCircle2,
   AlertTriangle, ChevronDown, Download, X, FileDown, Landmark, Pencil, Trash2,
-  Sparkles, MoreHorizontal,
+  Sparkles, MoreHorizontal, Eye,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { PasDica } from "@/components/pas/pas-dica"
 import { PasPecaReviewDialog, type PasPecaRevisao } from "@/components/pas/pas-peca-review-dialog"
+import { PasPecaVisualizarDialog } from "@/components/pas/pas-peca-visualizar-dialog"
 import { PasEncaminharDialog } from "@/components/pas/pas-encaminhar-dialog"
 import municipiosPR from "@/lib/municipios-pr.json"
 import { usePas, usePasPecas } from "@/hooks/use-pas"
@@ -55,7 +56,6 @@ import {
   textoTermoRetificacao,
   PAS_PECA_TITULOS,
   PAS_FASE_LABEL,
-  PAS_FASE_COR,
 } from "@/lib/pas-textos-padrao"
 import { cn, normalizeId } from "@/lib/utils"
 
@@ -325,6 +325,22 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   // Instrução, dali até o TIP é Julgamento (cobre também o Termo de Juntada
   // do julgamento, que tem `tipo: 'termo_juntada'` igual aos da Instrução —
   // agrupar por posição em vez de por tipo evita misturar etapas erradas).
+  /**
+   * Cor de cada etapa do rito. Mesma paleta das fases (pas-textos-padrao.ts),
+   * para a etapa de uma peça nos autos e a fase mostrada na régua do topo
+   * falarem a mesma língua — um processo em Instrução tem a régua em âmbar e
+   * as peças daquela etapa em âmbar.
+   *
+   * A cor fica na borda lateral e no rótulo, não no fundo da linha: colorir a
+   * linha inteira faria a lista competir com o conteúdo das peças.
+   */
+  const CORES_ETAPA: Record<string, { rotulo: string; texto: string; barra: string; fundo: string }> = {
+    instauracao: { rotulo: 'Instauração', texto: 'text-sky-700', barra: 'bg-sky-400', fundo: 'bg-sky-50' },
+    instrucao: { rotulo: 'Instrução', texto: 'text-amber-700', barra: 'bg-amber-400', fundo: 'bg-amber-50' },
+    julgamento: { rotulo: 'Julgamento', texto: 'text-violet-700', barra: 'bg-violet-400', fundo: 'bg-violet-50' },
+    posTip: { rotulo: 'Recursal / Arquivamento', texto: 'text-zinc-600', barra: 'bg-zinc-300', fundo: 'bg-zinc-50' },
+  };
+
   const etapasParaDownload = useMemo(() => {
     const idxInicial = pecas.findIndex(p => p.tipo === 'despacho_inicial');
     const idxEncerramento = pecas.findIndex(p => p.tipo === 'despacho_encerramento_instrucao');
@@ -369,6 +385,11 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       setIsBaixandoCapa(false);
     }
   };
+
+  // Peça aberta para leitura. Ver o documento como foi lavrado — timbre,
+  // identificação do processo, assinatura — sem gerar o PDF do processo
+  // inteiro só para conferir uma folha.
+  const [pecaEmLeitura, setPecaEmLeitura] = useState<PasPeca | null>(null);
 
   const [isEncaminharOpen, setIsEncaminharOpen] = useState(false);
 
@@ -945,8 +966,14 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       />
 
       <div className="max-w-3xl mx-auto w-full p-4 sm:p-8 space-y-8 pb-40">
-        <div className="flex flex-wrap items-center gap-3">
-          <Badge variant="outline" className={cn("text-xs font-medium h-6 px-2.5 border-none", PAS_FASE_COR[pas.fase])}>{PAS_FASE_LABEL[pas.fase]}</Badge>
+        {/* O selo da fase saiu daqui: a régua de etapas logo abaixo já diz em
+            que fase o processo está, e diz melhor — mostra também o que veio
+            antes e o que vem depois. Dois lugares dizendo a mesma coisa era
+            parte do que deixava a tela confusa.
+
+            Ficam só as duas informações que a régua NÃO carrega: de quem é a vez
+            agora, e quanto falta do prazo. */}
+        <div className="flex flex-wrap items-center gap-3 empty:hidden">
           {pas.responsavelAtualNome && (
             <Badge variant="outline" className="text-xs font-medium h-6 px-2.5 border-none bg-violet-50 text-violet-700">
               Encaminhado para {pas.responsavelAtualNome}
@@ -983,129 +1010,6 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
           ))}
         </div>
 
-        {/* Linha do tempo das peças */}
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Autos do processo</h2>
-            {/* UMA ação à vista, o resto atrás de um menu.
-
-                Eram até seis botões iguais em fileira — "Processo Completo"
-                tinha o mesmo peso visual de "Etapa 2", e a linha virava uma
-                parede de retângulos idênticos. Baixar o processo completo é o
-                que se faz quase sempre; baixar uma etapa isolada é exceção.
-
-                A "Etiqueta de Capa" saiu da linha de frente: é a folha para
-                colar na pasta FÍSICA, e este módulo existe para a tramitação
-                ser online. Segue no menu, para quem ainda monta a pasta. */}
-            <div className="flex items-center gap-2">
-              {isBaixandoPdf && progressoPdf && (
-                <span className="text-[11px] text-[#6B6659] tabular-nums">folha {progressoPdf}</span>
-              )}
-              {pecas.length > 0 && (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={handleBaixarProcessoCompleto}
-                  disabled={isBaixandoPdf}
-                  className="h-9 rounded-lg gap-2 text-xs font-bold bg-[#0E4A44] hover:bg-[#0B3A35]"
-                >
-                  {isBaixandoPdf && nomeArquivoBaixar === "Processo Completo" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-                  Baixar processo
-                </Button>
-              )}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="outline" size="sm" className="h-9 w-9 rounded-lg p-0 shrink-0" title="Outros downloads">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64">
-                  {etapasParaDownload.map((etapa) => (
-                    <DropdownMenuItem key={etapa.key} disabled={isBaixandoPdf} onClick={() => iniciarDownload(etapa.pecas, etapa.label)} className="gap-2 text-xs">
-                      <FileDown className="h-4 w-4 shrink-0 text-[#A39D8C]" /> {etapa.label}
-                    </DropdownMenuItem>
-                  ))}
-                  {etapasParaDownload.length > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuItem disabled={isBaixandoCapa} onClick={handleBaixarEtiquetaCapa} className="gap-2 text-xs">
-                    {isBaixandoCapa ? <Loader2 className="h-4 w-4 animate-spin" /> : <Landmark className="h-4 w-4 shrink-0 text-[#A39D8C]" />}
-                    Etiqueta de capa (pasta física)
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-          {pecas.length === 0 ? (
-            <p className="text-sm text-[#A39D8C] px-1">Nenhuma peça ainda.</p>
-          ) : (
-            <div className="rounded-lg border border-[#E4DFD1] bg-white divide-y divide-[#F1EEE4]">
-              {pecas.map((peca) => {
-                // A original nunca é alterada — só marcada visualmente com a
-                // peça de retificação que a corrigiu (ver handleRetificarPeca).
-                const retificadaPor = pecas.find(p => p.refPecaId === peca.id);
-                return (
-                <details key={peca.id} className="group">
-                  <summary className="flex items-center gap-3 px-4 py-3 cursor-pointer list-none">
-                    <span className="h-6 w-6 rounded-full bg-[#F5F2EA] text-[#6B6659] text-[11px] font-black flex items-center justify-center shrink-0">{peca.numero}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium text-[#262420] truncate">{peca.titulo}</p>
-                        {retificadaPor && (
-                          <Badge variant="outline" className="text-[9px] font-medium h-[18px] px-1.5 border-none bg-amber-50 text-amber-700 shrink-0">
-                            Retificada pela peça nº {retificadaPor.numero}
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-[#A39D8C]">{peca.criadoPorNome} — {format(new Date(peca.criadoEm), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleBaixarPeca(peca); }}
-                      disabled={isBaixandoPdf}
-                      title="Baixar PDF desta peça"
-                      className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC] hover:border-[#0E4A44]/40 transition-colors shrink-0 disabled:opacity-50"
-                    >
-                      {isBaixandoPdf && pecasParaBaixar?.length === 1 && pecasParaBaixar[0].id === peca.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <FileDown className="h-5 w-5" />}
-                    </button>
-                    {podeExcluirPeca && (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPecaParaExcluir(peca); }}
-                        title="Excluir esta peça dos autos"
-                        className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-rose-500 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-colors shrink-0"
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </button>
-                    )}
-                    <ChevronDown className="h-4 w-4 text-[#C4BEAC] shrink-0 transition-transform group-open:rotate-180" />
-                  </summary>
-                  <div className="px-4 pb-4 space-y-2">
-                    <div className="text-sm text-[#3F3B33] leading-relaxed pl-9" dangerouslySetInnerHTML={{ __html: peca.conteudoHtml }} />
-                    {peca.refPecaNumero && (
-                      <p className="text-xs text-[#A39D8C] pl-9">Retifica a peça nº {peca.refPecaNumero}.</p>
-                    )}
-                    <div className="flex items-center gap-3 pl-9 pt-1">
-                      {peca.anexoUrl && (
-                        <a href={peca.anexoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0E4A44] hover:underline">
-                          <Download className="h-3.5 w-3.5" /> Baixar anexo
-                        </a>
-                      )}
-                      {!retificadaPor && (
-                        <button
-                          type="button"
-                          onClick={() => handleRetificarPeca(peca)}
-                          className="inline-flex items-center gap-1.5 text-xs font-medium text-[#9C7A3C] hover:underline"
-                        >
-                          <Pencil className="h-3.5 w-3.5" /> Retificar
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </details>
-                );
-              })}
-            </div>
-          )}
-        </div>
 
         {/* Ações da fase atual */}
         <div className="rounded-lg border border-[#E4DFD1] bg-white p-5 space-y-4">
@@ -1397,6 +1301,185 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
           )}
         </div>
         )}
+
+        {/* O ARQUIVO VEM DEPOIS DA AÇÃO.
+
+            Antes os autos abriam a tela: quem entrava para dar o próximo passo
+            rolava a lista inteira de peças até achar o que fazer — e a lista só
+            cresce com o processo. A ordem agora segue o uso: em que fase está,
+            o que fazer agora, o julgamento, e por último o que já foi lavrado,
+            que é consulta, não ação. */}
+        {/* Linha do tempo das peças */}
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Autos do processo</h2>
+            {/* UMA ação à vista, o resto atrás de um menu.
+
+                Eram até seis botões iguais em fileira — "Processo Completo"
+                tinha o mesmo peso visual de "Etapa 2", e a linha virava uma
+                parede de retângulos idênticos. Baixar o processo completo é o
+                que se faz quase sempre; baixar uma etapa isolada é exceção.
+
+                A "Etiqueta de Capa" saiu da linha de frente: é a folha para
+                colar na pasta FÍSICA, e este módulo existe para a tramitação
+                ser online. Segue no menu, para quem ainda monta a pasta. */}
+            <div className="flex items-center gap-2">
+              {isBaixandoPdf && progressoPdf && (
+                <span className="text-[11px] text-[#6B6659] tabular-nums">folha {progressoPdf}</span>
+              )}
+              {pecas.length > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleBaixarProcessoCompleto}
+                  disabled={isBaixandoPdf}
+                  className="h-9 rounded-lg gap-2 text-xs font-bold bg-[#0E4A44] hover:bg-[#0B3A35]"
+                >
+                  {isBaixandoPdf && nomeArquivoBaixar === "Processo Completo" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+                  Baixar processo
+                </Button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="outline" size="sm" className="h-9 w-9 rounded-lg p-0 shrink-0" title="Outros downloads">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  {etapasParaDownload.map((etapa) => (
+                    <DropdownMenuItem key={etapa.key} disabled={isBaixandoPdf} onClick={() => iniciarDownload(etapa.pecas, etapa.label)} className="gap-2 text-xs">
+                      <FileDown className="h-4 w-4 shrink-0 text-[#A39D8C]" /> {etapa.label}
+                    </DropdownMenuItem>
+                  ))}
+                  {etapasParaDownload.length > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuItem disabled={isBaixandoCapa} onClick={handleBaixarEtiquetaCapa} className="gap-2 text-xs">
+                    {isBaixandoCapa ? <Loader2 className="h-4 w-4 animate-spin" /> : <Landmark className="h-4 w-4 shrink-0 text-[#A39D8C]" />}
+                    Etiqueta de capa (pasta física)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+          {pecas.length === 0 ? (
+            <p className="text-sm text-[#A39D8C] px-1">Nenhuma peça ainda.</p>
+          ) : (
+            /* AS PEÇAS AGRUPADAS PELA ETAPA EM QUE NASCERAM.
+
+               Era uma lista corrida: vinte peças numeradas em sequência, sem
+               dizer onde a Instauração termina e a Instrução começa. Num
+               processo com defesa, juntadas e retificações, achar "a peça do
+               julgamento" exigia ler os títulos um por um.
+
+               O agrupamento é o mesmo do download por etapa (etapasParaDownload),
+               e é posicional de propósito: as peças não guardam a fase em que
+               foram lavradas, e agrupar por TIPO misturaria etapas — um Termo de
+               Juntada existe tanto na Instrução quanto no Julgamento. */
+            <div className="space-y-4">
+              {etapasParaDownload.map((etapa) => {
+                const cor = CORES_ETAPA[etapa.key] || CORES_ETAPA.posTip;
+                return (
+                <div key={etapa.key} className="rounded-lg border border-[#E4DFD1] bg-white overflow-hidden">
+                  <div className={cn("flex items-center justify-between gap-2 px-4 py-2", cor.fundo)}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={cn("h-3 w-1 rounded-full shrink-0", cor.barra)} />
+                      <h3 className={cn("text-[11px] font-black uppercase tracking-widest truncate", cor.texto)}>{cor.rotulo}</h3>
+                      <span className="text-[10px] font-bold tabular-nums text-[#A39D8C] shrink-0">{etapa.pecas.length}</span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isBaixandoPdf}
+                      onClick={() => iniciarDownload(etapa.pecas, etapa.label)}
+                      title={`Baixar as peças de ${cor.rotulo}`}
+                      className="shrink-0 h-8 w-8 rounded-lg flex items-center justify-center text-[#6B6659] hover:bg-white/70 transition-colors disabled:opacity-40"
+                    >
+                      <FileDown className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="divide-y divide-[#F1EEE4]">
+              {etapa.pecas.map((peca) => {
+                // A original nunca é alterada — só marcada visualmente com a
+                // peça de retificação que a corrigiu (ver handleRetificarPeca).
+                const retificadaPor = pecas.find(p => p.refPecaId === peca.id);
+                return (
+                <details key={peca.id} className="group">
+                  <summary className="flex items-center gap-3 px-4 py-3 cursor-pointer list-none">
+                    <span className="h-6 w-6 rounded-full bg-[#F5F2EA] text-[#6B6659] text-[11px] font-black flex items-center justify-center shrink-0">{peca.numero}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-[#262420] truncate">{peca.titulo}</p>
+                        {retificadaPor && (
+                          <Badge variant="outline" className="text-[9px] font-medium h-[18px] px-1.5 border-none bg-amber-50 text-amber-700 shrink-0">
+                            Retificada pela peça nº {retificadaPor.numero}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-[#A39D8C]">{peca.criadoPorNome} — {format(new Date(peca.criadoEm), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                    </div>
+                    {/* Visualizar, baixar e excluir na própria linha da peça:
+                        conferir uma folha não pode exigir baixar o processo
+                        inteiro. O acordeão continua abrindo o texto cru; este
+                        botão mostra o DOCUMENTO, como ele foi lavrado. */}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPecaEmLeitura(peca); }}
+                      title="Visualizar esta peça como documento"
+                      className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-[#6B6659] hover:bg-[#F5F2EA] hover:border-[#0E4A44]/30 transition-colors shrink-0"
+                    >
+                      <Eye className="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleBaixarPeca(peca); }}
+                      disabled={isBaixandoPdf}
+                      title="Baixar PDF desta peça"
+                      className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC] hover:border-[#0E4A44]/40 transition-colors shrink-0 disabled:opacity-50"
+                    >
+                      {isBaixandoPdf && pecasParaBaixar?.length === 1 && pecasParaBaixar[0].id === peca.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <FileDown className="h-5 w-5" />}
+                    </button>
+                    {podeExcluirPeca && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPecaParaExcluir(peca); }}
+                        title="Excluir esta peça dos autos"
+                        className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-rose-500 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-colors shrink-0"
+                      >
+                        <Trash2 className="h-5 w-5" />
+                      </button>
+                    )}
+                    <ChevronDown className="h-4 w-4 text-[#C4BEAC] shrink-0 transition-transform group-open:rotate-180" />
+                  </summary>
+                  <div className="px-4 pb-4 space-y-2">
+                    <div className="text-sm text-[#3F3B33] leading-relaxed pl-9" dangerouslySetInnerHTML={{ __html: peca.conteudoHtml }} />
+                    {peca.refPecaNumero && (
+                      <p className="text-xs text-[#A39D8C] pl-9">Retifica a peça nº {peca.refPecaNumero}.</p>
+                    )}
+                    <div className="flex items-center gap-3 pl-9 pt-1">
+                      {peca.anexoUrl && (
+                        <a href={peca.anexoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0E4A44] hover:underline">
+                          <Download className="h-3.5 w-3.5" /> Baixar anexo
+                        </a>
+                      )}
+                      {!retificadaPor && (
+                        <button
+                          type="button"
+                          onClick={() => handleRetificarPeca(peca)}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-[#9C7A3C] hover:underline"
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> Retificar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </details>
+                );
+              })}
+                  </div>
+                </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       <Dialog open={isDefesaDialogOpen} onOpenChange={setIsDefesaDialogOpen}>
@@ -1430,6 +1513,18 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <PasPecaVisualizarDialog
+        peca={pecaEmLeitura}
+        onFechar={() => setPecaEmLeitura(null)}
+        onBaixar={(peca) => { setPecaEmLeitura(null); handleBaixarPeca(peca); }}
+        baixando={isBaixandoPdf}
+        config={config}
+        numeroProcesso={pas.numeroProcesso}
+        autuado={pas.estabelecimento.fantasia}
+        cnpj={pas.estabelecimento.cnpj}
+        nomeMunicipioExibicao={nomeMunicipioExibicao}
+      />
 
       <PasPecaReviewDialog
         revisao={revisao}
