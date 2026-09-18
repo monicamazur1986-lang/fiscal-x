@@ -31,6 +31,7 @@ import {
   Square,
   Cloud,
   CloudOff,
+  Image as ImageIcon,
   Eraser,
   Landmark,
   Clock,
@@ -4246,25 +4247,30 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                         </div>
                         <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-[#E4DFD1]">
                           <button type="button" onClick={() => setShowObsInput(prev => ({ ...prev, [item.id]: !prev[item.id] }))} className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase transition-all", (observations[item.id] || showObsInput[item.id]) ? "bg-primary/10 text-primary" : "text-[#6B6659] hover:bg-[#F1EEE4]")}><MessageSquare className="h-3.5 w-3.5" /> {showObsInput[item.id] ? "Fechar Nota" : observations[item.id] ? "Ver Nota" : "Observação"}</button>
-                          <label className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase transition-all cursor-pointer", (itemPhotos[item.id]?.length ?? 0) > 0 ? "bg-primary/10 text-primary" : "text-[#6B6659] hover:bg-[#F1EEE4]")}>
-                            {uploadingItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
-                            {(itemPhotos[item.id]?.length ?? 0) > 0 ? `Fotos (${itemPhotos[item.id].length})` : "Anexar Foto"}
-                            {/* Sem o atributo capture, de propósito.
+                            {/* DOIS CAMINHOS PARA A MESMA FOTO
 
-                                Com capture="environment" o toque abria a câmera DENTRO do
-                                navegador: a foto ia direto para o sistema, era comprimida e o
-                                original deixava de existir — não passava pela galeria do
-                                aparelho em momento nenhum.
+                                "Foto" abre a câmera direto (capture): é o caminho de
+                                campo, um toque, e continua sendo o principal. A imagem
+                                nasce e morre dentro do app — não fica na galeria.
 
-                                Sem ele, abre o seletor do sistema. O fiscal que tirar a
-                                foto pelo app de câmera e anexar da galeria fica com o original
-                                no aparelho, em resolução cheia, e o sistema guarda só a cópia
-                                compactada. A prova original sobrevive fora do documento.
+                                "Galeria" abre o seletor do sistema, para anexar uma foto
+                                tirada pelo app de câmera. Aí o original fica no aparelho
+                                em resolução cheia e o sistema guarda só a cópia
+                                compactada — importante porque a foto é prova, e a cópia
+                                que vai no relatório é reduzida.
 
-                                Um app da web não consegue GRAVAR na galeria; o que dá para
-                                fazer é não impedir que ela nasça lá. */}
-                            <input type="file" accept="image/*" className="hidden" disabled={uploadingItem === item.id} onChange={(e) => handlePhotoUpload(item.id, e)} />
-                          </label>
+                                Ter só o primeiro apagava o original; ter só o segundo
+                                custava um toque a mais em toda foto de campo. */}
+                            <label className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase transition-all cursor-pointer", (itemPhotos[item.id]?.length ?? 0) > 0 ? "bg-primary/10 text-primary" : "text-[#6B6659] hover:bg-[#F1EEE4]")}>
+                              {uploadingItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+                              {(itemPhotos[item.id]?.length ?? 0) > 0 ? `Fotos (${itemPhotos[item.id].length})` : "Foto"}
+                              <input type="file" accept="image/*" capture="environment" className="hidden" disabled={uploadingItem === item.id} onChange={(e) => handlePhotoUpload(item.id, e)} />
+                            </label>
+                            <label className={cn("flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-black uppercase transition-all cursor-pointer text-[#6B6659] hover:bg-[#F1EEE4]")} title="Anexar foto tirada pelo app de câmera — o original fica no aparelho">
+                              <ImageIcon className="h-3.5 w-3.5" />
+                              Galeria
+                              <input type="file" accept="image/*" className="hidden" disabled={uploadingItem === item.id} onChange={(e) => handlePhotoUpload(item.id, e)} />
+                            </label>
                         </div>
                         {(itemPhotos[item.id]?.length ?? 0) > 0 && (
                           <div className="grid grid-cols-2 gap-3">
@@ -4392,9 +4398,28 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                       </div>
                       <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-[#E4DFD1]">
                         <button type="button" onClick={() => setShowObsInput(prev => ({ ...prev, [item.id]: !prev[item.id] }))} className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase transition-all", (observations[item.id] || showObsInput[item.id]) ? "bg-primary/10 text-primary" : "text-[#6B6659] hover:bg-[#F1EEE4]")}><MessageSquare className="h-3.5 w-3.5" /> {showObsInput[item.id] ? "Fechar Nota" : observations[item.id] ? "Ver Nota" : "Observação"}</button>
+                        {/* DOIS CAMINHOS PARA A MESMA FOTO
+
+                            "Foto" abre a câmera direto (capture): é o caminho de
+                            campo, um toque, e continua sendo o principal. A imagem
+                            nasce e morre dentro do app — não fica na galeria.
+
+                            "Galeria" abre o seletor do sistema, para anexar uma foto
+                            tirada pelo app de câmera. Aí o original fica no aparelho
+                            em resolução cheia e o sistema guarda só a cópia
+                            compactada — importante porque a foto é prova, e a cópia
+                            que vai no relatório é reduzida.
+
+                            Ter só o primeiro apagava o original; ter só o segundo
+                            custava um toque a mais em toda foto de campo. */}
                         <label className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase transition-all cursor-pointer", (itemPhotos[item.id]?.length ?? 0) > 0 ? "bg-primary/10 text-primary" : "text-[#6B6659] hover:bg-[#F1EEE4]")}>
                           {uploadingItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
-                          {(itemPhotos[item.id]?.length ?? 0) > 0 ? `Fotos (${itemPhotos[item.id].length})` : "Anexar Foto"}
+                          {(itemPhotos[item.id]?.length ?? 0) > 0 ? `Fotos (${itemPhotos[item.id].length})` : "Foto"}
+                          <input type="file" accept="image/*" capture="environment" className="hidden" disabled={uploadingItem === item.id} onChange={(e) => handlePhotoUpload(item.id, e)} />
+                        </label>
+                        <label className={cn("flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] font-black uppercase transition-all cursor-pointer text-[#6B6659] hover:bg-[#F1EEE4]")} title="Anexar foto tirada pelo app de câmera — o original fica no aparelho">
+                          <ImageIcon className="h-3.5 w-3.5" />
+                          Galeria
                           <input type="file" accept="image/*" className="hidden" disabled={uploadingItem === item.id} onChange={(e) => handlePhotoUpload(item.id, e)} />
                         </label>
                       </div>
