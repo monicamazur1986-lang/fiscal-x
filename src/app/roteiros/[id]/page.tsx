@@ -30,6 +30,7 @@ import {
   CheckSquare,
   Square,
   Cloud,
+  CloudOff,
   Eraser,
   Landmark,
   Clock,
@@ -72,7 +73,7 @@ import { polishObservationsBatch } from "@/ai/flows/polish-observations-batch"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from "@/components/ui/alert-dialog"
-import { compressImage, blobToDataUrl } from "@/lib/compress-image"
+import { compressImage, compressImageToBudget, blobToDataUrl } from "@/lib/compress-image"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { getDefaultIntroHtml, getDefaultConclusaoHtml, fillRoteiroTextoTokens, resolverIntroHtml, resolverConclusaoHtml } from "@/lib/roteiro-textos-padrao"
 import { sanitizeHtml } from "@/lib/sanitize-html"
@@ -2355,10 +2356,27 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     [idData.cnae]
   );
   const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
+  /**
+   * ONDE A VISTORIA ESTÁ, de verdade.
+   *
+   * O indicador dizia "Salvo" com ícone de nuvem no instante em que a
+   * gravação era disparada, sem esperar resposta do servidor. Numa vistoria
+   * que não conseguia subir — sem sinal, ou grande demais — o fiscal via nuvem
+   * verde o tempo todo e ia embora acreditando que estava tudo na nuvem.
+   *
+   * Isso importa mais aqui do que pareceria: o relatório é gerado e
+   * compartilhado na hora, em campo. Se o fiscal souber que a vistoria está só
+   * no aparelho, ele exporta o PDF antes de sair. Se acreditar que subiu, não
+   * exporta — e um cache limpo leva o trabalho junto.
+   */
+  const [ondeEstaSalvo, setOndeEstaSalvo] = useState<'nuvem' | 'aparelho' | 'grande' | null>(null);
   // Seletor de inspeções deste roteiro (rascunhos em andamento + já
   // finalizadas) — substitui o antigo popup de "um único rascunho recuperável"
   // (que usava .find() e só enxergava a mais recente).
   const isDirtyRef = useRef(false);
+  // Um aviso por sessão de edição: o salvamento automático roda a cada 8
+  // segundos, e repetir o alerta a cada tentativa enterraria a tela em toasts.
+  const avisoTamanhoMostradoRef = useRef(false);
   // Sempre aponta para a versão mais recente de handleSaveDraft — sem isso, o
   // heartbeat abaixo (que só recria o intervalo quando answers/idData mudam)
   // podia acabar chamando uma versão antiga da função, salvando uma cópia
@@ -2557,10 +2575,13 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     const timer = setInterval(() => {
         if (!isDirtyRef.current || salvandoPeloHeartbeatRef.current) return;
         salvandoPeloHeartbeatRef.current = true;
+        // Sem setLastAutoSave aqui: quem carimba a hora é o handleSaveDraft,
+        // DEPOIS de saber se a gravação chegou. Carimbar no disparo era o que
+        // fazia o indicador mostrar nuvem verde para uma vistoria que nunca
+        // saiu do aparelho.
         Promise.resolve(handleSaveDraftRef.current?.(false))
           .catch(() => {})
           .finally(() => { salvandoPeloHeartbeatRef.current = false; });
-        setLastAutoSave(new Date());
     }, 8000);
     return () => clearInterval(timer);
   }, [profile, view]);
@@ -2809,13 +2830,29 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         }
       }
       isDirtyRef.current = false;
-      // saveInspecao nunca lança erro — se a gravação na nuvem falhou de
-      // verdade (ex.: documento grande demais por causa de fotos em base64),
-      // ela fica só neste aparelho, tentando de novo pra sempre, sem nunca
-      // avisar ninguém. Só avisa nos saves explícitos (botão "Salvar
-      // Rascunho"), não a cada heartbeat silencioso — senão vira spam de
-      // toast toda vez que o sinal cai por um instante.
-      if (showToast) {
+      setLastAutoSave(new Date());
+      setOndeEstaSalvo(res?.excedeuTamanho ? 'grande' : res?.synced ? 'nuvem' : 'aparelho');
+
+      // VISTORIA GRANDE DEMAIS PARA A NUVEM
+      //
+      // Este aviso não é opcional nem silenciável: enquanto a vistoria não
+      // couber, ela existe SÓ neste aparelho. Some se o cache for limpo, e
+      // não abre em outro dispositivo. Aparece também no salvamento
+      // automático (ao contrário do aviso de conexão), porque "sem sinal"
+      // se resolve sozinho e "não cabe" não — depende do fiscal agir.
+      if (res?.excedeuTamanho && !avisoTamanhoMostradoRef.current) {
+        avisoTamanhoMostradoRef.current = true;
+        toast({
+          variant: "destructive",
+          title: `Vistoria grande demais (${res.tamanhoKb} KB)`,
+          description: "As fotos estão sendo guardadas dentro da vistoria porque o envio de imagens falhou. Ela não cabe na nuvem e está salva só neste aparelho — remova algumas fotos ou finalize o relatório agora.",
+          duration: 15000,
+        });
+      } else if (showToast) {
+        // saveInspecao nunca lança erro; sem isto, uma falha de gravação
+        // passaria despercebida. Só nos saves explícitos (botão "Salvar Rascunho"),
+        // não a cada heartbeat — senão vira spam de toast toda vez que o
+        // sinal cai por um instante.
         if (res?.synced) toast({ title: "Sincronizado" });
         else toast({ variant: "destructive", title: "Salvo só neste aparelho", description: "Sem conexão com a nuvem — não abra esta vistoria em outro dispositivo até sincronizar." });
       }
@@ -3048,13 +3085,30 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         );
         url = await Promise.race([uploadWithTimeout, timeout]);
       } catch (storageErr) {
-        // Sem Storage configurado (ex.: plano Blaze ainda não ativado) — guarda a
-        // foto comprimida direto no documento, como já é feito com a assinatura.
-        url = await blobToDataUrl(compressed);
+        // Sem Storage (bucket fora do ar, plano sem Blaze, rede bloqueando) —
+        // a foto vai embutida no próprio documento, como já é feito com a
+        // assinatura. Só que aqui ela é reprocessada com ORÇAMENTO DE BYTES,
+        // não com a compressão de sempre: embutida, cada byte da imagem ocupa
+        // ~1,33 byte de texto dentro da vistoria, e o documento tem teto de
+        // 1 MiB. Na compressão do Storage (1280px, q0.7), duas fotos já podem
+        // estourar o documento — e estourar trava a fila de gravações do
+        // aparelho inteiro (ver use-inspecoes.ts).
+        //
+        // Vale usar o arquivo original de novo, e não `compressed`: comprimir
+        // em cima de JPEG já comprimido acumula artefato sem ganhar tamanho.
+        const { blob: paraEmbutir, coube } = await compressImageToBudget(file);
+        url = await blobToDataUrl(paraEmbutir);
+        toast({
+          variant: coube ? "default" : "destructive",
+          title: coube ? "Foto reduzida e guardada na vistoria" : "Foto guardada, mas pesada",
+          description: coube
+            ? "O envio de imagens falhou, então ela foi compactada e embutida no rascunho. A qualidade caiu um pouco para a vistoria continuar cabendo na nuvem."
+            : "O envio de imagens falhou e esta foto continua grande mesmo compactada. Com poucas fotos assim a vistoria deixa de ser salva na nuvem — evite anexar mais.",
+        });
       }
       const newPhoto: PhotoEvidence = {
         url,
-        timestamp: format(new Date(), "dd/MM/yyyy HH:mm"),
+        timestamp: format(new Date(), "dd/MM/yyyy 'às' HH:mm"),
       };
       setItemPhotos(prev => ({ ...prev, [itemId]: [...(prev[itemId] || []), newPhoto] }));
       toast({ title: "Foto Anexada" });
@@ -3506,9 +3560,31 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                                                           crossOrigin={photoIsDataUrl ? undefined : "anonymous"}
                                                           className={cn("block mx-auto w-full h-auto rounded-t-lg", PHOTO_SIZE_MAX_WIDTH[size])}
                                                         />
-                                                        <p className="text-[6.5pt] text-zinc-400 font-bold uppercase px-2 py-1 border-t border-zinc-200">
-                                                          {photo.timestamp}
-                                                        </p>
+                                                        {/* LEGENDA DE IDENTIFICAÇÃO DA FOTO
+
+                                                            Uma foto solta não prova nada: fora do relatório ela é
+                                                            uma imagem sem dono, sem lugar e sem data. Quem a
+                                                            receber por outro caminho — anexada a um processo,
+                                                            encaminhada por mensagem — precisa saber de onde veio.
+
+                                                            A legenda antiga trazia só o horário, em 6,5pt cinza
+                                                            claro: some no papel impresso e não identifica nada.
+                                                            Agora carrega estabelecimento e data/hora, legível.
+
+                                                            O horário é o da FOTO (quando foi anexada), não o da
+                                                            inspeção: numa vistoria longa as duas coisas se
+                                                            distanciam, e o que vale como registro é quando aquela
+                                                            cena foi capturada. */}
+                                                        <div className="px-2 py-1 border-t border-zinc-200 leading-tight">
+                                                          {idData.fantasia && (
+                                                            <p className="text-[6.5pt] font-bold uppercase text-zinc-600 break-words">
+                                                              {idData.fantasia}
+                                                            </p>
+                                                          )}
+                                                          <p className="text-[6.5pt] font-bold uppercase text-zinc-400">
+                                                            {photo.timestamp}
+                                                          </p>
+                                                        </div>
                                                       </div>
                                                     );
                                                   })}
@@ -3600,7 +3676,23 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             roteiro") saiu: repetia a tela Roteiros › Inspeções em Andamento, e
             a exclusão desceu pra barra fixa, junto das outras duas ações. */}
         <div className="flex items-center gap-2 sm:gap-3">
-            {lastAutoSave && (<div className="flex items-center gap-2 text-[#1F7A5C] bg-[#E4EEEC]/70 px-3 py-1.5 rounded-full border border-[#1F7A5C]/20"><Cloud className="h-3 w-3" /><span className="text-[10px] font-black uppercase whitespace-nowrap">Salvo às {format(lastAutoSave, "HH:mm")}</span></div>)}
+            {lastAutoSave && (
+              <div className={cn(
+                "flex items-center gap-2 px-3 py-1.5 rounded-full border",
+                ondeEstaSalvo === 'nuvem' && "text-[#1F7A5C] bg-[#E4EEEC]/70 border-[#1F7A5C]/20",
+                ondeEstaSalvo === 'aparelho' && "text-[#9C7A3C] bg-amber-50 border-amber-300",
+                ondeEstaSalvo === 'grande' && "text-rose-700 bg-rose-50 border-rose-300",
+                !ondeEstaSalvo && "text-[#6B6659] bg-[#F1EEE4] border-[#E4DFD1]"
+              )}>
+                {ondeEstaSalvo === 'nuvem' ? <Cloud className="h-3 w-3" /> : <CloudOff className="h-3 w-3" />}
+                <span className="text-[10px] font-black uppercase whitespace-nowrap">
+                  {ondeEstaSalvo === 'nuvem' && `Na nuvem, ${format(lastAutoSave, "HH:mm")}`}
+                  {ondeEstaSalvo === 'aparelho' && 'Só neste aparelho'}
+                  {ondeEstaSalvo === 'grande' && 'Não cabe na nuvem'}
+                  {!ondeEstaSalvo && `Salvo às ${format(lastAutoSave, "HH:mm")}`}
+                </span>
+              </div>
+            )}
         </div>
       </header>
 
@@ -4157,7 +4249,21 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                           <label className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase transition-all cursor-pointer", (itemPhotos[item.id]?.length ?? 0) > 0 ? "bg-primary/10 text-primary" : "text-[#6B6659] hover:bg-[#F1EEE4]")}>
                             {uploadingItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
                             {(itemPhotos[item.id]?.length ?? 0) > 0 ? `Fotos (${itemPhotos[item.id].length})` : "Anexar Foto"}
-                            <input type="file" accept="image/*" capture="environment" className="hidden" disabled={uploadingItem === item.id} onChange={(e) => handlePhotoUpload(item.id, e)} />
+                            {/* Sem o atributo capture, de propósito.
+
+                                Com capture="environment" o toque abria a câmera DENTRO do
+                                navegador: a foto ia direto para o sistema, era comprimida e o
+                                original deixava de existir — não passava pela galeria do
+                                aparelho em momento nenhum.
+
+                                Sem ele, abre o seletor do sistema. O fiscal que tirar a
+                                foto pelo app de câmera e anexar da galeria fica com o original
+                                no aparelho, em resolução cheia, e o sistema guarda só a cópia
+                                compactada. A prova original sobrevive fora do documento.
+
+                                Um app da web não consegue GRAVAR na galeria; o que dá para
+                                fazer é não impedir que ela nasça lá. */}
+                            <input type="file" accept="image/*" className="hidden" disabled={uploadingItem === item.id} onChange={(e) => handlePhotoUpload(item.id, e)} />
                           </label>
                         </div>
                         {(itemPhotos[item.id]?.length ?? 0) > 0 && (
@@ -4289,7 +4395,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                         <label className={cn("flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase transition-all cursor-pointer", (itemPhotos[item.id]?.length ?? 0) > 0 ? "bg-primary/10 text-primary" : "text-[#6B6659] hover:bg-[#F1EEE4]")}>
                           {uploadingItem === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
                           {(itemPhotos[item.id]?.length ?? 0) > 0 ? `Fotos (${itemPhotos[item.id].length})` : "Anexar Foto"}
-                          <input type="file" accept="image/*" capture="environment" className="hidden" disabled={uploadingItem === item.id} onChange={(e) => handlePhotoUpload(item.id, e)} />
+                          <input type="file" accept="image/*" className="hidden" disabled={uploadingItem === item.id} onChange={(e) => handlePhotoUpload(item.id, e)} />
                         </label>
                       </div>
                       {(itemPhotos[item.id]?.length ?? 0) > 0 && (

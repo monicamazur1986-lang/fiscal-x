@@ -85,6 +85,69 @@ export async function compressImage(file: File, maxDimension = 1280, quality = 0
   return decodeAndResize(source, maxDimension, quality);
 }
 
+
+/**
+ * COMPRESSÃO COM ORÇAMENTO DE BYTES — para a foto que vai EMBUTIDA no
+ * documento, e não para o Storage.
+ *
+ * São dois destinos com exigências opostas. No Storage a foto é um arquivo à
+ * parte: pode ter 300 KB sem incomodar ninguém, e vale manter a qualidade,
+ * porque ela é prova em processo sanitário. Embutida, ela vira texto base64
+ * DENTRO da vistoria — cada byte da imagem ocupa ~1,33 byte no documento, e o
+ * documento tem teto de 1 MiB no Firestore.
+ *
+ * A conta que importa: com ~80 KB por foto, o base64 dá ~107 KB, e seis fotos
+ * somam ~640 KB — cabem junto com o resto da vistoria. Na compressão de
+ * sempre (1280px, q0.7), duas fotos já podem estourar o documento inteiro.
+ *
+ * Estourar não falha só aquela gravação: a fila do SDK é FIFO, e uma gravação
+ * que o servidor nunca aceita segura todas as outras até o aparelho parar de
+ * salvar (ver a trava de tamanho em use-inspecoes.ts).
+ *
+ * As tentativas descem em dimensão E qualidade juntas. Só reduzir a qualidade
+ * deixa a foto borrada mantendo o tamanho da tela; reduzir os dois preserva
+ * melhor o que importa numa foto de fiscalização — ler um rótulo, enxergar
+ * sujidade num equipamento.
+ */
+const TENTATIVAS_EMBUTIDA: { dimensao: number; qualidade: number }[] = [
+  { dimensao: 1280, qualidade: 0.7 },
+  { dimensao: 1024, qualidade: 0.6 },
+  { dimensao: 900, qualidade: 0.5 },
+  { dimensao: 720, qualidade: 0.45 },
+  { dimensao: 600, qualidade: 0.4 },
+  { dimensao: 480, qualidade: 0.35 },
+];
+
+/** Orçamento por foto embutida. Ver a conta no comentário acima. */
+export const ORCAMENTO_FOTO_EMBUTIDA = 80 * 1024;
+
+export async function compressImageToBudget(
+  file: File,
+  maxBytes = ORCAMENTO_FOTO_EMBUTIDA,
+): Promise<{ blob: Blob; coube: boolean; bytes: number }> {
+  let source: File | Blob = file;
+  if (isHeic(file)) {
+    try {
+      source = await convertHeicToJpeg(file);
+    } catch {
+      throw new Error('Não foi possível converter essa imagem HEIC.');
+    }
+  }
+
+  let ultimo: Blob | null = null;
+  for (const { dimensao, qualidade } of TENTATIVAS_EMBUTIDA) {
+    const blob = await decodeAndResize(source, dimensao, qualidade);
+    ultimo = blob;
+    if (blob.size <= maxBytes) return { blob, coube: true, bytes: blob.size };
+  }
+
+  // Nem no menor ajuste coube. Devolve mesmo assim, com o aviso: uma foto
+  // menor que o ideal ainda é melhor do que perder a prova, e quem chama
+  // decide o que dizer ao fiscal.
+  const blob = ultimo!;
+  return { blob, coube: false, bytes: blob.size };
+}
+
 export function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
