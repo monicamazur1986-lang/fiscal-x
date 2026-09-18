@@ -293,14 +293,30 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
         updatedAt: Timestamp.now()
       };
 
-      // Num documento que já existe, a gravação é merge: não enviar estes
-      // campos é o que preserva o compartilhamento. Enviá-los com o default
-      // [] do schema (o formulário não os conhece) apagaria o acesso do
-      // colega no primeiro salvamento automático — quem altera a lista é
-      // compartilharIntimacao, e só ela.
+      // Num documento que já existe, a gravação é merge: o que NÃO é enviado
+      // fica como está no banco. É o que preserva o compartilhamento — enviar
+      // compartilhadoCom com o default [] do schema (o formulário não o
+      // conhece) apagaria o acesso do colega no primeiro salvamento
+      // automático. Quem altera essa lista é compartilharIntimacao, e só ela.
+      //
+      // A AUTORIA SAI PELO MESMO MOTIVO, e este é mais sutil.
+      //
+      // Acima, createdBy é deduzido do documento que está na lista local
+      // (`anterior`). Quando o colega abre uma autuação compartilhada e ela
+      // ainda não chegou à lista dele — índice em construção, listener das
+      // compartilhadas cancelado, primeiro salvamento antes do snapshot —,
+      // `anterior` vem vazio e o campo assume o uid DELE. A regra do Firestore
+      // exige que createdBy não mude no update, então a gravação inteira é
+      // rejeitada: o colega digita, o autosave falha calado, e o autor nunca
+      // vê o que foi preenchido.
+      //
+      // Não enviando o campo, não há o que divergir: o merge mantém a autoria
+      // gravada e a regra compara o valor com ele mesmo.
       if (id) {
         delete fbData.compartilhadoCom;
         delete fbData.compartilhadoComNomes;
+        delete fbData.createdBy;
+        delete fbData.createdByName;
       }
 
       try {
@@ -318,7 +334,13 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
         if (!synced) cloudError = "Sem conexão com a nuvem — será sincronizado automaticamente.";
       } catch (e: any) {
         console.warn("Falha ao persistir intimacão no Firebase:", e);
-        cloudError = e?.message || "Falha ao salvar na nuvem";
+        // "Sem conexão" e "sem permissão" pedem reações opostas: uma se
+        // resolve esperando, a outra não se resolve nunca. Dizer a primeira
+        // quando é a segunda faz o fiscal continuar digitando num documento
+        // que não está sendo salvo.
+        cloudError = e?.code === 'permission-denied'
+          ? "Sem permissão para salvar esta autuação. Se ela foi compartilhada com você, feche e abra de novo; se persistir, peça ao autor para compartilhar outra vez."
+          : (e?.message || "Falha ao salvar na nuvem");
       }
     } else {
       cloudError = "Sem conexão com a nuvem";
@@ -446,8 +468,24 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
   ) => {
     const uids = colegas.map(c => c.uid);
 
+    // O TERMO VINCULADO VAI JUNTO.
+    //
+    // Auto de Infração e Termo de Apreensão/Interdição são documentos
+    // separados no banco, ligados por autoInfracaoVinculadaId. Compartilhar
+    // só o auto dava ao colega acesso a metade do caso: o termo continuava
+    // com createdBy do autor e sem compartilhadoCom, então a regra do
+    // Firestore barrava até a LEITURA. Na tela isso não aparece como erro —
+    // o termo simplesmente não é restaurado, e o colega vê um auto sem a
+    // apreensão que o acompanha, como se o autor não tivesse preenchido.
+    //
+    // Os dois são o mesmo ato de fiscalização; quem recebe um recebe o outro.
+    const documento = intimacoesRef.current.find(i => String(i.id) === String(id));
+    const idsParaCompartilhar = [id, documento?.autoInfracaoVinculadaId, documento?.documentoOrigemId]
+      .filter((x): x is string => !!x && String(x).trim() !== '');
+    const alvos = Array.from(new Set(idsParaCompartilhar.map(String)));
+
     setIntimacoes(prev => {
-      const atualizada = prev.map(i => String(i.id) === String(id)
+      const atualizada = prev.map(i => alvos.includes(String(i.id))
         ? { ...i, compartilhadoCom: uids, compartilhadoComNomes: colegas }
         : i);
       salvarCacheColecao(LOCAL_STORAGE_KEY, atualizada);
@@ -455,12 +493,21 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     });
 
     if (!db || configError) return { synced: false };
-    return attemptFirestoreWrite(
-      setDoc(doc(db, "intimacoes", id), {
-        compartilhadoCom: uids,
-        compartilhadoComNomes: colegas,
-      }, { merge: true })
-    );
+
+    // Em série, e não em paralelo: são poucas gravações (duas, no máximo), e
+    // se a do termo falhar é melhor saber disso do que ter metade aplicada
+    // sem ninguém perceber.
+    let synced = true;
+    for (const alvo of alvos) {
+      const r = await attemptFirestoreWrite(
+        setDoc(doc(db, "intimacoes", alvo), {
+          compartilhadoCom: uids,
+          compartilhadoComNomes: colegas,
+        }, { merge: true })
+      );
+      if (!r.synced) synced = false;
+    }
+    return { synced };
   }, [db, configError]);
 
   return {
