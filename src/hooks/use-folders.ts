@@ -15,7 +15,7 @@ const LOCAL_STORAGE_KEY = 'fiscal_x_folders';
  * Docfacil não compartilham a mesma árvore) — mesmo padrão de sincronização
  * já usado em use-docfacil.ts, pra que uma pasta criada por um fiscal
  * apareça pros outros usuários do mesmo município, não só no aparelho dele. */
-export function useFolders(area: 'intimacoes' | 'docfacil') {
+export function useFolders(area: 'intimacoes' | 'docfacil' | 'pas') {
   const { profile, user, configError } = useAuth();
   const [folders, setFolders] = useState<Folder[]>([]);
   const [loading, setLoading] = useState(true);

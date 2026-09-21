@@ -80,7 +80,7 @@ export type Folder = {
   name: string;
   parentId?: string;
   municipioId: string;
-  area: 'intimacoes' | 'docfacil';
+  area: 'intimacoes' | 'docfacil' | 'pas';
   createdBy: string;
   createdAt: string;
   deleted?: boolean;
@@ -379,6 +379,23 @@ export type Pas = {
   responsavelAtualNome?: string | null;
   /** Lembrete/notificação criado ao encaminhar — cancelado quando alguém age. */
   encaminhamentoLembreteId?: string | null;
+  /** Quem passou a vez pra responsavelAtualUid — seja um encaminhamento
+   * manual (PasEncaminharDialog) ou automático (ex.: instrução concluída
+   * devolvendo o despacho pro gestor que o emitiu). Usado só pra avisar essa
+   * pessoa quando o processo "volta" pra ela (ver limparEncaminhamento em
+   * pas/[id]/page.tsx) — não é trava de permissão, só endereço do aviso. */
+  encaminhadoPorUid?: string | null;
+  encaminhadoPorNome?: string | null;
+  /** Pasta de organização (coleção `folders`, area: 'pas') — só arruma a
+   * lista, não tem efeito nenhum no andamento jurídico do processo. */
+  folderId?: string;
+  /** Guardado pelo usuário pra tirar da vista sem mexer na fase legal — bem
+   * diferente da fase `arquivamento`, que é o encerramento de verdade do
+   * processo (Título III, Cap.4 do manual), alcançado pelo fluxo de
+   * julgamento/TIP. Um PAS ainda em instrução pode ser arquivado aqui só
+   * pra sair da lista principal, e devolvido dali a qualquer momento. */
+  arquivado?: boolean;
+  arquivadoEm?: string;
   createdBy: string;
   createdByName?: string;
   createdAt: string;

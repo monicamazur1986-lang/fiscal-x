@@ -19,6 +19,7 @@
  * Antes disso existir (ainda na instauração), cai num endereçamento
  * genérico ao cargo, sem nome. */
 import { baseLegalDoMunicipio, porExtensoComUnidade } from '@/lib/base-legal-municipal';
+import type { PasFase, PasPecaTipo } from '@/lib/types';
 
 /** Todo texto do rito cita artigo e prazo, e ambos mudam conforme o município
  *  tenha ou não código sanitário próprio (ver base-legal-municipal.ts). Por
@@ -166,6 +167,28 @@ export const PAS_FASE_LABEL: Record<string, string> = {
   julgamento: 'Julgamento',
   recursal: 'Fase Recursal',
   arquivamento: 'Arquivamento',
+};
+
+/** Sequência linear das fases do rito — mesma ordem do roadmap da tela do
+ * PAS. Serve pra "andar uma casa pra trás" (ver PAS_FASE_APOS_PECA abaixo e
+ * o botão "Voltar etapa" em pas/[id]/page.tsx): sem essa lista, calcular "a
+ * fase anterior" dependia de repetir a mesma sequência em mais de um lugar. */
+export const PAS_FASE_ORDEM: PasFase[] = ['instauracao', 'instrucao', 'aguardando_julgamento', 'julgamento', 'recursal', 'arquivamento'];
+
+/**
+ * Peça cuja lavratura é o próprio ato que avança a fase do processo (ver os
+ * handlers em pas/[id]/page.tsx — handleIniciarInstrucao, handleEncaminharJulgamento
+ * etc.), mapeada pra fase que ela produz. Existe pra desfazer esse avanço
+ * quando a peça é excluída por ter sido lavrada errada: sem isso, apagar a
+ * peça (documento) e o processo continuar "preso" na fase que ela abriu era
+ * exatamente o que deixava a tela sem o botão pra redigir de novo — a fase
+ * não tem memória própria do que a colocou lá.
+ */
+export const PAS_FASE_APOS_PECA: Partial<Record<PasPecaTipo, PasFase>> = {
+  despacho_inicial: 'instrucao',
+  despacho_encerramento_instrucao: 'aguardando_julgamento',
+  julgamento_primeira_instancia: 'julgamento',
+  termo_imposicao_penalidade: 'recursal',
 };
 
 export const PAS_FASE_COR: Record<string, string> = {

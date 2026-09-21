@@ -35,35 +35,20 @@
  *    página no tamanho real dela.
  */
 
+import { CLASSE_FOLHA_PDF, garantirEstiloDaFolha, zerarEspacamentoInline } from './pdf-letter-spacing';
+
 const A4_LARGURA_MM = 210;
 const A4_ALTURA_MM = 297;
 /** 3x sobre ~794px de largura ≈ 288 DPI — mesma nitidez do gerador antigo. */
 const ESCALA_CANVAS = 3;
 /** Resolução usada pra rasterizar as páginas de um PDF anexado. */
 const DPI_ANEXO = 200;
-const CLASSE_FOLHA = 'pdf-folha-pas';
-
-/**
- * LETRAS ESMAGADAS — o html2canvas, sempre que encontra `letter-spacing`
- * diferente de zero, para de desenhar o texto por palavras e passa a desenhar
- * **letra por letra**, avançando só a largura de cada glifo e ignorando o
- * espaçamento configurado (ver `renderTextWithLetterSpacing` no dist dele).
- * O resultado são caracteres colados/sobrepostos, sem kerning — exatamente o
- * que aparecia nos títulos em versalete do timbre e da capa, que usam as
- * classes `tracking-tighter`/`tracking-tight` (espaçamento negativo).
- *
- * A regra abaixo zera o espaçamento dentro das folhas do PDF (inclusive no
- * cabeçalho rico que o município configurou por conta própria, onde não dá
- * pra mexer classe por classe). Ela entra no staging antes de qualquer
- * medição, então a altura medida e a imagem capturada continuam batendo.
- */
-function garantirEstiloDaFolha(staging: HTMLDivElement) {
-  if (staging.querySelector('style[data-pdf-estilo]')) return;
-  const estilo = document.createElement('style');
-  estilo.setAttribute('data-pdf-estilo', '');
-  estilo.textContent = `.${CLASSE_FOLHA}, .${CLASSE_FOLHA} * { letter-spacing: normal !important; }`;
-  staging.appendChild(estilo);
-}
+// A correção de letter-spacing (ver pdf-letter-spacing.ts) nasceu aqui e foi
+// extraída pra ser compartilhada com a autuação e o relatório de roteiro,
+// que tinham o mesmo defeito. CLASSE_FOLHA só precisa ser a MESMA usada nas
+// duas metades da correção — reaproveita a constante do módulo em vez de
+// manter um nome local à parte.
+const CLASSE_FOLHA = CLASSE_FOLHA_PDF;
 
 type PaginaHtml = { tipo: 'html'; folha: HTMLElement };
 type PaginaAnexoPdf = { tipo: 'anexo-pdf'; doc: any; pagina: number };
@@ -209,11 +194,11 @@ export async function renderPasIntoPdf(
   const capturar = async (el: HTMLElement) => {
     await prepararImagens(el);
     // Cinto e suspensório do `letter-spacing: normal` acima: o html2canvas lê
-    // os estilos no clone que ele monta num iframe à parte, então o valor vai
-    // também inline, elemento por elemento. Como o computado já é `normal`
-    // por causa da regra, isso não muda nenhuma altura já medida.
-    el.style.letterSpacing = 'normal';
-    el.querySelectorAll<HTMLElement>('*').forEach((filho) => { filho.style.letterSpacing = 'normal'; });
+    // os estilos num clone que ele monta num iframe à parte, então o valor vai
+    // também inline, elemento por elemento (ver pdf-letter-spacing.ts). Como o
+    // computado já é `normal` por causa da regra, isso não muda nenhuma altura
+    // já medida.
+    zerarEspacamentoInline(el);
     // windowWidth precisa bater exatamente com a largura usada pra medir as
     // alturas — um valor fixo que não coincida com a largura real da folha já
     // foi causa de conteúdo cortado nas bordas.

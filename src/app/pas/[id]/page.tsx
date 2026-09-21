@@ -7,7 +7,7 @@ import { ptBR } from "date-fns/locale"
 import {
   Loader2, Timer, FileStack, Send, Paperclip, CheckCircle2,
   AlertTriangle, ChevronDown, Download, X, FileDown, Landmark, Pencil, Trash2,
-  Sparkles, MoreHorizontal, Eye,
+  Sparkles, MoreHorizontal, Eye, Undo2,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
@@ -23,6 +23,7 @@ import {
   AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
 } from "@/components/ui/alert-dialog"
 import { PasDica } from "@/components/pas/pas-dica"
+import { PasTimbreOficial } from "@/components/pas/pas-timbre-oficial"
 import { PasPecaReviewDialog, type PasPecaRevisao } from "@/components/pas/pas-peca-review-dialog"
 import { PasPecaVisualizarDialog } from "@/components/pas/pas-peca-visualizar-dialog"
 import { PasEncaminharDialog } from "@/components/pas/pas-encaminhar-dialog"
@@ -56,6 +57,8 @@ import {
   textoTermoRetificacao,
   PAS_PECA_TITULOS,
   PAS_FASE_LABEL,
+  PAS_FASE_ORDEM,
+  PAS_FASE_APOS_PECA,
 } from "@/lib/pas-textos-padrao"
 import { cn, normalizeId } from "@/lib/utils"
 
@@ -171,18 +174,17 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         estabelecimento: pas.estabelecimento.fantasia,
         cnpj: pas.estabelecimento.cnpj,
         endereco: pas.estabelecimento.endereco,
-        teorAutoInfracao: (autoInfracao?.teor || '').replace(/<[^>]*>/g, ' ').replace(/s+/g, ' ').trim(),
+        teorAutoInfracao: (autoInfracao?.teor || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(),
         legislacaoBase: autoInfracao?.legislacaoBase,
         dataCiencia: pas.dataCienciaAI ? format(new Date(pas.dataCienciaAI), "dd/MM/yyyy") : undefined,
         naoConformidades,
-        conclusaoInspecao: (dados?.conclusaoHtml || '').replace(/<[^>]*>/g, ' ').replace(/s+/g, ' ').trim() || undefined,
+        conclusaoInspecao: (dados?.conclusaoHtml || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() || undefined,
         defesa: {
           apresentada: !!pas.defesa,
           tempestividade: pas.defesa?.tempestividade,
           recebidaEm: pas.defesa?.recebidaEm ? format(new Date(pas.defesa.recebidaEm), "dd/MM/yyyy") : undefined,
         },
         termoVinculado,
-        antecedentes: antecedentes.trim() || undefined,
         quantidadeProvas: provasSelecionadas.length,
         pecas: pecas.map(pc => pc.titulo),
         // Só entra como nota se o fiscal escreveu algo À MÃO. Depois de uma
@@ -228,7 +230,6 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const [isRegistrandoDefesa, setIsRegistrandoDefesa] = useState(false);
 
   const [fatos, setFatos] = useState("");
-  const [antecedentes, setAntecedentes] = useState("");
   const provasInputRef = useRef<HTMLInputElement>(null);
   const [provasSelecionadas, setProvasSelecionadas] = useState<File[]>([]);
 
@@ -459,6 +460,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const [isEmitindoJulgamento, setIsEmitindoJulgamento] = useState(false);
   const [isEncaminhandoTip, setIsEncaminhandoTip] = useState(false);
   const [isArquivando, setIsArquivando] = useState(false);
+  const [isVoltandoEtapa, setIsVoltandoEtapa] = useState(false);
 
   const [isExcluindoPas, setIsExcluindoPas] = useState(false);
 
@@ -489,13 +491,38 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const podeExcluirPeca = isGestor || isAutuante;
 
   const handleExcluirPeca = async () => {
-    if (!pecaParaExcluir) return;
+    if (!pecaParaExcluir || !pas) return;
     setIsExcluindoPeca(true);
     try {
       const { renumerado } = await excluirPeca(pecaParaExcluir.id);
+
+      // O SISTEMA VOLTA SOZINHO PRO FLUXO PADRÃO.
+      //
+      // Certas peças SÃO o próprio ato que avança a fase (despacho inicial,
+      // encerramento da instrução, julgamento, TIP — ver PAS_FASE_APOS_PECA).
+      // Excluir uma dessas por ter sido lavrada errada não podia deixar o
+      // processo preso na fase que ela abriu: os botões pra redigir de novo
+      // (relatório, termos) ficam escondidos assim que a fase avança, e sem
+      // reverter a fase eles não voltavam a aparecer mesmo com a peça já
+      // fora dos autos. Só reverte quando a fase ainda é exatamente a que
+      // essa peça abriu — se o processo já seguiu adiante (ex.: excluiu o
+      // despacho de instauração depois de já ter julgamento emitido), a
+      // fase não recua sozinha; use "Voltar etapa" (no card de ações) pra
+      // decidir isso manualmente.
+      const faseQueEstaPecaAbriu = PAS_FASE_APOS_PECA[pecaParaExcluir.tipo];
+      let faseAnteriorRestaurada: PasFase | null = null;
+      if (faseQueEstaPecaAbriu && pas.fase === faseQueEstaPecaAbriu) {
+        const idx = PAS_FASE_ORDEM.indexOf(faseQueEstaPecaAbriu);
+        if (idx > 0) {
+          faseAnteriorRestaurada = PAS_FASE_ORDEM[idx - 1];
+          await atualizarPas(pas.id, { fase: faseAnteriorRestaurada });
+        }
+      }
+
+      const descricaoFase = faseAnteriorRestaurada ? ` A etapa voltou para ${PAS_FASE_LABEL[faseAnteriorRestaurada]}.` : '';
       toast(renumerado
-        ? { title: "Peça excluída", description: "As peças seguintes foram renumeradas." }
-        : { title: "Peça excluída", description: "A numeração das peças seguintes não pôde ser ajustada — publique as regras do Firestore e reabra o processo." });
+        ? { title: "Peça excluída", description: `As peças seguintes foram renumeradas.${descricaoFase}` }
+        : { title: "Peça excluída", description: `A numeração das peças seguintes não pôde ser ajustada — publique as regras do Firestore e reabra o processo.${descricaoFase}` });
       setPecaParaExcluir(null);
     } catch (e) {
       console.error('Erro ao excluir peça do PAS:', e);
@@ -505,22 +532,36 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
     }
   };
 
-  const handleEscolherEncaminhamento = async (colega: { uid: string; displayName: string }) => {
+  // Passa a "vez de agir" pra alguém — mesma mecânica tanto pro
+  // encaminhamento manual (handleEscolherEncaminhamento, abaixo) quanto pras
+  // devoluções automáticas de fase (ex.: handleEncaminharJulgamento, quando a
+  // instrução termina e o despacho retorna pro gestor que o emitiu): cria
+  // uma notificação quase imediata na Agenda/push já existentes (sem
+  // antecedência nenhuma) e marca quem passou a vez, pra avisar essa pessoa
+  // de volta quando o processo "voltar" pra ela (ver limparEncaminhamento).
+  const notificarProximaAcao = async (destino: { uid: string; nome: string }, titulo: string) => {
     if (!pas || !profile?.municipioId) return;
+    const lembreteId = await criarLembretePrazo(saveInspecao, {
+      titulo,
+      prazoISO: new Date().toISOString(),
+      diasAntecedencia: 0,
+      fiscalId: destino.uid,
+      fiscalNome: destino.nome,
+      municipioId: profile.municipioId,
+    });
+    await atualizarPas(pas.id, {
+      responsavelAtualUid: destino.uid,
+      responsavelAtualNome: destino.nome,
+      encaminhamentoLembreteId: lembreteId,
+      encaminhadoPorUid: profile.uid,
+      encaminhadoPorNome: profile.displayName || 'Fiscal',
+    });
+  };
+
+  const handleEscolherEncaminhamento = async (colega: { uid: string; displayName: string }) => {
+    if (!pas) return;
     try {
-      // Notificação quase imediata — reaproveita o mesmo lembrete de prazo,
-      // só que sem antecedência nenhuma (a "data" do aviso é agora mesmo),
-      // pra a pessoa receber o aviso pela Agenda/push já existentes, sem
-      // precisar de nenhum código novo de notificação.
-      const lembreteId = await criarLembretePrazo(saveInspecao, {
-        titulo: `PAS encaminhado pra você — ${pas.estabelecimento.fantasia} (nº ${pas.numeroProcesso})`,
-        prazoISO: new Date().toISOString(),
-        diasAntecedencia: 0,
-        fiscalId: colega.uid,
-        fiscalNome: colega.displayName,
-        municipioId: profile.municipioId,
-      });
-      await atualizarPas(pas.id, { responsavelAtualUid: colega.uid, responsavelAtualNome: colega.displayName, encaminhamentoLembreteId: lembreteId });
+      await notificarProximaAcao({ uid: colega.uid, nome: colega.displayName }, `PAS encaminhado pra você — ${pas.estabelecimento.fantasia} (nº ${pas.numeroProcesso})`);
       toast({ title: `Encaminhado para ${colega.displayName}` });
     } catch (e) {
       console.error('Erro ao encaminhar o PAS:', e);
@@ -530,10 +571,29 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
 
   // Sempre que alguém efetivamente age (uma peça nova entra nos autos), o
   // encaminhamento pendente se resolve sozinho — sem isso, o aviso "com
-  // fulano" continuaria aparecendo mesmo depois de resolvido.
+  // fulano" continuaria aparecendo mesmo depois de resolvido. A DEVOLUÇÃO
+  // avisa quem tinha encaminhado/despachado (encaminhadoPorUid) que a vez
+  // voltou pra ele — não avisa quando é a própria pessoa agindo (ela já
+  // sabe, foi ela mesma).
   const limparEncaminhamento = async () => {
     if (!pas?.responsavelAtualUid) return;
-    await atualizarPas(pas.id, { responsavelAtualUid: null, responsavelAtualNome: null });
+    if (pas.encaminhadoPorUid && pas.encaminhadoPorUid !== profile?.uid) {
+      try {
+        await criarLembretePrazo(saveInspecao, {
+          titulo: `Devolvido pra você — ${pas.estabelecimento.fantasia} (nº ${pas.numeroProcesso})`,
+          prazoISO: new Date().toISOString(),
+          diasAntecedencia: 0,
+          fiscalId: pas.encaminhadoPorUid,
+          fiscalNome: pas.encaminhadoPorNome || 'Fiscal',
+          municipioId: pas.municipioId,
+        });
+      } catch (e) {
+        // Aviso de devolução é conveniência, não pode travar a ação
+        // principal (registrar defesa, emitir julgamento etc.).
+        console.error('Erro ao avisar a devolução do PAS:', e);
+      }
+    }
+    await atualizarPas(pas.id, { responsavelAtualUid: null, responsavelAtualNome: null, encaminhadoPorUid: null, encaminhadoPorNome: null });
     await cancelarLembretePrazo(deleteInspecao, pas.encaminhamentoLembreteId);
   };
 
@@ -665,13 +725,40 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const handleArquivarProcesso = async () => {
     setIsArquivando(true);
     try {
-      await atualizarPas(pas.id, { fase: 'arquivamento' });
+      // Também marca `arquivado` (o mesmo campo usado pra tirar da vista na
+      // lista do PAS) — sem isso, encerrar o processo aqui não bastava: ele
+      // continuava aparecendo em "Todos" até alguém arquivar de novo, à mão,
+      // pelo menu da lista.
+      await atualizarPas(pas.id, { fase: 'arquivamento', arquivado: true, arquivadoEm: new Date().toISOString() });
       toast({ title: "Processo arquivado" });
     } catch (e) {
       console.error('Erro ao arquivar o PAS:', e);
       toast({ variant: "destructive", title: "Erro ao arquivar" });
     } finally {
       setIsArquivando(false);
+    }
+  };
+
+  // Escape hatch manual — pra quando a peça errada já foi excluída ANTES
+  // deste recurso existir (ou numa situação que o revert automático de
+  // handleExcluirPeca não cobre) e o processo ficou preso numa fase cujas
+  // ações já sumiram da tela. Não apaga nem restaura peça nenhuma: só muda
+  // qual etapa está "aberta", pra a autoridade poder redigir de novo o que
+  // precisar. Mesmo acesso de quem já pode excluir peça (isGestor || isAutuante).
+  const faseAtualIdx = PAS_FASE_ORDEM.indexOf(pas.fase);
+  const faseParaVoltar = faseAtualIdx > 0 ? PAS_FASE_ORDEM[faseAtualIdx - 1] : null;
+
+  const handleVoltarEtapa = async () => {
+    if (!faseParaVoltar) return;
+    setIsVoltandoEtapa(true);
+    try {
+      await atualizarPas(pas.id, { fase: faseParaVoltar });
+      toast({ title: `Etapa voltou para ${PAS_FASE_LABEL[faseParaVoltar]}`, description: "Nenhuma peça foi apagada — os autos continuam como estavam." });
+    } catch (e) {
+      console.error('Erro ao voltar a etapa do PAS:', e);
+      toast({ variant: "destructive", title: "Erro ao voltar a etapa" });
+    } finally {
+      setIsVoltandoEtapa(false);
     }
   };
 
@@ -778,19 +865,17 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         itensProva.push({ tipo: 'termo_juntada' as const, titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: textoTermoJuntadaProva(file.name), anexoUrl: url });
       }
       // O texto já chega estruturado (a IA escreve as seções, ou o fiscal
-      // escreve como quiser). Embrulhar em "1. DOS FATOS" duplicava o
-      // cabeçalho que o próprio texto traz. Os antecedentes continuam como
-      // seção à parte porque são digitados num campo à parte.
+      // escreve como quiser) — um campo só, sem embrulhar em "1. DOS FATOS"
+      // (duplicava o cabeçalho que o próprio texto traz) e sem uma segunda
+      // caixa separada pra antecedentes: quem tiver histórico a relatar
+      // escreve no mesmo texto, como faria numa peça datilografada.
       const comoParagrafos = (texto: string) => texto
         .split(/\n{2,}/)
         .map(bloco => bloco.trim())
         .filter(Boolean)
         .map(bloco => `<p>${bloco.replace(/\n/g, '<br>')}</p>`)
         .join('');
-      const relatorioHtml = [
-        comoParagrafos(fatos),
-        antecedentes.trim() ? `<p><strong>DOS ANTECEDENTES</strong></p>${comoParagrafos(antecedentes)}` : '',
-      ].filter(Boolean).join('');
+      const relatorioHtml = comoParagrafos(fatos);
 
       setRevisao({
         titulo: PAS_PECA_TITULOS.relatorio_instrucao,
@@ -808,7 +893,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
               { tipo: 'termo_juntada', titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: textoTermoJuntadaInstrucao({ destinatario: destinatarioGestor }) },
               { tipo: 'relatorio_instrucao', titulo: PAS_PECA_TITULOS.relatorio_instrucao, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl },
             ]);
-            setFatos(""); setAntecedentes(""); setProvasSelecionadas([]);
+            setFatos(""); setProvasSelecionadas([]);
             toast({ title: "Relatório técnico registrado" });
             await limparEncaminhamento();
             setRevisao(null);
@@ -909,8 +994,18 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
           const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
           await adicionarPeca({ tipo: 'despacho_encerramento_instrucao', titulo: PAS_PECA_TITULOS.despacho_encerramento_instrucao, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl });
           await atualizarPas(pas.id, { fase: 'aguardando_julgamento' });
-          toast({ title: "Encaminhado para julgamento" });
           await limparEncaminhamento();
+          // "Retornem-se os autos conclusos" — o próprio texto do despacho de
+          // instrução já promete isso (ver textoDespachoInstrucao). Instrução
+          // concluída avisa automaticamente quem emitiu aquele despacho de
+          // que o processo voltou, pronto pra julgamento.
+          if (gestorResponsavel) {
+            await notificarProximaAcao(
+              { uid: gestorResponsavel.criadoPorUid, nome: gestorResponsavel.criadoPorNome },
+              `Instrução concluída, despacho retorna para julgamento — ${pas.estabelecimento.fantasia} (nº ${pas.numeroProcesso})`
+            );
+          }
+          toast({ title: "Encaminhado para julgamento" });
           setRevisao(null);
         } catch (e) {
           console.error('Erro ao encaminhar o PAS para julgamento:', e);
@@ -1015,15 +1110,47 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         <div className="rounded-lg border border-[#E4DFD1] bg-white p-5 space-y-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Próxima ação</h2>
-            {isGestor && pas.fase !== 'aguardando_julgamento' && (
-              <button
-                type="button"
-                onClick={() => setIsEncaminharOpen(true)}
-                className="flex items-center gap-1.5 text-xs font-medium text-[#6B6659] hover:text-[#0E4A44] transition-colors"
-              >
-                <Send className="h-3.5 w-3.5" /> Encaminhar
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {/* Escape hatch pra quando o processo ficou preso numa fase sem
+                  as peças que a abriram (excluídas por engano) — muda só qual
+                  etapa está aberta, sem apagar nem restaurar peça nenhuma. */}
+              {podeExcluirPeca && faseParaVoltar && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={isVoltandoEtapa}
+                      className="flex items-center gap-1.5 text-xs font-medium text-[#6B6659] hover:text-[#0E4A44] transition-colors disabled:opacity-50"
+                    >
+                      <Undo2 className="h-3.5 w-3.5" /> Voltar etapa
+                    </button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Voltar para {PAS_FASE_LABEL[faseParaVoltar]}?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Usa isso quando uma peça que abriu a etapa atual ({PAS_FASE_LABEL[pas.fase]}) foi excluída por engano e o processo ficou sem os botões pra redigir de novo. Nenhuma peça é apagada ou restaurada — só a etapa aberta muda, liberando as ações de {PAS_FASE_LABEL[faseParaVoltar]}.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleVoltarEtapa} disabled={isVoltandoEtapa}>
+                        {isVoltandoEtapa ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Voltar etapa
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+              {isGestor && pas.fase !== 'aguardando_julgamento' && (
+                <button
+                  type="button"
+                  onClick={() => setIsEncaminharOpen(true)}
+                  className="flex items-center gap-1.5 text-xs font-medium text-[#6B6659] hover:text-[#0E4A44] transition-colors"
+                >
+                  <Send className="h-3.5 w-3.5" /> Encaminhar
+                </button>
+              )}
+            </div>
           </div>
 
           {pas.fase === 'instauracao' && (
@@ -1050,9 +1177,15 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                   {temDespachoInstrucao ? <CheckCircle2 className="h-3.5 w-3.5" /> : "1"}
                 </span>
                 <div className="flex-1 min-w-0">
+                  {/* "Exclusivo do gestor" é explicação de por que NÃO há botão.
+                      Para o gestor, que tem o botão logo abaixo, era só ruído —
+                      e aparecia de novo no Julgamento, com outra pontuação. Fica
+                      só para quem não pode agir, como já era feito lá. */}
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-[#262420]">Despacho de Instrução</p>
-                    <span className="text-[10px] uppercase font-bold text-[#9C7A3C]">Exclusivo do gestor</span>
+                    {!isGestor && (
+                      <span className="text-[10px] uppercase font-bold text-[#9C7A3C]">Exclusivo do gestor</span>
+                    )}
                   </div>
                   {!temDespachoInstrucao && (
                     isGestor ? (
@@ -1084,31 +1217,29 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
 
                       {/* Redação assistida. Fica acima do campo porque é por onde
                           a maioria vai começar; quem prefere escrever do zero
-                          simplesmente ignora e digita abaixo. */}
-                      <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3 space-y-2">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold text-violet-900">Redigir com IA</p>
-                            <p className="text-[11px] text-violet-800/80 leading-snug mt-0.5">
-                              {inspecaoOrigem
-                                ? `Usa o auto de infração e os ${naoConformidades.length} ${naoConformidades.length === 1 ? 'item não conforme' : 'itens não conformes'} do relatório de inspeção.`
-                                : 'Usa o auto de infração e o que você escrever abaixo. Esta autuação não está vinculada a um relatório de inspeção.'}
-                            </p>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={isGerandoIa}
-                            onClick={() => handleGerarComIa('instrucao')}
-                            className="shrink-0 h-9 gap-1.5 border-violet-300 bg-white text-violet-700 hover:bg-violet-100 text-xs font-bold"
-                          >
-                            {isGerandoIa ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                            Gerar rascunho
-                          </Button>
+                          simplesmente ignora e digita abaixo. Uma frase só —
+                          o que a IA usa e o que ela NÃO faz juntos, mesmo
+                          formato do box equivalente do Julgamento — em vez de
+                          duas caixas de texto competindo pela mesma leitura. */}
+                      <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-violet-900">Redigir com IA</p>
+                          <p className="text-[11px] text-violet-800/80 leading-snug mt-0.5">
+                            {inspecaoOrigem
+                              ? `Usa o auto de infração e os ${naoConformidades.length} ${naoConformidades.length === 1 ? 'item não conforme' : 'itens não conformes'} do relatório de inspeção — não lê arquivos anexados aos autos. Confira os fatos e os artigos antes de registrar.`
+                              : 'Usa o auto de infração e o que você escrever abaixo (sem relatório de inspeção vinculado) — não lê arquivos anexados aos autos. Confira os fatos e os artigos antes de registrar.'}
+                          </p>
                         </div>
-                        <p className="text-[10px] text-violet-800/70 leading-snug">
-                          A IA não lê os arquivos anexados aos autos — ela compõe pelo que está cadastrado. Confira os fatos e os artigos citados antes de registrar.
-                        </p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isGerandoIa}
+                          onClick={() => handleGerarComIa('instrucao')}
+                          className="shrink-0 h-9 gap-1.5 border-violet-300 bg-white text-violet-700 hover:bg-violet-100 text-xs font-bold"
+                        >
+                          {isGerandoIa ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                          Gerar rascunho
+                        </Button>
                       </div>
 
                       <div className="space-y-1.5">
@@ -1124,16 +1255,9 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                           value={fatos}
                           onChange={(e) => setFatos(e.target.value)}
                           rows={10}
-                          placeholder="Gere o rascunho acima e revise aqui — ou escreva o relatório do zero."
+                          placeholder="Gere o rascunho acima e revise aqui, ou escreva do zero — fatos, antecedentes, o que for preciso relatar."
                           className="rounded-md border-[#E4DFD1] resize-y text-[13px] leading-relaxed"
                         />
-                        <p className="text-[11px] text-[#A39D8C] leading-snug">
-                          Os fatos não precisam ser redigitados: eles já constam do Auto de Infração e do termo vinculado, e é de lá que o rascunho é montado.
-                        </p>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-[#6B6659]">Antecedentes (opcional)</Label>
-                        <Textarea value={antecedentes} onChange={(e) => setAntecedentes(e.target.value)} rows={3} className="rounded-md border-[#E4DFD1] resize-none" />
                       </div>
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-2">
@@ -1200,12 +1324,6 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                     <p className="text-xs text-[#A39D8C] mt-1">Falta concluir o relatório técnico e a defesa (ou o termo de informação) acima.</p>
                   )}
                 </div>
-              </div>
-
-              <div className="pt-2 border-t border-[#F1EEE4]">
-                <Button type="button" variant="outline" size="sm" onClick={() => setIsDocComplementarOpen(true)} className="h-8 rounded-md text-xs gap-1.5">
-                  <Paperclip className="h-3.5 w-3.5" /> Adicionar documento complementar
-                </Button>
               </div>
             </div>
           )}
@@ -1286,7 +1404,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                     {isEncaminhandoTip ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />} Encaminhar TIP
                   </Button>
                 ) : (
-                  <p className="text-xs text-[#A39D8C] mt-1">Libera depois do Julgamento em 1ª Instância emitido.</p>
+                  <p className="text-xs text-[#A39D8C] mt-1">Libera depois do julgamento acima.</p>
                 )
               )}
             </div>
@@ -1327,6 +1445,15 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
               {isBaixandoPdf && progressoPdf && (
                 <span className="text-[11px] text-[#6B6659] tabular-nums">folha {progressoPdf}</span>
               )}
+              {/* Sempre disponível, em qualquer fase — não só na Instrução.
+                  Um fato novo pode surgir a qualquer momento do processo
+                  (uma liminar da Justiça, o levantamento de uma interdição,
+                  um ofício recebido no Julgamento ou na fase Recursal) e os
+                  autos precisam poder registrar isso sem esperar o processo
+                  "voltar" pra Instrução. */}
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsDocComplementarOpen(true)} className="h-9 rounded-lg gap-1.5 text-xs">
+                <Paperclip className="h-3.5 w-3.5" /> Adicionar documento
+              </Button>
               {pecas.length > 0 && (
                 <Button
                   type="button"
@@ -1536,7 +1663,6 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         nomeAssinante={profile?.displayName || 'Fiscal'}
         logoUrl={config.logoUrl}
         headerRichText={config.headerRichText}
-        municipioNome={config.municipioNome}
         secretaria={config.secretaria}
         departamento={config.departamento}
       />
@@ -1569,13 +1695,13 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       <Dialog open={isDocComplementarOpen} onOpenChange={setIsDocComplementarOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-serif">Adicionar documento complementar</DialogTitle>
-            <DialogDescription>Pra qualquer papel que não se encaixa nas peças padrão (laudo, ofício recebido, foto extra) — entra nos autos como um Termo de Juntada avulso.</DialogDescription>
+            <DialogTitle className="font-serif">Adicionar documento</DialogTitle>
+            <DialogDescription>Pra qualquer fato novo que não se encaixa nas peças padrão do rito — um laudo, ofício recebido, liminar da Justiça, levantamento de interdição, foto extra — em qualquer fase do processo. Entra nos autos como um Termo de Juntada avulso, sem mudar a fase atual.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase text-[#6B6659]">O que é este documento?</Label>
-              <Textarea value={docComplementarDescricao} onChange={(e) => setDocComplementarDescricao(e.target.value)} rows={3} placeholder="Ex.: Laudo do IAP sobre a amostra de água coletada" className="rounded-md border-[#E4DFD1] resize-none" />
+              <Textarea value={docComplementarDescricao} onChange={(e) => setDocComplementarDescricao(e.target.value)} rows={3} placeholder="Ex.: Decisão judicial concedendo liminar para levantamento da interdição" className="rounded-md border-[#E4DFD1] resize-none" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase text-[#6B6659]">Arquivo</Label>
@@ -1602,7 +1728,9 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
               {pecaParaExcluir?.titulo} — juntada por {pecaParaExcluir?.criadoPorNome}.
               {' '}Use isso só para documento errado ou duplicado: a peça é apagada de vez (não é lixeira) e as seguintes são renumeradas.
               {pecaParaExcluir?.anexoUrl ? ' O arquivo anexado deixa de aparecer nos autos e no PDF.' : ''}
-              {' '}A fase do processo não volta atrás sozinha: se esta peça era a que abriu a fase atual, ajuste o andamento em seguida.
+              {' '}{pecaParaExcluir && PAS_FASE_APOS_PECA[pecaParaExcluir.tipo]
+                ? 'Se esta era a peça que abriu a etapa atual, a etapa volta sozinha para a anterior, liberando os botões pra redigir de novo.'
+                : 'Se esta peça era a que abriu a fase atual, use "Voltar etapa" (no card de ações) pra destravar as ações da fase anterior.'}
               {' '}Para corrigir o conteúdo de uma peça válida, use o Termo de Retificação, que preserva a original.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1628,30 +1756,28 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
           numera tudo de forma contínua a partir da capa. */}
       <div style={{ position: 'fixed', left: -99999, top: 0 }} aria-hidden="true">
         <div ref={printRef} className="document-paper h-auto bg-white">
-          <div data-pdf-header className="flex flex-row items-center justify-between gap-6 mb-1 pb-2 border-none">
-            <div className="w-[140px] h-[100px] flex items-center justify-start overflow-hidden">
-              {config.logoUrl ? (
-                <img
-                  src={config.logoUrl.startsWith('data:') ? config.logoUrl : `/api/proxy-image?url=${encodeURIComponent(config.logoUrl)}`}
-                  className="max-w-full max-h-full object-contain block"
-                  alt="Brasão"
-                  crossOrigin={config.logoUrl.startsWith('data:') ? undefined : "anonymous"}
-                />
-              ) : (
-                <Landmark className="w-2/3 h-2/3 text-zinc-300" strokeWidth={1} />
-              )}
+          {/* Identificação do processo (nº/autuado) entrou aqui dentro do
+              timbre — que é capturado uma vez só e estampado em TODA folha do
+              PDF (ver renderPasIntoPdf) — em vez de ser um `data-pdf-block`
+              repetido no início de cada peça. Era subdivisão redundante: só
+              aparecia na 1ª folha de cada peça (nunca nas de continuação),
+              consumia espaço do orçamento de paginação de toda peça curta, e
+              já é a mesma autuação/estabelecimento do início ao fim do
+              processo. Mesmo tratamento já usado na autuação e no roteiro. */}
+          <div data-pdf-header className="mb-1 pb-2 border-none" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+            <div className="flex flex-row items-center justify-between gap-6">
+              <PasTimbreOficial
+                logoUrl={config.logoUrl}
+                headerRichText={config.headerRichText}
+                secretaria={config.secretaria}
+                departamento={config.departamento}
+                nomeMunicipioExibicao={nomeMunicipioExibicao}
+                tamanho="pdf"
+              />
             </div>
-            <div className="flex-1 text-center">
-              {config.headerRichText ? (
-                <div style={{ fontFamily: "'Times New Roman', Times, serif" }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(config.headerRichText) }} />
-              ) : (
-                <>
-                  <p className="text-[10pt] font-black uppercase text-black">PREFEITURA MUNICIPAL DE {config.municipioNome || "PRUDENTÓPOLIS"}</p>
-                  <h2 className="text-[12pt] font-black uppercase leading-tight">{config.secretaria || "SECRETARIA MUNICIPAL DE SAÚDE"}</h2>
-                  <h3 className="text-[10pt] font-bold uppercase text-zinc-700">{config.departamento || "VIGILÂNCIA SANITÁRIA"}</h3>
-                </>
-              )}
-              <p className="text-[13pt] font-black uppercase text-center tracking-tighter mt-2 border-y border-zinc-200 py-1">Processo Administrativo Sanitário</p>
+            <div className="text-[9pt] mt-2 pt-2 border-t border-zinc-200">
+              <p><strong>Processo Administrativo Sanitário nº:</strong> {pas.numeroProcesso}</p>
+              <p><strong>Autuado:</strong> {pas.estabelecimento.fantasia}{pas.estabelecimento.cnpj ? ` — CNPJ: ${pas.estabelecimento.cnpj}` : ''}</p>
             </div>
           </div>
 
@@ -1693,12 +1819,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
               data-pdf-anexo-url={peca.anexoUrl || undefined}
               data-pdf-anexo-nome={peca.anexoUrl ? `${peca.numero}. ${peca.titulo}` : undefined}
             >
-              <div data-pdf-block className="mb-4 text-[9pt]" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
-                <p><strong>Processo Administrativo Sanitário nº:</strong> {pas.numeroProcesso}</p>
-                <p><strong>Autuado:</strong> {pas.estabelecimento.fantasia}{pas.estabelecimento.cnpj ? ` — CNPJ: ${pas.estabelecimento.cnpj}` : ''}</p>
-              </div>
-
-              <div data-pdf-block className="mb-2">
+              <div data-pdf-block className="mb-4">
                 <div className="sub-header-row text-center">{peca.numero}. {peca.titulo.toUpperCase()}</div>
               </div>
 
@@ -1747,29 +1868,15 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       <div style={{ position: 'fixed', left: -99999, top: 0 }} aria-hidden="true">
         <div ref={capaRef} className="document-paper h-auto bg-white">
           <div data-pdf-header className="flex flex-row items-center justify-between gap-6 mb-1 pb-2 border-none">
-            <div className="w-[140px] h-[100px] flex items-center justify-start overflow-hidden">
-              {config.logoUrl ? (
-                <img
-                  src={config.logoUrl.startsWith('data:') ? config.logoUrl : `/api/proxy-image?url=${encodeURIComponent(config.logoUrl)}`}
-                  className="max-w-full max-h-full object-contain block"
-                  alt="Brasão"
-                  crossOrigin={config.logoUrl.startsWith('data:') ? undefined : "anonymous"}
-                />
-              ) : (
-                <Landmark className="w-2/3 h-2/3 text-zinc-300" strokeWidth={1} />
-              )}
-            </div>
-            <div className="flex-1 text-center">
-              {config.headerRichText ? (
-                <div style={{ fontFamily: "'Times New Roman', Times, serif" }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(config.headerRichText) }} />
-              ) : (
-                <>
-                  <p className="text-[10pt] font-black uppercase text-black">PREFEITURA MUNICIPAL DE {config.municipioNome || "PRUDENTÓPOLIS"}</p>
-                  <h2 className="text-[12pt] font-black uppercase leading-tight">{config.secretaria || "SECRETARIA MUNICIPAL DE SAÚDE"}</h2>
-                  <h3 className="text-[10pt] font-bold uppercase text-zinc-700">{config.departamento || "VIGILÂNCIA SANITÁRIA"}</h3>
-                </>
-              )}
-            </div>
+            <PasTimbreOficial
+              logoUrl={config.logoUrl}
+              headerRichText={config.headerRichText}
+              secretaria={config.secretaria}
+              departamento={config.departamento}
+              nomeMunicipioExibicao={nomeMunicipioExibicao}
+              tamanho="pdf"
+              comTituloProcesso={false}
+            />
           </div>
 
           <div data-pdf-block className="mt-10 text-center" style={{ fontFamily: "'Times New Roman', Times, serif" }}>

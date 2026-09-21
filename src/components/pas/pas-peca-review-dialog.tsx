@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from "react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { Loader2, PenTool, Check, Landmark, Paperclip, X } from "lucide-react"
+import { Loader2, PenTool, Check, Paperclip, X } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { DocfacilEditor } from "@/components/docfacil-editor"
+import { RichTextEditor } from "@/components/rich-text-editor"
+import { FolhaEscalada } from "@/components/folha-escalada"
 import { SignaturePad } from "@/components/signature-pad"
-import { sanitizeHtml } from "@/lib/sanitize-html"
+import { PasTimbreOficial } from "@/components/pas/pas-timbre-oficial"
 
 export interface PasPecaConfirmacao {
   assinaturaUrl?: string;
@@ -47,7 +48,6 @@ interface PasPecaReviewDialogProps {
   nomeAssinante: string;
   logoUrl?: string;
   headerRichText?: string;
-  municipioNome?: string;
   secretaria?: string;
   departamento?: string;
 }
@@ -72,7 +72,6 @@ export function PasPecaReviewDialog({
   nomeAssinante,
   logoUrl,
   headerRichText,
-  municipioNome,
   secretaria,
   departamento,
 }: PasPecaReviewDialogProps) {
@@ -109,64 +108,61 @@ export function PasPecaReviewDialog({
 
   return (
     <Dialog open={!!revisao} onOpenChange={(v) => { if (!v && !isSalvando) onFechar(); }}>
-      <DialogContent className="sm:max-w-[850px] w-[95vw] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[900px] w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-serif">{revisao.titulo}</DialogTitle>
           <DialogDescription>Revise e ajuste o texto se precisar. Depois, assine na tela, marque que vai assinar no papel, ou anexe o documento já pronto — sem uma dessas três coisas, a peça não é gravada.</DialogDescription>
         </DialogHeader>
 
-        <div className="border border-[#E4DFD1] rounded-md overflow-hidden bg-white" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
-          {/* Cabeçalho — mesmo timbre institucional usado no PDF final. */}
-          <div className="flex flex-row items-center justify-between gap-4 px-6 pt-4 pb-2 border-b border-[#E4DFD1]">
-            <div className="w-[70px] h-[55px] flex items-center justify-start overflow-hidden shrink-0">
-              {logoUrl ? (
-                <img
-                  src={logoUrl.startsWith('data:') ? logoUrl : `/api/proxy-image?url=${encodeURIComponent(logoUrl)}`}
-                  className="max-w-full max-h-full object-contain block"
-                  alt="Brasão"
-                />
-              ) : (
-                <Landmark className="w-2/3 h-2/3 text-zinc-300" strokeWidth={1} />
-              )}
+        {/* Folha A4 de verdade (timbre + corpo + fechamento juntos, numa peça
+            só) escalada pro tamanho da tela — mesmo padrão da autuação e do
+            relatório de roteiro (ver useEscalaFolha). Antes, o timbre e a
+            assinatura viviam numa caixa de largura solta enquanto o corpo
+            abria dentro do próprio editor, com sua folha de 210mm fixos: em
+            tela estreita as duas partes desalinhavam e o editor cortava
+            palavra/letra na borda em vez de encolher junto. */}
+        <div className="document-paper-wrapper custom-scrollbar">
+          <FolhaEscalada deps={[revisao.titulo, assinaturaUrl, assinadoForaDoSistema]}>
+            <div className="flex flex-row items-center justify-between gap-4 mb-1 pb-2 border-b border-zinc-200">
+              <PasTimbreOficial
+                logoUrl={logoUrl}
+                headerRichText={headerRichText}
+                secretaria={secretaria}
+                departamento={departamento}
+                nomeMunicipioExibicao={nomeMunicipioExibicao}
+                tamanho="pdf"
+              />
             </div>
-            <div className="flex-1 text-center">
-              {headerRichText ? (
-                <div className="text-[9pt]" dangerouslySetInnerHTML={{ __html: sanitizeHtml(headerRichText) }} />
-              ) : (
-                <>
-                  <p className="text-[9pt] font-black uppercase text-black">PREFEITURA MUNICIPAL DE {municipioNome || nomeMunicipioExibicao}</p>
-                  <h2 className="text-[10pt] font-black uppercase leading-tight">{secretaria || "SECRETARIA MUNICIPAL DE SAÚDE"}</h2>
-                  <h3 className="text-[9pt] font-bold uppercase text-zinc-700">{departamento || "VIGILÂNCIA SANITÁRIA"}</h3>
-                </>
-              )}
-              <p className="text-[10pt] font-black uppercase text-center tracking-tighter mt-1.5 border-y border-zinc-200 py-0.5">Processo Administrativo Sanitário</p>
+
+            <div className="pt-3 text-[9pt]">
+              <p><strong>Processo Administrativo Sanitário nº:</strong> {numeroProcesso}</p>
+              <p><strong>Autuado:</strong> {autuado}</p>
+              {cnpj && <p><strong>CNPJ:</strong> {cnpj}</p>}
             </div>
-            <div className="w-[70px] shrink-0" aria-hidden />
-          </div>
 
-          <div className="px-6 pt-3 text-[9pt]">
-            <p><strong>Processo Administrativo Sanitário nº:</strong> {numeroProcesso}</p>
-            <p><strong>Autuado:</strong> {autuado}</p>
-            {cnpj && <p><strong>CNPJ:</strong> {cnpj}</p>}
-          </div>
-
-          <div className="px-6 pt-3">
-            <p className="text-[10pt] font-black uppercase text-center tracking-wide">{revisao.titulo}</p>
-          </div>
-
-          {/* Corpo — editável. */}
-          <DocfacilEditor defaultValue={revisao.conteudoInicial} onChange={setConteudo} showLetterhead={false} />
-
-          {/* Fechamento — local/data automáticos + nome de quem vai assinar.
-              Sem imagem de assinatura quando for assinar fisicamente depois
-              de impresso — a linha e o nome ficam prontos pra caneta. */}
-          <div className="px-6 py-6 text-center space-y-4 border-t border-[#E4DFD1]">
-            <p className="text-[9pt]">{nomeMunicipioExibicao.toUpperCase()}, {format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.</p>
-            {assinaturaUrl && !assinadoForaDoSistema && <img src={assinaturaUrl} alt="Assinatura" className="h-14 mx-auto object-contain" />}
-            <div className="pt-1 mx-auto w-full max-w-[260px] border-t border-black">
-              <p className="font-bold uppercase text-[9pt] mt-1">{nomeAssinante}</p>
+            <div className="pt-3">
+              <p className="text-[11pt] font-black uppercase text-center tracking-wide">{revisao.titulo}</p>
             </div>
-          </div>
+
+            {/* Corpo — editável, direto na folha (mesmo componente usado no
+                corpo da autuação), sem um editor de rich text separado
+                criando uma segunda folha de largura própria por dentro
+                desta. */}
+            <div className="pt-4">
+              <RichTextEditor value={conteudo} onChange={setConteudo} fontSize="11pt" minHeight="6em" />
+            </div>
+
+            {/* Fechamento — local/data automáticos + nome de quem vai assinar.
+                Sem imagem de assinatura quando for assinar fisicamente depois
+                de impresso — a linha e o nome ficam prontos pra caneta. */}
+            <div className="pt-8 pb-2 text-center space-y-4">
+              <p className="text-[10pt]">{nomeMunicipioExibicao.toUpperCase()}, {format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.</p>
+              {assinaturaUrl && !assinadoForaDoSistema && <img src={assinaturaUrl} alt="Assinatura" className="h-14 mx-auto object-contain" />}
+              <div className="pt-1 mx-auto w-full max-w-[260pt] border-t border-black">
+                <p className="font-bold uppercase text-[10pt] mt-1">{nomeAssinante}</p>
+              </div>
+            </div>
+          </FolhaEscalada>
         </div>
 
         <div className="space-y-2.5 py-2 border-t border-[#E4DFD1]">

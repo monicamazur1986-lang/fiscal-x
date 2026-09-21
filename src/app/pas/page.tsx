@@ -3,16 +3,22 @@
 import { useState, useMemo, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Suspense } from "react"
-import { Plus, Loader2, ChevronRight, Building2 } from "lucide-react"
+import { Plus, Loader2, ChevronRight, Building2, Archive, Folder, FolderPlus } from "lucide-react"
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { usePas } from "@/hooks/use-pas"
+import { useFolders } from "@/hooks/use-folders"
 import { useIntimacoes } from "@/hooks/use-intimacoes"
+import { useInspecoes } from "@/hooks/use-inspecoes"
 import { useAuth } from "@/hooks/use-auth"
 import { useToast } from "@/hooks/use-toast"
-import { agruparProcessos, CartaoPas, SecaoPas, VazioPas } from "@/components/pas/lista-pas"
+import { cancelarLembretePrazo } from "@/lib/prazo-lembrete"
+import { agruparProcessos, CartaoPas, FiltroPastaPas, SecaoPas, VazioPas } from "@/components/pas/lista-pas"
+import type { Pas } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import municipiosPR from "@/lib/municipios-pr.json"
 
@@ -28,17 +34,83 @@ function PasPageInner() {
   // nas regras do Firestore.
   const [selectedMunicipio, setSelectedMunicipio] = useState("");
   const municipioOverride = isRoot ? { municipioIdOverride: selectedMunicipio || undefined } : undefined;
-  const { processos, loading, criarPas, needsMunicipioSelection } = usePas(municipioOverride);
+  const { processos, loading, criarPas, atualizarPas, excluirPas, needsMunicipioSelection } = usePas(municipioOverride);
   const { intimacoes, updateIntimacaoMeta } = useIntimacoes(municipioOverride);
+  const { deleteInspecao } = useInspecoes();
+  const { folders: pastas, createFolder } = useFolders('pas');
 
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
+  // 'todos' esconde os arquivados (arquivar é "tirar da vista"); uma pasta
+  // específica ou 'arquivados' filtram por esse critério, ignorando o outro.
+  const [filtro, setFiltro] = useState<string>('todos');
+  const [isPastaDialogOpen, setIsPastaDialogOpen] = useState(false);
+  const [novaPastaNome, setNovaPastaNome] = useState("");
+
+  const processosFiltrados = useMemo(() => {
+    if (filtro === 'arquivados') return processos.filter((p) => p.arquivado);
+    if (filtro === 'todos') return processos.filter((p) => !p.arquivado);
+    return processos.filter((p) => !p.arquivado && p.folderId === filtro);
+  }, [processos, filtro]);
+
   // A lista era cronológica e plana: num município com trinta processos
   // abertos, descobrir de qual cuidar exigia abrir um por um. O que decide a
   // ordem num PAS não é a data — é prazo vencido, é estar encaminhado para
-  // você, é estar parado esperando julgamento.
-  const grupos = useMemo(() => agruparProcessos(processos, profile?.uid), [processos, profile?.uid]);
+  // você, é estar parado esperando julgamento. Arquivados não entram nessa
+  // triagem por urgência (já foram tirados da vista de propósito).
+  const grupos = useMemo(
+    () => (filtro === 'arquivados' ? [] : agruparProcessos(processosFiltrados, profile?.uid)),
+    [processosFiltrados, filtro, profile?.uid]
+  );
+
+  const handleCriarPasta = async () => {
+    if (!novaPastaNome.trim()) return;
+    try {
+      await createFolder(novaPastaNome);
+      setNovaPastaNome("");
+      setIsPastaDialogOpen(false);
+    } catch (e) {
+      console.error('Erro ao criar pasta do PAS:', e);
+      toast({ variant: "destructive", title: "Erro ao criar pasta" });
+    }
+  };
+
+  const handleArquivar = async (id: string, arquivado: boolean) => {
+    try {
+      await atualizarPas(id, { arquivado, arquivadoEm: arquivado ? new Date().toISOString() : "" });
+      toast({ title: arquivado ? "Processo arquivado" : "Processo desarquivado" });
+    } catch (e) {
+      console.error('Erro ao arquivar PAS:', e);
+      toast({ variant: "destructive", title: "Erro ao arquivar" });
+    }
+  };
+
+  const handleMoverPasta = async (id: string, folderId: string | null) => {
+    try {
+      await atualizarPas(id, { folderId: folderId || "" });
+    } catch (e) {
+      console.error('Erro ao mover PAS de pasta:', e);
+      toast({ variant: "destructive", title: "Erro ao mover para a pasta" });
+    }
+  };
+
+  // Mesma limpeza de pas/[id]/page.tsx (handleExcluirPas) — excluir só o
+  // documento deixava o lembrete de prazo órfão na Agenda e o Auto de
+  // Infração de origem travado (pasId apontando pra um PAS que não existe
+  // mais, impedindo reabrir um processo novo a partir dele).
+  const handleExcluir = async (p: Pas) => {
+    try {
+      await cancelarLembretePrazo(deleteInspecao, p.agendaLembreteId);
+      await cancelarLembretePrazo(deleteInspecao, p.encaminhamentoLembreteId);
+      await excluirPas(p.id);
+      await updateIntimacaoMeta(p.autoInfracaoId, { pasId: null });
+      toast({ title: "Processo excluído" });
+    } catch (e) {
+      console.error('Erro ao excluir PAS:', e);
+      toast({ variant: "destructive", title: "Erro ao excluir processo" });
+    }
+  };
 
   // Autos de Infração finalizados que ainda não têm PAS aberto — candidatos
   // a virar processo novo (o PAS, no manual, sempre nasce de um AI).
@@ -125,17 +197,94 @@ function PasPageInner() {
         ) : processos.length === 0 ? (
           <VazioPas isRoot={isRoot} />
         ) : (
-          <div className="space-y-8">
-            {grupos.map((grupo) => (
-              <SecaoPas key={grupo.chave} grupo={grupo}>
-                {grupo.processos.map((p) => (
-                  <CartaoPas key={p.id} pas={p} onAbrir={() => router.push(`/pas/${p.id}`)} />
+          <>
+            {/* Pastas só organizam a lista (não têm efeito jurídico nenhum) —
+                por isso ficam numa faixa de filtros, igual ao Acervo de
+                Documentos, em vez de uma coluna lateral fixa. */}
+            <div className="flex flex-wrap items-center gap-1.5 bg-[#EFEADC] rounded-lg p-1">
+              <FiltroPastaPas ativa={filtro === 'todos'} onClick={() => setFiltro('todos')}>
+                Todos <span className="tabular-nums opacity-60">{processos.filter((p) => !p.arquivado).length}</span>
+              </FiltroPastaPas>
+              {pastas.map((f) => (
+                <FiltroPastaPas key={f.id} ativa={filtro === f.id} onClick={() => setFiltro(f.id)}>
+                  <Folder className="h-3.5 w-3.5" /> {f.name}
+                </FiltroPastaPas>
+              ))}
+              <FiltroPastaPas ativa={filtro === 'arquivados'} tom="arquivados" onClick={() => setFiltro('arquivados')}>
+                <Archive className="h-3.5 w-3.5" /> Arquivados <span className="tabular-nums opacity-60">{processos.filter((p) => p.arquivado).length}</span>
+              </FiltroPastaPas>
+              <button
+                type="button"
+                onClick={() => setIsPastaDialogOpen(true)}
+                title="Nova pasta"
+                className="h-8 w-8 rounded-md flex items-center justify-center text-[#A39D8C] hover:text-[#0E4A44] hover:bg-white transition-colors"
+              >
+                <FolderPlus className="h-4 w-4" />
+              </button>
+            </div>
+
+            {processosFiltrados.length === 0 ? (
+              <VazioPas isRoot={isRoot} filtro={filtro === 'arquivados' ? 'arquivados' : filtro === 'todos' ? 'todos' : 'pasta'} />
+            ) : filtro === 'arquivados' ? (
+              <div className="space-y-2">
+                {processosFiltrados.map((p) => (
+                  <CartaoPas
+                    key={p.id}
+                    pas={p}
+                    pastas={pastas}
+                    onAbrir={() => router.push(`/pas/${p.id}`)}
+                    onMoverPasta={(folderId) => handleMoverPasta(p.id, folderId)}
+                    onArquivar={(arquivado) => handleArquivar(p.id, arquivado)}
+                    onExcluir={() => handleExcluir(p)}
+                  />
                 ))}
-              </SecaoPas>
-            ))}
-          </div>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {grupos.map((grupo) => (
+                  <SecaoPas key={grupo.chave} grupo={grupo}>
+                    {grupo.processos.map((p) => (
+                      <CartaoPas
+                        key={p.id}
+                        pas={p}
+                        pastas={pastas}
+                        onAbrir={() => router.push(`/pas/${p.id}`)}
+                        onMoverPasta={(folderId) => handleMoverPasta(p.id, folderId)}
+                        onArquivar={(arquivado) => handleArquivar(p.id, arquivado)}
+                        onExcluir={() => handleExcluir(p)}
+                        // Dentro de uma pasta específica todo cartão já é
+                        // daquela pasta — o crachá só repetiria o filtro que
+                        // a própria tela já está aplicando.
+                        mostrarBadgePasta={filtro === 'todos'}
+                        // "Encaminhados para você" É o responsável — mostrar
+                        // de novo o próprio nome em cada cartão do grupo não
+                        // soma informação, só ocupa linha.
+                        ocultarResponsavel={grupo.chave === 'comigo'}
+                      />
+                    ))}
+                  </SecaoPas>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
+
+      <Dialog open={isPastaDialogOpen} onOpenChange={setIsPastaDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-serif">Nova pasta</DialogTitle>
+            <DialogDescription>Organize os processos como preferir — não muda a fase nem o andamento de nenhum PAS.</DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-1.5">
+            <Label className="text-xs font-medium text-[#6B6659]">Nome da pasta</Label>
+            <Input value={novaPastaNome} onChange={(e) => setNovaPastaNome(e.target.value)} placeholder="Ex: Fiscalização Norte" className="h-10 rounded-md border-[#E4DFD1] bg-white text-sm" />
+          </div>
+          <DialogFooter>
+            <Button onClick={handleCriarPasta} size="sm" className="h-9 rounded-md text-xs font-medium bg-[#0E4A44] hover:bg-[#0B3A35]">Criar pasta</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isPickerOpen} onOpenChange={setIsPickerOpen}>
         <DialogContent className="sm:max-w-lg">
