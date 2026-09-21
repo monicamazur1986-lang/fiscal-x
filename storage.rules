@@ -6,22 +6,22 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Espelha getUserData()/isRoot() do firestore.rules — Storage Rules v2
-    // consegue ler o Firestore (cross-service rules) pra tomar a mesma
-    // decisão de autorização em vez de confiar só em isAuthenticated().
-    function myUserData() {
-      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
-    }
-
+    // firestore.get()/exists() cross-service (Storage lendo o Firestore)
+    // NUNCA autoriza neste projeto — confirmado na prática: uploads com
+    // dado e regra corretos voltavam "storage/unauthorized" (get() nega em
+    // vez de simplesmente não achar o doc). Por isso role/municipioId do
+    // usuário vêm do CUSTOM CLAIM do próprio token (ver /api/sync-claims,
+    // chamado a cada login/troca de papel em use-auth.tsx), nunca de uma
+    // leitura ao Firestore feita daqui.
     function isRoot() {
       return isAuthenticated() && (
         request.auth.token.email == 'app.fiscalx@gmail.com' ||
-        myUserData().role == 'root'
+        request.auth.token.role == 'root'
       );
     }
 
     function belongsToMyMunicipio(municipioId) {
-      return isAuthenticated() && (isRoot() || myUserData().municipioId == municipioId);
+      return isAuthenticated() && (isRoot() || request.auth.token.municipioId == municipioId);
     }
 
     // Logomarca global do sistema (aparece na tela de login) - pública para leitura,
@@ -78,28 +78,18 @@ service firebase.storage {
     }
 
     // Anexos do PAS (assinatura, provas, PDF de relatório pronto etc.) — o
-    // path já carrega o id do processo; espelha a mesma permissão de
-    // leitura do documento em firestore.rules (dono, encaminhado,
-    // compartilhado por autoridade, gestor do mesmo município, ou root).
-    // Sem esta regra, TODA gravação aqui vinha negada e caía calada no
-    // fallback de base64 dentro do próprio documento do Firestore — passava
-    // batido numa assinatura pequena, mas um PDF de relatório nesse caminho
-    // estourava o limite de 1 MiB por documento e a peça nunca terminava
-    // de gravar (ver uploadArquivoPas em pas/[id]/page.tsx).
-    function pasData(pasId) {
-      return firestore.get(/databases/(default)/documents/pas/$(pasId)).data;
-    }
-    function podeAcessarPas(pasId) {
-      return isAuthenticated() && (
-        isRoot() ||
-        (myUserData().role == 'admin' && pasData(pasId).municipioId == myUserData().municipioId) ||
-        pasData(pasId).createdBy == request.auth.uid ||
-        pasData(pasId).responsavelAtualUid == request.auth.uid ||
-        (request.auth.uid in pasData(pasId).get('compartilhadoCom', []))
-      );
-    }
-    match /pas/{pasId}/{allPaths=**} {
-      allow read, write: if podeAcessarPas(pasId);
+    // caminho carrega o município ANTES do id do processo (ver
+    // uploadArquivoPas em pas/[id]/page.tsx). Não é o mesmo recorte fino do
+    // Firestore (dono, encaminhado, compartilhado por autoridade) — aqui só
+    // dá pra checar "é deste município", porque ler o documento do processo
+    // pra saber quem é o dono também é firestore.get() cross-service, e
+    // esse sempre nega (mesmo motivo de isRoot() acima). Qualquer
+    // fiscal/gestor do mesmo município (colegas da mesma vigilância) já
+    // acessa o PROCESSO em si por esse critério nas regras do Firestore
+    // (isAdmin() no pas/{id}), então isto não abre nada que o Firestore já
+    // não deixasse um gestor local ver.
+    match /pas/{municipioId}/{pasId}/{allPaths=**} {
+      allow read, write: if belongsToMyMunicipio(municipioId);
     }
 
     match /{allPaths=**} {

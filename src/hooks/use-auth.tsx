@@ -258,6 +258,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribeProfile();
   }, [user?.uid, user?.email]);
 
+  // SINCRONIZA role/municipioId PRO TOKEN (custom claims) A CADA LOGIN E A
+  // CADA MUDANÇA DE PAPEL/MUNICÍPIO.
+  //
+  // As regras do Storage deste projeto não conseguem ler o Firestore
+  // (firestore.get() cross-service sempre nega — ver storage.rules), então
+  // "é gestor"/"é deste município" só podem ser checados ali através do
+  // token, nunca reabrindo o documento do usuário na hora do upload. Isso
+  // faz esses dois campos existirem tanto no doc (fonte da verdade, pro
+  // resto do app) quanto no token (pro Storage).
+  //
+  // Rodar de novo sempre que role/municipioId mudam (não só no login) cobre
+  // o gestor aprovando/promovendo alguém: a aba de quem foi promovido já
+  // está com o onSnapshot acima aberto, então este efeito dispara sozinho e
+  // busca claims novas sem precisar deslogar e logar de novo. getIdToken(true)
+  // força buscar um token FRESCO com o claim recém-gravado — sem isso, o
+  // token em uso continuaria com o claim antigo até o refresh automático
+  // (até ~1h) ou um novo login.
+  useEffect(() => {
+    if (!profile?.role || !profile?.municipioId || !auth.currentUser) return;
+    (async () => {
+      try {
+        const idToken = await auth.currentUser!.getIdToken();
+        const res = await fetch('/api/sync-claims', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (res.ok) await auth.currentUser!.getIdToken(true);
+      } catch (e) {
+        console.warn('Falha ao sincronizar claims de autenticação:', e);
+      }
+    })();
+  }, [profile?.role, profile?.municipioId]);
+
   const loginWithEmailPassword = async (email: string, pass: string, options?: { keepConnected?: boolean }) => {
     const normalizedEmail = email.toLowerCase().trim();
     try {
