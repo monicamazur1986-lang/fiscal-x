@@ -189,6 +189,17 @@ service cloud.firestore {
     // intimacoes/inspecoes: dono (fiscal que abriu) ou gestor do município,
     // ou root. municipioId travado no update, como nas demais coleções.
     match /pas/{id} {
+      // Quem estava na inspeção (casado por nome de autoridade no Auto de
+      // Infração de origem, ver compartilharComAutoridades em
+      // use-intimacoes.ts) já acompanha o PAS que nasceu dele — copiado pra
+      // este campo na abertura do PAS (handleCriarPas em pas/page.tsx). Só
+      // LEITURA: agir no processo continua exigindo ser createdBy,
+      // responsavelAtualUid (a "vez" de alguém) ou gestor — ver o get()
+      // padrão default([]) abaixo, pra não rejeitar documento antigo sem
+      // este campo.
+      function compartilhadoComigo() {
+        return request.auth.uid in resource.data.get('compartilhadoCom', []);
+      }
       allow read: if isAuthenticated() && (
         isRoot() ||
         (isAdmin() && resource.data.municipioId == getUserData().municipioId) ||
@@ -196,7 +207,8 @@ service cloud.firestore {
         // Encaminhado explicitamente pra este usuário (PasEncaminharDialog) —
         // sem isso, um fiscal que não é o autuante original não conseguia
         // nem abrir o processo que o gestor mandou pra ele.
-        (resource.data.responsavelAtualUid == request.auth.uid)
+        (resource.data.responsavelAtualUid == request.auth.uid) ||
+        compartilhadoComigo()
       );
       allow create: if isAuthenticated() && (isRoot() || request.resource.data.municipioId == getUserData().municipioId);
       // Registrar a defesa recebida (ou qualquer outro avanço) não é um ato
@@ -237,7 +249,8 @@ service cloud.firestore {
           isRoot() ||
           (isAdmin() && get(/databases/$(database)/documents/pas/$(id)).data.municipioId == getUserData().municipioId) ||
           (get(/databases/$(database)/documents/pas/$(id)).data.createdBy == request.auth.uid) ||
-          (get(/databases/$(database)/documents/pas/$(id)).data.responsavelAtualUid == request.auth.uid)
+          (get(/databases/$(database)/documents/pas/$(id)).data.responsavelAtualUid == request.auth.uid) ||
+          (request.auth.uid in get(/databases/$(database)/documents/pas/$(id)).data.get('compartilhadoCom', []))
         );
         allow create: if isAuthenticated() && (
           isRoot() || get(/databases/$(database)/documents/pas/$(id)).data.municipioId == getUserData().municipioId

@@ -133,7 +133,7 @@ function useLivePagination(containerRef: React.RefObject<HTMLDivElement>, header
 }
 
 function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<Intimacao>, intimacaoId?: string }) {
-    const { generateNewNumeroProcesso, saveIntimacao, updateIntimacaoMeta, compartilharIntimacao, intimacoes, loading: loadingIntimacoes } = useIntimacoes();
+    const { generateNewNumeroProcesso, saveIntimacao, updateIntimacaoMeta, compartilharIntimacao, compartilharComAutoridades, intimacoes, loading: loadingIntimacoes } = useIntimacoes();
     const [compartilharAberto, setCompartilharAberto] = useState(false);
     const [abrindoCompartilhar, setAbrindoCompartilhar] = useState(false);
     // Alteração de um colega chegada pelo snapshot enquanto esta tela está
@@ -624,6 +624,25 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             // fazia o lembrete de prazo nunca ser criado, silenciosamente,
             // mesmo depois de a autuação sincronizar de verdade.
             const mainValues = getValues();
+
+            // QUEM ESTAVA NA INSPEÇÃO JÁ VÊ O DOCUMENTO, SEM PRECISAR QUE
+            // ALGUÉM COMPARTILHE À MÃO. Casa cada nome do bloco de
+            // autoridades sanitárias (deste auto e do termo vinculado, se
+            // houver) com uma conta de usuário do município — reaproveita
+            // compartilharComAutoridades (use-intimacoes.ts), que também
+            // preserva quem já tivesse sido compartilhado manualmente.
+            try {
+                const nomesAutoridades = [
+                    ...(mainValues.autoridades || []).map((a) => a.nome),
+                    ...(hasAnexo ? (anexoMethods.getValues('autoridades') || []).map((a) => a.nome) : []),
+                ];
+                await compartilharComAutoridades(result.mainId, nomesAutoridades);
+            } catch (e) {
+                // Não pode travar a finalização por conta disso — o documento
+                // já está salvo; compartilhar automaticamente é conveniência.
+                console.warn('Falha ao compartilhar automaticamente com as autoridades:', e);
+            }
+
             if (mainValues.prazoDias && profile?.municipioId) {
                 try {
                     const prazoData = addBusinessDays(mainValues.dataIntimacao, mainValues.prazoDias);
@@ -633,6 +652,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                         fiscalId: profile.uid,
                         fiscalNome: profile.displayName || 'Fiscal',
                         municipioId: profile.municipioId,
+                        origemHref: `/intimacoes/${result.mainId}`,
                     });
                     await updateIntimacaoMeta(result.mainId, { agendaLembreteId: lembreteId });
                 } catch (e) {

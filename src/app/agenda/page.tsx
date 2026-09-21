@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { useInspecoes } from "@/hooks/use-inspecoes"
 import { useAuth } from "@/hooks/use-auth"
 import { useAutoridades } from "@/hooks/use-autoridades"
@@ -23,7 +24,9 @@ import {
   Calendar as CalendarIcon,
   Filter,
   Check,
-  BellRing
+  BellRing,
+  AlertTriangle,
+  ExternalLink,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { format, isSameDay, addHours } from "date-fns"
@@ -55,8 +58,23 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 
 type CategoryFilter = 'all' | 'pendente' | 'prazo' | 'concluido' | 'arquivado';
+type ViewMode = 'calendario' | 'lista';
+
+/** Todo prazo pendente é um `pendente` ou `prazo` (ver criarLembretePrazo em
+ * prazo-lembrete.ts — um lembrete de prazo sempre nasce 'pendente'; 'prazo'
+ * cobre o compromisso manual marcado nesse estágio). Concluído/arquivado já
+ * saiu do que precisa de atenção. */
+const STATUSES_PENDENTES: Inspecao['status'][] = ['pendente', 'prazo'];
+
+const TOM_PILULA_PRAZO: Record<string, string> = {
+  urgente: "bg-rose-50 text-rose-700",
+  hoje: "bg-amber-50 text-amber-700",
+  proximo: "bg-violet-50 text-violet-700",
+  neutro: "text-[#6B6659]",
+};
 
 export default function AgendaPage() {
+  const router = useRouter()
   const { profile } = useAuth()
   const { inspecoes, saveInspecao, deleteInspecao, loading, pendingSyncCount } = useInspecoes()
   const { autoridades } = useAutoridades()
@@ -65,6 +83,7 @@ export default function AgendaPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [viewMonth, setViewMonth] = useState<Date>(new Date())
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>('all')
+  const [viewMode, setViewMode] = useState<ViewMode>('calendario')
   
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -171,6 +190,52 @@ export default function AgendaPage() {
       .filter(insp => isSameDay(insp.data, selectedDate))
       .sort((a, b) => a.data.getTime() - b.data.getTime());
   }, [filteredInspecoes, selectedDate]);
+
+  const handleAbrirInspecao = useCallback((insp: Inspecao) => {
+    if (insp.origemHref) { router.push(insp.origemHref); return; }
+    setEditingInspecao(insp);
+    setIsDialogOpen(true);
+  }, [router]);
+
+  // TODOS OS PRAZOS PENDENTES, NUM LUGAR SÓ.
+  //
+  // O calendário mostra um mês por vez — pra saber o que está vencido ou
+  // vencendo esta semana, era preciso navegar mês a mês procurando. Aqui
+  // é uma lista só, ordenada por urgência (vencido primeiro), com QUALQUER
+  // prazo pendente de QUALQUER data — mesmo critério de agrupamento já
+  // usado na lista do PAS (vermelho pra vencido, e por aí). Com um filtro
+  // de status diferente de "Todos"/"Pendentes"/"Em Prazo" selecionado
+  // (Concluídos/Arquivados), a urgência perde sentido — cai num grupo só,
+  // sem cor, já que não é mais algo pendente de atenção.
+  const prazosGrupos = useMemo(() => {
+    const ehVisaoPendente = activeCategory === 'all' || activeCategory === 'pendente' || activeCategory === 'prazo';
+    const base = ehVisaoPendente
+      ? inspecoes.filter((i) => STATUSES_PENDENTES.includes(i.status) && (activeCategory === 'all' || i.status === activeCategory))
+      : filteredInspecoes;
+
+    if (!ehVisaoPendente) {
+      return [{ chave: 'outros', titulo: 'Registros', tom: 'neutro' as const, itens: [...base].sort((a, b) => a.data.getTime() - b.data.getTime()) }]
+        .filter((g) => g.itens.length > 0);
+    }
+
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const em7dias = new Date(hoje); em7dias.setDate(em7dias.getDate() + 7);
+    const grupos: { chave: string; titulo: string; tom: keyof typeof TOM_PILULA_PRAZO; itens: Inspecao[] }[] = [
+      { chave: 'vencidos', titulo: 'Vencidos', tom: 'urgente', itens: [] },
+      { chave: 'hoje', titulo: 'Vencem hoje', tom: 'hoje', itens: [] },
+      { chave: 'semana', titulo: 'Próximos 7 dias', tom: 'proximo', itens: [] },
+      { chave: 'depois', titulo: 'Mais adiante', tom: 'neutro', itens: [] },
+    ];
+    base.forEach((i) => {
+      const d = new Date(i.data); d.setHours(0, 0, 0, 0);
+      if (d.getTime() < hoje.getTime()) grupos[0].itens.push(i);
+      else if (d.getTime() === hoje.getTime()) grupos[1].itens.push(i);
+      else if (d.getTime() <= em7dias.getTime()) grupos[2].itens.push(i);
+      else grupos[3].itens.push(i);
+    });
+    grupos.forEach((g) => g.itens.sort((a, b) => a.data.getTime() - b.data.getTime()));
+    return grupos.filter((g) => g.itens.length > 0);
+  }, [inspecoes, filteredInspecoes, activeCategory]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -362,6 +427,29 @@ export default function AgendaPage() {
         </div>
 
         <div className="bg-[#FAF8F3] px-4 lg:px-10 py-1.5 border-t border-[#F1EEE4] flex items-center gap-2 overflow-x-auto no-scrollbar">
+          {/* Calendário mostra um mês por vez — pra saber o que está vencido
+              ou vencendo esta semana, era preciso navegar mês a mês. "Prazos"
+              troca pra uma lista só, com todo prazo pendente de qualquer
+              data, ordenada por urgência. */}
+          <div className="flex items-center gap-1 bg-white rounded-xl p-1 border border-[#E4DFD1] shrink-0">
+            <button
+              type="button"
+              onClick={() => setViewMode('calendario')}
+              className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors", viewMode === 'calendario' ? "bg-primary text-white" : "text-[#A39D8C] hover:text-[#6B6659]")}
+            >
+              <CalendarIcon className="h-3.5 w-3.5" />
+              <span className="text-[9px] font-black uppercase tracking-widest">Calendário</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('lista')}
+              className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors", viewMode === 'lista' ? "bg-primary text-white" : "text-[#A39D8C] hover:text-[#6B6659]")}
+            >
+              <ListTodo className="h-3.5 w-3.5" />
+              <span className="text-[9px] font-black uppercase tracking-widest">Prazos</span>
+            </button>
+          </div>
+          <div className="w-px h-5 bg-[#E4DFD1] shrink-0" />
           {menuCategories.map((cat) => (
             <button
               key={cat.id}
@@ -382,6 +470,70 @@ export default function AgendaPage() {
         </div>
       </header>
 
+      {viewMode === 'lista' ? (
+        <div className="flex-1 overflow-y-auto bg-[#F5F2EA] p-4 sm:p-6 lg:p-8">
+          <div className="max-w-3xl mx-auto w-full space-y-8 pb-10">
+            {prazosGrupos.length === 0 ? (
+              <div className="py-20 flex flex-col items-center justify-center text-center opacity-70">
+                <ListTodo className="h-8 w-8 text-[#D8D2C0] mb-3" />
+                <p className="text-[9px] font-black uppercase text-[#A39D8C] tracking-[0.2em]">Nenhum prazo pendente</p>
+              </div>
+            ) : (
+              prazosGrupos.map((grupo) => (
+                <section key={grupo.chave} className="space-y-2">
+                  <div className={cn(
+                    "inline-flex items-center gap-1.5 px-1",
+                    grupo.tom !== 'neutro' && "px-2.5 py-1 rounded-full",
+                    TOM_PILULA_PRAZO[grupo.tom]
+                  )}>
+                    {grupo.tom === 'urgente' && <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
+                    {grupo.tom === 'hoje' && <Timer className="h-3.5 w-3.5 shrink-0" />}
+                    {grupo.tom === 'proximo' && <CalendarDays className="h-3.5 w-3.5 shrink-0" />}
+                    <h2 className="text-[10px] font-black uppercase tracking-[0.2em]">{grupo.titulo}</h2>
+                    <span className="text-[10px] font-bold tabular-nums opacity-70">{grupo.itens.length}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {grupo.itens.map((insp) => {
+                      const cfg = getStatusConfig(insp.status);
+                      return (
+                        <button
+                          key={insp.id}
+                          onClick={() => handleAbrirInspecao(insp)}
+                          className="w-full flex items-center gap-4 bg-white p-3 pl-4 rounded-xl shadow-sm border border-[#E4DFD1] hover:shadow-lg hover:border-primary/30 transition-all text-left group"
+                        >
+                          <div className="flex flex-col items-center justify-center shrink-0 w-12">
+                            <span className="text-[9px] font-black uppercase text-[#A39D8C]">{format(insp.data, "MMM", { locale: ptBR })}</span>
+                            <span className="text-lg font-serif text-[#262420] leading-none">{format(insp.data, "dd")}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-serif text-[13px] text-[#262420] leading-tight group-hover:text-primary transition-colors truncate">
+                                {insp.titulo}
+                              </h4>
+                              <Badge className={cn("text-[7px] font-black uppercase px-2 h-4 border-none shrink-0", cfg.color)}>
+                                {cfg.label}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <Activity className="h-2.5 w-2.5 text-[#C9C2AC] shrink-0" />
+                              <span className="text-[8px] font-bold text-[#A39D8C] uppercase tracking-widest truncate">
+                                {insp.fiscalNome}
+                              </span>
+                            </div>
+                          </div>
+                          {insp.origemHref
+                            ? <ExternalLink className="h-3.5 w-3.5 text-[#C9C2AC] group-hover:text-primary transition-colors shrink-0" />
+                            : <ChevronRight className="h-3.5 w-3.5 text-[#C9C2AC] group-hover:translate-x-0.5 transition-transform shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))
+            )}
+          </div>
+        </div>
+      ) : (
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 lg:overflow-hidden">
         <main className="lg:col-span-8 bg-white flex flex-col border-b lg:border-b-0 lg:border-r border-[#E4DFD1] lg:overflow-hidden">
           <div className="flex-1 min-h-[30rem] lg:min-h-0 p-3 sm:p-4 lg:p-6">
@@ -416,7 +568,7 @@ export default function AgendaPage() {
                   return (
                     <button
                       key={insp.id}
-                      onClick={() => { setEditingInspecao(insp); setIsDialogOpen(true); }}
+                      onClick={() => handleAbrirInspecao(insp)}
                       className="w-full bg-white p-4 rounded-2xl shadow-sm border border-[#E4DFD1] hover:shadow-lg hover:border-primary/30 transition-all text-left group"
                     >
                       <div className="flex items-center justify-between gap-3 mb-2">
@@ -438,7 +590,7 @@ export default function AgendaPage() {
                                {insp.fiscalNome}
                             </span>
                          </div>
-                         <ChevronRight className="h-3 w-3 text-[#C9C2AC] group-hover:translate-x-0.5 transition-transform" />
+                         {insp.origemHref ? <ExternalLink className="h-3 w-3 text-[#C9C2AC] group-hover:text-primary transition-colors" /> : <ChevronRight className="h-3 w-3 text-[#C9C2AC] group-hover:translate-x-0.5 transition-transform" />}
                       </div>
                     </button>
                   )
@@ -467,6 +619,7 @@ export default function AgendaPage() {
           </div>
         </aside>
       </div>
+      )}
     </div>
   )
 }

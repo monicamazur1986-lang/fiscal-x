@@ -110,6 +110,11 @@ export type Inspecao = {
   updatedAt?: string;
   alertaMinutosAntes?: number;
   alertaEnviadoEm?: string;
+  /** Link de volta pro processo/documento que gerou este lembrete de prazo
+   * (ex.: `/pas/<id>`, `/intimacoes/<id>`) — ausente num compromisso manual
+   * da Agenda ou num registro de vistoria de verdade. Ver criarLembretePrazo
+   * em prazo-lembrete.ts e a lista "Todos os prazos" em agenda/page.tsx. */
+  origemHref?: string;
   /** Pasta de organização no menu Documentos (mesma árvore de Intimações) — só usada em relatórios finalizados. */
   folderId?: string;
   /** Fixado pelo fiscal no menu Documentos, pra organizar a lista como preferir. */
@@ -347,6 +352,16 @@ export type Pas = {
    * tem numeração própria separada da autuação que o originou. */
   numeroProcesso: string;
   autoInfracaoId: string;
+  /** Quem estava na inspeção já acompanha o PAS, sem precisar de
+   * encaminhamento manual — copiado do compartilhadoCom do próprio Auto de
+   * Infração no instante em que o PAS é aberto (ver compartilharComAutoridades
+   * em use-intimacoes.ts e handleCriarPas em pas/page.tsx), já que o
+   * casamento por nome de autoridade foi feito lá. Só dá LEITURA — agir no
+   * processo continua exigindo ser createdBy, responsavelAtualUid (a "vez"
+   * de alguém) ou gestor, igual já era; ver a regra de pas/{id} no
+   * firestore.rules. */
+  compartilhadoCom?: string[];
+  compartilhadoComNomes?: { uid: string; nome: string }[];
   estabelecimento: {
     fantasia: string;
     cnpj?: string;

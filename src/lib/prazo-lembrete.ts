@@ -29,6 +29,12 @@ export async function criarLembretePrazo(
     fiscalId: string;
     fiscalNome: string;
     municipioId: string;
+    /** Link de volta pro processo/documento que gerou o prazo (ex.:
+     * `/pas/<id>`) — sem isso, a lista "Todos os prazos" da Agenda (ver
+     * agenda/page.tsx) só tinha o título em texto pra dizer de onde o
+     * prazo veio, sem levar a autoridade de volta pro processo com um
+     * clique. */
+    origemHref?: string;
   }
 ): Promise<string> {
   const dias = params.diasAntecedencia ?? DIAS_ANTECEDENCIA_PADRAO;
@@ -36,12 +42,13 @@ export async function criarLembretePrazo(
   dataLembrete.setDate(dataLembrete.getDate() - dias);
   dataLembrete.setHours(8, 0, 0, 0); // horário fixo de manhã — prazo não tem hora própria
 
-  // descricao só entra no objeto quando informada — um `undefined` explícito
-  // faz o Firestore rejeitar a gravação inteira (addDoc/setDoc não aceitam
-  // esse valor em nenhum campo).
+  // descricao/origemHref só entram no objeto quando informados — um
+  // `undefined` explícito faz o Firestore rejeitar a gravação inteira
+  // (addDoc/setDoc não aceitam esse valor em nenhum campo).
   const { id } = await saveInspecao({
     titulo: params.titulo,
     ...(params.descricao ? { descricao: params.descricao } : {}),
+    ...(params.origemHref ? { origemHref: params.origemHref } : {}),
     data: dataLembrete,
     fiscalId: params.fiscalId,
     fiscalNome: params.fiscalNome,

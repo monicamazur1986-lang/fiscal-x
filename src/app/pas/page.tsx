@@ -104,7 +104,14 @@ function PasPageInner() {
       await cancelarLembretePrazo(deleteInspecao, p.agendaLembreteId);
       await cancelarLembretePrazo(deleteInspecao, p.encaminhamentoLembreteId);
       await excluirPas(p.id);
-      await updateIntimacaoMeta(p.autoInfracaoId, { pasId: null });
+      // Limpeza de referência, não pode impedir a exclusão do PAS em si
+      // (já aconteceu na linha acima) — ver o mesmo cuidado, com o motivo
+      // completo, em handleExcluirPas de pas/[id]/page.tsx.
+      try {
+        await updateIntimacaoMeta(p.autoInfracaoId, { pasId: null });
+      } catch (e) {
+        console.warn('PAS excluído, mas não foi possível liberar o Auto de Infração de origem:', e);
+      }
       toast({ title: "Processo excluído" });
     } catch (e) {
       console.error('Erro ao excluir PAS:', e);
@@ -145,6 +152,13 @@ function PasPageInner() {
         autuanteUid: profile.uid,
         autuanteNome: profile.displayName || 'Fiscal',
         dataCienciaAI: new Date(dataCiencia).toISOString(),
+        // Quem estava na inspeção (já casado por nome de autoridade no
+        // auto de origem, ver compartilharComAutoridades) acompanha o PAS
+        // desde que ele nasce — sem isso, só quem abre o PAS o vê, e o
+        // colega que via o auto perdia esse acesso justamente na hora em
+        // que ele passa a interessar mais (o processo administrativo).
+        ...(ai.compartilhadoCom?.length ? { compartilhadoCom: ai.compartilhadoCom } : {}),
+        ...(ai.compartilhadoComNomes?.length ? { compartilhadoComNomes: ai.compartilhadoComNomes } : {}),
       });
       await updateIntimacaoMeta(ai.id, { pasId: id });
       setIsPickerOpen(false);

@@ -81,6 +81,16 @@ async function uploadAnexoExterno(pasId: string, file?: File): Promise<string | 
   return uploadArquivoPas(pasId, file);
 }
 
+// Acima disso, cair pra base64 dentro do próprio documento do Firestore
+// quase certamente estoura o limite de 1 MiB por documento — melhor
+// falhar alto e claro do que gravar a peça pela metade. Foi exatamente
+// essa combinação (arquivo grande em base64 dentro do campo) que já
+// travou a fila de gravações da vistoria antes (ver comentário em
+// saveInspecao, use-inspecoes.ts) — ali era foto; aqui é PDF de
+// relatório, tipicamente maior ainda, e o efeito é o mesmo: a peça nunca
+// termina de gravar, o processo não avança, e não fica claro por quê.
+const TETO_BASE64_ANEXO_BYTES = 700 * 1024;
+
 async function uploadArquivoPas(pasId: string, file: File): Promise<string> {
   try {
     if (!storage) throw new Error('Storage indisponível.');
@@ -89,8 +99,11 @@ async function uploadArquivoPas(pasId: string, file: File): Promise<string> {
     await uploadBytes(ref, file);
     return await getDownloadURL(ref);
   } catch (e) {
-    // Sem Storage configurado, guarda o arquivo direto no documento (mesmo
-    // fallback já usado nas fotos de roteiro).
+    if (file.size > TETO_BASE64_ANEXO_BYTES) {
+      throw new Error(`Não foi possível enviar "${file.name}" (${Math.round(file.size / 1024)} KB) — sem conexão com o Storage neste momento, e o arquivo é grande demais para gravar direto no documento. Tente de novo.`);
+    }
+    // Arquivo pequeno (ex.: assinatura) e Storage indisponível — guarda
+    // direto no documento (mesmo fallback já usado nas fotos de roteiro).
     return blobToDataUrl(file);
   }
 }
@@ -236,6 +249,12 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const [isRegistrandoDefesa, setIsRegistrandoDefesa] = useState(false);
 
   const [fatos, setFatos] = useState("");
+  // Uma coisa exclui a outra: ou a autoridade redige (com ou sem ajuda da
+  // IA) dentro do sistema, ou o relatório já foi feito fora e só entra
+  // como anexo — não as duas ao mesmo tempo, e anexar não pode depender de
+  // digitar algo primeiro (nem que seja um "segue em anexo" de fachada só
+  // pra passar da validação de conteúdo).
+  const [modoRelatorio, setModoRelatorio] = useState<'sistema' | 'anexo'>('sistema');
   const provasInputRef = useRef<HTMLInputElement>(null);
   const [provasSelecionadas, setProvasSelecionadas] = useState<File[]>([]);
   // RASCUNHO DO RELATÓRIO. Diferente dos despachos (só existem depois de
@@ -525,13 +544,25 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       await cancelarLembretePrazo(deleteInspecao, pas.agendaLembreteId);
       await cancelarLembretePrazo(deleteInspecao, pas.encaminhamentoLembreteId);
       await excluirPas(pas.id);
-      // Libera o Auto de Infração pra abrir um PAS novo de novo.
-      await updateIntimacaoMeta(pas.autoInfracaoId, { pasId: null });
+      // Libera o Auto de Infração pra abrir um PAS novo de novo — limpeza de
+      // referência, não pode impedir a exclusão do PAS em si (que já
+      // aconteceu na linha acima). Um PAS aberto a partir de um auto
+      // compartilhado por um colega (a lista de "Abrir PAS" já inclui os
+      // compartilhados, ver aisElegiveis em pas/page.tsx) deixa o usuário
+      // como dono do PAS, mas não necessariamente com acesso de escrita no
+      // auto original — sem isolar esta chamada, uma negativa de permissão
+      // aqui fazia o catch de fora achar que o PAS não tinha sido excluído,
+      // quando na verdade já tinha.
+      try {
+        await updateIntimacaoMeta(pas.autoInfracaoId, { pasId: null });
+      } catch (e) {
+        console.warn('PAS excluído, mas não foi possível liberar o Auto de Infração de origem:', e);
+      }
       toast({ title: "Processo excluído" });
       router.push('/pas');
     } catch (e) {
       console.error('Erro ao excluir o PAS:', e);
-      toast({ variant: "destructive", title: "Erro ao excluir" });
+      toast({ variant: "destructive", title: "Erro ao excluir", description: descreverErro(e) });
       setIsExcluindoPas(false);
     }
   };
@@ -543,6 +574,13 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const [pecaParaExcluir, setPecaParaExcluir] = useState<PasPeca | null>(null);
   const [isExcluindoPeca, setIsExcluindoPeca] = useState(false);
   const podeExcluirPeca = isGestor || isAutuante;
+  // "Fazer o colega assumir o PAS no meu lugar" é isso: encaminhar já não é
+  // trava de permissão nenhuma (ver PasEncaminharDialog — a regra do
+  // Firestore já aceita responsavelAtualUid pra agir), só faltava o próprio
+  // autuante (não só o gestor) conseguir chamar a caixa. Quem já está com a
+  // "vez" (encaminhado antes) também pode passar adiante — permite uma
+  // cadeia de encaminhamentos, não só um handoff único do dono.
+  const podeEncaminhar = isGestor || isAutuante || pas?.responsavelAtualUid === profile?.uid;
 
   const handleExcluirPeca = async () => {
     if (!pecaParaExcluir || !pas) return;
@@ -602,6 +640,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       fiscalId: destino.uid,
       fiscalNome: destino.nome,
       municipioId: profile.municipioId,
+      origemHref: `/pas/${pas.id}`,
     });
     await atualizarPas(pas.id, {
       responsavelAtualUid: destino.uid,
@@ -640,6 +679,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
           fiscalId: pas.encaminhadoPorUid,
           fiscalNome: pas.encaminhadoPorNome || 'Fiscal',
           municipioId: pas.municipioId,
+          origemHref: `/pas/${pas.id}`,
         });
       } catch (e) {
         // Aviso de devolução é conveniência, não pode travar a ação
@@ -820,6 +860,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             fiscalId: pas.autuanteUid,
             fiscalNome: pas.autuanteNome,
             municipioId: profile!.municipioId,
+            origemHref: `/pas/${pas.id}`,
           });
           await atualizarPas(pas.id, { fase: 'recursal', agendaLembreteId: lembreteId });
           await limparRascunhoPeca(chaveRascunho);
@@ -961,6 +1002,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             fiscalId: pas.autuanteUid,
             fiscalNome: pas.autuanteNome,
             municipioId: profile.municipioId!,
+            origemHref: `/pas/${pas.id}`,
           });
           await atualizarPas(pas.id, { prazoDefesaData: prazoData.toISOString(), agendaLembreteId: lembreteId });
           await limparRascunhoPeca(chaveRascunho);
@@ -976,13 +1018,19 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   };
 
   const handleSalvarRelatorio = async () => {
-    // fatos é HTML de um editor rico — vazio de verdade não é "" (o
-    // SunEditor sem nada digitado costuma devolver "<p><br></p>"), e uma
-    // foto sem nenhuma palavra ao redor ainda é conteúdo válido.
-    const temConteudoReal = /<img[\s>]/i.test(fatos) || fatos.replace(/<[^>]*>/g, '').trim().length > 0;
-    if (!temConteudoReal) {
-      toast({ variant: "destructive", title: "Descreva os fatos antes de salvar" });
-      return;
+    // No modo "sistema", precisa ter conteúdo de verdade antes de abrir a
+    // revisão. fatos é HTML de um editor rico — vazio de verdade não é ""
+    // (o SunEditor sem nada digitado costuma devolver "<p><br></p>"), e
+    // uma foto sem nenhuma palavra ao redor ainda é conteúdo válido. No
+    // modo "anexo" essa exigência não existe — o relatório já está pronto
+    // fora do sistema, e é ele (anexado na revisão a seguir) que vale,
+    // não um texto escrito aqui só pra passar da validação.
+    if (modoRelatorio === 'sistema') {
+      const temConteudoReal = /<img[\s>]/i.test(fatos) || fatos.replace(/<[^>]*>/g, '').trim().length > 0;
+      if (!temConteudoReal) {
+        toast({ variant: "destructive", title: "Descreva os fatos antes de salvar" });
+        return;
+      }
     }
     setIsSalvandoRelatorio(true);
     try {
@@ -1001,38 +1049,52 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         const url = await uploadArquivoPas(pas.id, file);
         itensProva.push({ tipo: 'termo_juntada' as const, titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: textoTermoJuntadaProva(file.name), anexoUrl: url });
       }
-      // fatos já É o HTML de verdade (documento rico, com foto inserível no
-      // meio do texto) — entra direto, sem conversão nem cabeçalho "1. DOS
-      // FATOS" embrulhando por fora (duplicaria o que o próprio texto traz).
-      const relatorioHtml = fatos;
+      // Modo "sistema": fatos já É o HTML de verdade (documento rico, com
+      // foto inserível no meio do texto) — entra direto, sem conversão nem
+      // cabeçalho "1. DOS FATOS" embrulhando por fora (duplicaria o que o
+      // próprio texto traz). Modo "anexo": uma frase de juntada curta e
+      // automática — não pedida à autoridade — porque não HÁ outro
+      // documento pra anunciar: aqui a própria peça É o termo de juntada,
+      // não um relatório separado que o termo precederia.
+      const tituloPeca = modoRelatorio === 'anexo'
+        ? `${PAS_PECA_TITULOS.termo_juntada} — ${PAS_PECA_TITULOS.relatorio_instrucao}`
+        : PAS_PECA_TITULOS.relatorio_instrucao;
+      const relatorioHtml = modoRelatorio === 'anexo'
+        ? 'Junto aos presentes autos o Relatório Técnico de Instrução, anexo a este termo, para os devidos fins.'
+        : fatos;
       const chaveRascunho = 'relatorio_instrucao';
 
       setRevisao({
-        titulo: PAS_PECA_TITULOS.relatorio_instrucao,
+        titulo: tituloPeca,
         conteudoInicial: relatorioHtml,
-        chaveRascunho,
-        onSalvarRascunho: salvarRascunhoPeca,
+        // Rascunho só faz sentido no modo "sistema" — no modo "anexo" não
+        // há redação em andamento pra guardar, o documento já está pronto.
+        ...(modoRelatorio === 'sistema' ? { chaveRascunho, onSalvarRascunho: salvarRascunhoPeca } : {}),
         onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
           try {
             const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
             await adicionarPecas([
               ...itensProva.map((p) => ({ ...p, criadoEm: dataAto })),
-              // Regra de ouro do manual: o relatório precisa do próprio Termo
-              // de Juntada imediatamente antes dele, mesmo sem prova anexada
-              // em arquivo (Título III, Cap.2, item 2.4, Figura 14) — sem
-              // isso, ele entrava nos autos desacompanhado sempre que nenhum
-              // arquivo era anexado.
-              { tipo: 'termo_juntada', titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: textoTermoJuntadaInstrucao({ destinatario: destinatarioGestor }), criadoEm: dataAto },
-              { tipo: 'relatorio_instrucao', titulo: PAS_PECA_TITULOS.relatorio_instrucao, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto },
+              // Modo "anexo": SÓ o termo de juntada — ele já é a peça
+              // "relatorio_instrucao" (é o que destrava o passo seguinte
+              // do processo), sem uma segunda folha de assinatura vazia
+              // atrás dele. Modo "sistema": regra de ouro do manual, o
+              // relatório (texto de verdade) precisa do próprio Termo de
+              // Juntada imediatamente antes, mesmo sem prova em arquivo
+              // (Título III, Cap.2, item 2.4, Figura 14).
+              ...(modoRelatorio === 'sistema'
+                ? [{ tipo: 'termo_juntada' as const, titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: textoTermoJuntadaInstrucao({ destinatario: destinatarioGestor }), criadoEm: dataAto }]
+                : []),
+              { tipo: 'relatorio_instrucao', titulo: tituloPeca, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto },
             ]);
             await limparRascunhoPeca(chaveRascunho);
-            setFatos(""); setProvasSelecionadas([]); setProvasRascunho([]);
+            setFatos(""); setProvasSelecionadas([]); setProvasRascunho([]); setModoRelatorio('sistema');
             toast({ title: "Relatório técnico registrado" });
             await limparEncaminhamento();
             setRevisao(null);
           } catch (e) {
             console.error('Erro ao salvar o relatório técnico do PAS:', e);
-            toast({ variant: "destructive", title: "Erro ao salvar o relatório" });
+            toast({ variant: "destructive", title: "Erro ao salvar o relatório", description: descreverErro(e) });
           }
         },
       });
@@ -1313,7 +1375,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                   </AlertDialogContent>
                 </AlertDialog>
               )}
-              {isGestor && pas.fase !== 'aguardando_julgamento' && (
+              {podeEncaminhar && pas.fase !== 'aguardando_julgamento' && (
                 <button
                   type="button"
                   onClick={() => setIsEncaminharOpen(true)}
@@ -1326,7 +1388,12 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
           </div>
 
           {pas.fase === 'instauracao' && (
-            isAutuante ? (
+            // Encaminhado (responsavelAtualUid) age igual ao autuante — é
+            // exatamente o "colega faz o PAS no meu lugar": o autuante
+            // original encaminha (ver podeEncaminhar acima) e quem recebe
+            // já consegue agir, não só olhar. A regra do Firestore
+            // (atualizarPas) já aceita responsavelAtualUid pra isto.
+            (isAutuante || pas.responsavelAtualUid === profile?.uid) ? (
               <div className="flex items-center gap-2">
                 <Button onClick={handleIniciarInstrucao} className="bg-[#0E4A44] hover:bg-[#0B3A35]">
                   <FileStack className="h-4 w-4 mr-2" /> Iniciar Instrução
@@ -1387,64 +1454,93 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                     <div className="space-y-3 mt-2">
                       <p className="text-xs text-[#A39D8C]">Pode preencher a qualquer momento — não precisa esperar o despacho de instrução.</p>
 
-                      {/* Redação assistida. Fica acima do campo porque é por onde
-                          a maioria vai começar; quem prefere escrever do zero
-                          simplesmente ignora e digita abaixo. Uma frase só —
-                          o que a IA usa e o que ela NÃO faz juntos, mesmo
-                          formato do box equivalente do Julgamento — em vez de
-                          duas caixas de texto competindo pela mesma leitura. */}
-                      <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3 flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-violet-900">Redigir com IA</p>
-                          <p className="text-[11px] text-violet-800/80 leading-snug mt-0.5">
-                            {inspecaoOrigem
-                              ? `Usa o auto de infração e os ${naoConformidades.length} ${naoConformidades.length === 1 ? 'item não conforme' : 'itens não conformes'} do relatório de inspeção — não lê arquivos anexados aos autos. Confira os fatos e os artigos antes de registrar.`
-                              : 'Usa o auto de infração e o que você escrever abaixo (sem relatório de inspeção vinculado) — não lê arquivos anexados aos autos. Confira os fatos e os artigos antes de registrar.'}
-                          </p>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={isGerandoIa}
-                          onClick={() => handleGerarComIa('instrucao')}
-                          className="shrink-0 h-9 gap-1.5 border-violet-300 bg-white text-violet-700 hover:bg-violet-100 text-xs font-bold"
+                      {/* Uma coisa exclui a outra: ou redige no sistema, ou o
+                          relatório já está pronto e só entra como anexo — não
+                          precisa "preencher" nada pra anexar, nem que seja só
+                          uma frase de fachada pra passar da validação. */}
+                      <div className="inline-flex items-center gap-1 bg-[#F5F2EA] rounded-lg p-1">
+                        <button
+                          type="button"
+                          onClick={() => setModoRelatorio('sistema')}
+                          className={cn("px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-colors", modoRelatorio === 'sistema' ? "bg-white text-[#0E4A44] shadow-sm" : "text-[#A39D8C] hover:text-[#6B6659]")}
                         >
-                          {isGerandoIa ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                          Gerar rascunho
-                        </Button>
+                          Redigir no sistema
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setModoRelatorio('anexo')}
+                          className={cn("px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-colors", modoRelatorio === 'anexo' ? "bg-white text-[#0E4A44] shadow-sm" : "text-[#A39D8C] hover:text-[#6B6659]")}
+                        >
+                          Já pronto (anexar PDF)
+                        </button>
                       </div>
 
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <Label className="text-xs text-[#6B6659]">Texto do relatório</Label>
-                          {fatos.replace(/<[^>]*>/g, '').trim() && (
-                            // Também apaga o rascunho salvo (se houver) — senão um
-                            // recarregamento da página trazia o texto "limpo" de
-                            // volta, restaurado do rascunho que continuava lá.
-                            <button type="button" onClick={() => { setFatos(""); limparRascunhoPeca('relatorio_instrucao'); }} className="text-[10px] font-bold uppercase tracking-widest text-[#A39D8C] hover:text-rose-600 transition-colors">
-                              Limpar
-                            </button>
-                          )}
-                        </div>
-                        {/* Documento de verdade em vez de caixa de texto solta —
-                            a foto entra pelo próprio botão de imagem da barra de
-                            ferramentas, no meio do parágrafo onde ela faz
-                            sentido (redimensiona arrastando o canto), em vez de
-                            uma lista de arquivos à parte. Cada foto sobe pro
-                            Storage na hora da inserção (handleImagemRelatorio),
-                            não em base64 — o mesmo cuidado já tomado nos outros
-                            anexos do PAS. */}
-                        <div className="rounded-md border border-[#E4DFD1] overflow-hidden">
-                          <DocfacilEditor
-                            defaultValue={fatos}
-                            forceContent={fatos}
-                            onChange={setFatos}
-                            onImageUploadBefore={handleImagemRelatorio}
-                            showLetterhead={false}
-                            placeholder="Gere o rascunho acima e revise aqui, ou escreva do zero — fatos, antecedentes, o que for preciso relatar. Insira fotos pelo botão de imagem da barra de ferramentas."
-                          />
-                        </div>
-                      </div>
+                      {modoRelatorio === 'anexo' ? (
+                        <p className="text-xs text-[#6B6659] bg-[#F5F2EA] rounded-md px-3 py-2.5">
+                          O relatório pronto é anexado na tela seguinte, junto com a assinatura — não precisa escrever nada aqui.
+                        </p>
+                      ) : (
+                        <>
+                          {/* Redação assistida. Fica acima do campo porque é por onde
+                              a maioria vai começar; quem prefere escrever do zero
+                              simplesmente ignora e digita abaixo. Uma frase só —
+                              o que a IA usa e o que ela NÃO faz juntos, mesmo
+                              formato do box equivalente do Julgamento — em vez de
+                              duas caixas de texto competindo pela mesma leitura. */}
+                          <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3 flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-violet-900">Redigir com IA</p>
+                              <p className="text-[11px] text-violet-800/80 leading-snug mt-0.5">
+                                {inspecaoOrigem
+                                  ? `Usa o auto de infração e os ${naoConformidades.length} ${naoConformidades.length === 1 ? 'item não conforme' : 'itens não conformes'} do relatório de inspeção — não lê arquivos anexados aos autos. Confira os fatos e os artigos antes de registrar.`
+                                  : 'Usa o auto de infração e o que você escrever abaixo (sem relatório de inspeção vinculado) — não lê arquivos anexados aos autos. Confira os fatos e os artigos antes de registrar.'}
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isGerandoIa}
+                              onClick={() => handleGerarComIa('instrucao')}
+                              className="shrink-0 h-9 gap-1.5 border-violet-300 bg-white text-violet-700 hover:bg-violet-100 text-xs font-bold"
+                            >
+                              {isGerandoIa ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                              Gerar rascunho
+                            </Button>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <Label className="text-xs text-[#6B6659]">Texto do relatório</Label>
+                              {fatos.replace(/<[^>]*>/g, '').trim() && (
+                                // Também apaga o rascunho salvo (se houver) — senão um
+                                // recarregamento da página trazia o texto "limpo" de
+                                // volta, restaurado do rascunho que continuava lá.
+                                <button type="button" onClick={() => { setFatos(""); limparRascunhoPeca('relatorio_instrucao'); }} className="text-[10px] font-bold uppercase tracking-widest text-[#A39D8C] hover:text-rose-600 transition-colors">
+                                  Limpar
+                                </button>
+                              )}
+                            </div>
+                            {/* Documento de verdade em vez de caixa de texto solta —
+                                a foto entra pelo próprio botão de imagem da barra de
+                                ferramentas, no meio do parágrafo onde ela faz
+                                sentido (redimensiona arrastando o canto), em vez de
+                                uma lista de arquivos à parte. Cada foto sobe pro
+                                Storage na hora da inserção (handleImagemRelatorio),
+                                não em base64 — o mesmo cuidado já tomado nos outros
+                                anexos do PAS. */}
+                            <div className="rounded-md border border-[#E4DFD1] overflow-hidden">
+                              <DocfacilEditor
+                                defaultValue={fatos}
+                                forceContent={fatos}
+                                onChange={setFatos}
+                                onImageUploadBefore={handleImagemRelatorio}
+                                showLetterhead={false}
+                                placeholder="Gere o rascunho acima e revise aqui, ou escreva do zero — fatos, antecedentes, o que for preciso relatar. Insira fotos pelo botão de imagem da barra de ferramentas."
+                              />
+                            </div>
+                          </div>
+                        </>
+                      )}
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-2">
                           <Label className="text-xs text-[#6B6659]">Provas anexadas</Label>
@@ -1473,15 +1569,19 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                       </div>
                       <div className="flex items-center gap-2">
                         <Button onClick={handleSalvarRelatorio} disabled={isSalvandoRelatorio || isSalvandoRascunhoRelatorio} className="bg-[#0E4A44] hover:bg-[#0B3A35]">
-                          {isSalvandoRelatorio ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Salvar Relatório
+                          {isSalvandoRelatorio ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} {modoRelatorio === 'anexo' ? 'Continuar para assinatura' : 'Salvar Relatório'}
                         </Button>
-                        {/* Falta algo pra concluir agora (confirmar um fato,
-                            esperar mais provas) e vai assinar só depois, talvez
-                            no tablet — guarda o texto e as provas já anexadas
+                        {/* Só no modo "sistema" — no modo "anexo" não há
+                            redação em andamento pra guardar. Falta algo pra
+                            concluir agora (confirmar um fato, esperar mais
+                            provas) e vai assinar só depois, talvez no
+                            tablet — guarda o texto e as provas já anexadas
                             sem virar peça de verdade ainda. */}
-                        <Button type="button" variant="outline" onClick={handleSalvarRascunhoRelatorio} disabled={isSalvandoRelatorio || isSalvandoRascunhoRelatorio} className="rounded-md gap-1.5 text-[#6B6659]">
-                          {isSalvandoRascunhoRelatorio ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Salvar rascunho
-                        </Button>
+                        {modoRelatorio === 'sistema' && (
+                          <Button type="button" variant="outline" onClick={handleSalvarRascunhoRelatorio} disabled={isSalvandoRelatorio || isSalvandoRascunhoRelatorio} className="rounded-md gap-1.5 text-[#6B6659]">
+                            {isSalvandoRascunhoRelatorio ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Salvar rascunho
+                          </Button>
+                        )}
                       </div>
                     </div>
                   )}

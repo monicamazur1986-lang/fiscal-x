@@ -13,6 +13,7 @@ import {
   setDoc,
   addDoc,
   deleteDoc,
+  getDocs,
   Timestamp,
   query,
   orderBy,
@@ -510,10 +511,75 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     return { synced };
   }, [db, configError]);
 
+  /**
+   * AUTOMÁTICO PARA QUEM ESTAVA NA INSPEÇÃO.
+   *
+   * `compartilharIntimacao` (acima) é a via manual — alguém precisa abrir a
+   * caixa e marcar o colega. Aqui, ao finalizar (ver handleFinalize em
+   * intimacao-form.tsx), casa cada nome do bloco de autoridades sanitárias
+   * do próprio documento (quem assinou/participou, preenchido na autuação)
+   * com uma conta de usuário do mesmo município — o mesmo cadastro de
+   * `users` que o CompartilharEdicaoDialog já lista — e ativa esse usuário
+   * no compartilhadoCom, JUNTO com quem já estivesse manualmente
+   * compartilhado. Nunca substitui, só soma: reaproveita
+   * `compartilharIntimacao`, que já propaga pro termo vinculado.
+   *
+   * Casamento por NOME (normalizado — minúsculo, sem acento, sem excesso
+   * de espaço) porque é o que existe: uma autoridade sanitária não tem uid
+   * próprio, só nome/cargo/RG (ver Autoridade em lib/types.ts) — não há
+   * como saber de outro jeito, sem digitar, quem essa pessoa é no sistema.
+   */
+  const compartilharComAutoridades = useCallback(async (id: string, nomesAutoridades: string[]) => {
+    if (!db || configError || !profile?.municipioId) return;
+    const nomesNormalizados = Array.from(new Set(
+      nomesAutoridades.map((n) => normalizeId(n || '')).filter(Boolean)
+    ));
+    if (nomesNormalizados.length === 0) return;
+
+    const mid = normalizeId(profile.municipioId);
+    let usersSnap;
+    try {
+      usersSnap = await getDocs(query(collection(db, 'users'), where('municipioId', '==', mid)));
+    } catch (e) {
+      // Sem permissão pra listar usuários (regras não publicadas, por
+      // exemplo) não pode travar a finalização do documento — só não
+      // compartilha automaticamente desta vez.
+      console.warn('Não foi possível casar autoridades com contas de usuário:', e);
+      return;
+    }
+
+    const porNomeNormalizado = new Map<string, { uid: string; nome: string }>();
+    usersSnap.docs.forEach((d) => {
+      const data: any = d.data();
+      if (!data.isAuthorized || (data.role !== 'admin' && data.role !== 'fiscal')) return;
+      const nome = data.displayName || data.email || '';
+      const normalizado = normalizeId(nome);
+      if (normalizado) porNomeNormalizado.set(normalizado, { uid: d.id, nome });
+    });
+
+    const documento = intimacoesRef.current.find((i) => String(i.id) === String(id));
+    const combinados = new Map<string, { uid: string; nome: string }>();
+    (documento?.compartilhadoComNomes || []).forEach((c) => combinados.set(c.uid, c));
+
+    let encontrouAlguem = false;
+    nomesNormalizados.forEach((nomeNormalizado) => {
+      const achado = porNomeNormalizado.get(nomeNormalizado);
+      if (achado && achado.uid !== profile?.uid && !combinados.has(achado.uid)) {
+        combinados.set(achado.uid, achado);
+        encontrouAlguem = true;
+      }
+    });
+
+    // Nada novo pra somar — não regrava o que já está lá.
+    if (!encontrouAlguem) return;
+    await compartilharIntimacao(id, Array.from(combinados.values()));
+  }, [db, configError, profile?.municipioId, profile?.uid, compartilharIntimacao]);
+
   return {
     intimacoes,
     saveIntimacao,
     compartilharIntimacao,
+    compartilharComAutoridades,
     generateNewNumeroProcesso,
     bulkDelete,
     permanentDelete,
