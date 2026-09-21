@@ -77,6 +77,31 @@ service firebase.storage {
       allow update, delete: if false;
     }
 
+    // Anexos do PAS (assinatura, provas, PDF de relatório pronto etc.) — o
+    // path já carrega o id do processo; espelha a mesma permissão de
+    // leitura do documento em firestore.rules (dono, encaminhado,
+    // compartilhado por autoridade, gestor do mesmo município, ou root).
+    // Sem esta regra, TODA gravação aqui vinha negada e caía calada no
+    // fallback de base64 dentro do próprio documento do Firestore — passava
+    // batido numa assinatura pequena, mas um PDF de relatório nesse caminho
+    // estourava o limite de 1 MiB por documento e a peça nunca terminava
+    // de gravar (ver uploadArquivoPas em pas/[id]/page.tsx).
+    function pasData(pasId) {
+      return firestore.get(/databases/(default)/documents/pas/$(pasId)).data;
+    }
+    function podeAcessarPas(pasId) {
+      return isAuthenticated() && (
+        isRoot() ||
+        (myUserData().role == 'admin' && pasData(pasId).municipioId == myUserData().municipioId) ||
+        pasData(pasId).createdBy == request.auth.uid ||
+        pasData(pasId).responsavelAtualUid == request.auth.uid ||
+        (request.auth.uid in pasData(pasId).get('compartilhadoCom', []))
+      );
+    }
+    match /pas/{pasId}/{allPaths=**} {
+      allow read, write: if podeAcessarPas(pasId);
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }
