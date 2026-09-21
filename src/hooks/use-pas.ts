@@ -193,6 +193,7 @@ export function usePasPecas(pasId: string | null) {
   type NovaPeca = {
     tipo: PasPecaTipo; titulo: string; conteudoHtml: string; anexoUrl?: string; assinaturaUrl?: string;
     assinadoForaDoSistema?: boolean; refPecaId?: string; refPecaNumero?: number;
+    anexosAdicionais?: { url: string; nome: string }[];
     /** Data do ato (ISO) escolhida na revisão da peça (ver PasPecaReviewDialog)
      * — sem isso, um processo montado com atraso saía com toda peça datada do
      * dia em que alguém sentou pra digitar os autos, em vez do dia real de
@@ -225,6 +226,7 @@ export function usePasPecas(pasId: string | null) {
         titulo: item.titulo,
         conteudoHtml: item.conteudoHtml,
         ...(item.anexoUrl ? { anexoUrl: item.anexoUrl } : {}),
+        ...(item.anexosAdicionais?.length ? { anexosAdicionais: item.anexosAdicionais } : {}),
         ...(item.assinaturaUrl ? { assinaturaUrl: item.assinaturaUrl } : {}),
         ...(item.assinadoForaDoSistema ? { assinadoForaDoSistema: true } : {}),
         ...(item.refPecaId ? { refPecaId: item.refPecaId } : {}),

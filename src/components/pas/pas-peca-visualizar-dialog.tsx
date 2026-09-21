@@ -108,6 +108,19 @@ export function PasPecaVisualizarDialog({
                 </a>
               </div>
             )}
+            {peca.anexosAdicionais?.map((anexo, i) => (
+              <div key={i} className="no-print mt-2 flex items-center gap-2 rounded-md border border-[#E4DFD1] bg-[#FAF8F3] px-3 py-2">
+                <Paperclip className="h-3.5 w-3.5 text-[#A39D8C] shrink-0" />
+                <a
+                  href={anexo.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[9pt] text-[#0E4A44] underline underline-offset-2"
+                >
+                  Abrir "{anexo.nome}"
+                </a>
+              </div>
+            ))}
 
             <div className="pt-10 pb-2 text-center space-y-6">
               <p className="text-[10pt]">

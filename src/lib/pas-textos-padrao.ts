@@ -68,8 +68,20 @@ export function textoTermoJuntadaInstrucao(params?: { destinatario?: Destinatari
   return `${blocoDestinatario(params?.destinatario)}Junto aos presentes autos o Relatório Técnico de Instrução e as provas a ele relacionadas, em cumprimento à determinação do despacho de instrução, para os devidos fins.`;
 }
 
-export function textoTermoJuntadaProva(nomeArquivo: string): string {
-  return `Junto ao presente processo o documento "<strong>${nomeArquivo}</strong>", para instrução do feito.`;
+/**
+ * Frase final que o próprio Relatório de Instrução acrescenta quando provas
+ * são entregues JUNTO com ele — não é um novo ato (Termo de Juntada), é o
+ * mesmo relatório dizendo que os arquivos abaixo o acompanham. Substitui um
+ * Termo de Juntada por arquivo (cada um com número próprio nos autos) por
+ * uma única peça, um único número, cobrindo relatório + anexos — mesma fase
+ * processual, uma entrega só (ver handleSalvarRelatorio, pas/[id]/page.tsx).
+ */
+export function textoAnexosDoRelatorio(nomesArquivos: string[]): string {
+  if (nomesArquivos.length === 0) return '';
+  const lista = nomesArquivos.map((n) => `"<strong>${n}</strong>"`).join(', ');
+  return nomesArquivos.length === 1
+    ? `<br><br>Segue anexo a este relatório o documento ${lista}, para instrução do feito.`
+    : `<br><br>Seguem anexos a este relatório os documentos ${lista}, para instrução do feito.`;
 }
 
 /**

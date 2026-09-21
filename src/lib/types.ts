@@ -331,6 +331,13 @@ export type PasPeca = {
    * autos (prova, defesa, comprovante) — ver a regra de sempre juntar ANTES
    * do documento a que se refere, no Cap.2 do Título III do manual. */
   anexoUrl?: string;
+  /** Arquivos extras juntados na MESMA peça/ato (ex.: Relatório Técnico de
+   * Instrução + provas entregues junto) — não geram Termo de Juntada nem
+   * numeração própria: o corpo da peça já cita que eles seguem anexos (ver
+   * handleSalvarRelatorio, pas/[id]/page.tsx), então são a mesma fase
+   * processual, não autos novos. Cada um entra nos autos, em sequência,
+   * logo depois do anexo principal (`anexoUrl`, quando houver). */
+  anexosAdicionais?: { url: string; nome: string }[];
   /** Assinatura manuscrita (data URL) de quem lavrou a peça — capturada na
    * revisão antes de gravar (ver PasPecaReviewDialog). Ausente só nas peças
    * geradas automaticamente sem revisão (termo de juntada de prova avulsa)

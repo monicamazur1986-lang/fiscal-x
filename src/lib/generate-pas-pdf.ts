@@ -30,9 +30,14 @@
  *  - dentro de cada documento, `[data-pdf-block]` marca as unidades que não
  *    devem ser cortadas no meio. Um bloco maior que a altura útil é quebrado
  *    pelos próprios filhos (parágrafos), preservando o estilo do container.
- *  - `data-pdf-anexo-url` num `[data-pdf-doc]` faz o arquivo anexo (PDF
- *    escaneado ou imagem) ser juntado logo depois daquele documento, cada
- *    página no tamanho real dela.
+ *  - `data-pdf-anexos` num `[data-pdf-doc]` (lista em JSON, `[{url, nome}]`)
+ *    faz cada arquivo anexo (PDF escaneado ou imagem) ser juntado logo
+ *    depois daquele documento, em sequência, cada página no tamanho real
+ *    dela — mais de um arquivo na lista vira uma única sequência contínua
+ *    de páginas, todas sob o mesmo documento (mesma fase processual, não
+ *    autos separados por arquivo). `data-pdf-anexo-anuncia-paginas` faz o
+ *    texto do documento ganhar uma frase final citando o intervalo de
+ *    páginas que esses anexos ocupam nos autos.
  */
 
 import { CLASSE_FOLHA_PDF, garantirEstiloDaFolha, zerarEspacamentoInline } from './pdf-letter-spacing';
@@ -345,14 +350,36 @@ export async function renderPasIntoPdf(
 
     alvos.forEach((bloco) => colocar(bloco.cloneNode(true) as HTMLElement));
 
+    // Anexos deste documento — carregados AQUI, ainda antes de fechar a
+    // última folha do texto, só pra já saber quantas páginas eles ocupam e
+    // poder anunciar o intervalo dentro do próprio texto (mais um bloco,
+    // colocado pela mesma paginação de sempre: nunca estoura a folha, na
+    // pior hipótese abre uma página nova, como qualquer bloco grande faria).
+    const anexosRaw = docEl.getAttribute('data-pdf-anexos');
+    const anexos: { url: string; nome: string }[] = anexosRaw ? JSON.parse(anexosRaw) : [];
+    let paginasAnexos: Pagina[] = [];
+    for (const anexo of anexos) {
+      // eslint-disable-next-line no-await-in-loop -- poucos anexos por peça, e a ordem importa (mesma sequência do texto)
+      paginasAnexos.push(...(await carregarAnexo(anexo.url, anexo.nome)));
+    }
+
+    if (paginasAnexos.length > 0 && docEl.hasAttribute('data-pdf-anexo-anuncia-paginas')) {
+      const inicio = paginas.length + (atual.childElementCount > 0 ? 1 : 0) + 1;
+      const fim = inicio + paginasAnexos.length - 1;
+      const frase = document.createElement('p');
+      frase.style.marginTop = '10px';
+      frase.style.fontStyle = 'italic';
+      frase.style.fontSize = '9pt';
+      frase.textContent = fim > inicio
+        ? `(Documento constante das páginas ${inicio} a ${fim} destes autos.)`
+        : `(Documento constante da página ${inicio} destes autos.)`;
+      colocar(frase);
+    }
+
     fecharFolha();
     staging.removeChild(atual);
 
-    const anexoUrl = docEl.getAttribute('data-pdf-anexo-url');
-    if (anexoUrl) {
-      const nome = docEl.getAttribute('data-pdf-anexo-nome') || 'documento anexo';
-      paginas.push(...(await carregarAnexo(anexoUrl, nome)));
-    }
+    paginas.push(...paginasAnexos);
   }
 
   const total = paginas.length;

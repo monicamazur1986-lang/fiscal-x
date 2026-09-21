@@ -48,7 +48,7 @@ import {
   textoDespachoInicial,
   textoDespachoInstrucao,
   textoTermoJuntadaInstrucao,
-  textoTermoJuntadaProva,
+  textoAnexosDoRelatorio,
   textoTermoJuntadaDefesa,
   textoTermoInformacaoSemDefesa,
   textoDespachoEncerramentoInstrucao,
@@ -799,6 +799,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   ];
   const roadmapIndexAtual = ROADMAP_STEPS.findIndex(s => s.fases.includes(pas.fase));
 
+  const temDocumentoOrigem = pecas.some(p => p.tipo === 'documento_origem');
   const temDespachoInstrucao = pecas.some(p => p.tipo === 'despacho_instrucao');
   const temRelatorioInstrucao = pecas.some(p => p.tipo === 'relatorio_instrucao');
   const temDefesaOuInformacao = !!pas.defesa || pecas.some(p => p.tipo === 'termo_informacao');
@@ -1119,20 +1120,18 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
     }
     setIsSalvandoRelatorio(true);
     try {
-      // Cada prova anexada gera seu próprio Termo de Juntada, sempre ANTES do
-      // Relatório na lista de peças — só esses aqui não passam por
-      // revisão/assinatura individual (são recibos de anexação, não peças de
-      // conteúdo); o Relatório em si (que é o texto de verdade) ainda passa
-      // pela revisão antes de ser gravado, junto com essas juntadas no mesmo
-      // lote (adicionarPecas numera tudo sequencialmente, sem risco de
-      // corrida entre chamadas). As já salvas num rascunho (provasRascunho)
-      // entram direto — foram enviadas ao Storage quando o rascunho foi
-      // salvo, reenviar de novo duplicaria o arquivo.
-      const itensProva: { tipo: 'termo_juntada'; titulo: string; conteudoHtml: string; anexoUrl: string }[] =
-        provasRascunho.map((p) => ({ tipo: 'termo_juntada' as const, titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: textoTermoJuntadaProva(p.nome), anexoUrl: p.url }));
+      // Provas entregues JUNTO com o relatório não geram Termo de Juntada
+      // próprio (numeração separada) — entram como anexosAdicionais na
+      // MESMA peça do relatório, que passa a citar cada uma no próprio
+      // texto (textoAnexosDoRelatorio, abaixo): é a mesma entrega, mesma
+      // fase processual, não autos novos por arquivo. As já salvas num
+      // rascunho (provasRascunho) entram direto — foram enviadas ao Storage
+      // quando o rascunho foi salvo, reenviar de novo duplicaria o arquivo.
+      const anexosAdicionais: { url: string; nome: string }[] =
+        provasRascunho.map((p) => ({ url: p.url, nome: p.nome }));
       for (const file of provasSelecionadas) {
         const url = await uploadArquivoPas(pas, file);
-        itensProva.push({ tipo: 'termo_juntada' as const, titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: textoTermoJuntadaProva(file.name), anexoUrl: url });
+        anexosAdicionais.push({ url, nome: file.name });
       }
       // Modo "sistema": fatos já É o HTML de verdade (documento rico, com
       // foto inserível no meio do texto) — entra direto, sem conversão nem
@@ -1158,8 +1157,12 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
           try {
             const anexoUrl = await uploadAnexoExterno(pas, anexoExternoFile);
+            // A frase que cita cada anexo entra DEPOIS da revisão — no texto
+            // que a autoridade efetivamente aprovou, não no rascunho editável
+            // (ela não é parte do que se redige, é o registro automático de
+            // que os arquivos seguem junto).
+            const conteudoComAnexos = conteudoFinal + textoAnexosDoRelatorio(anexosAdicionais.map((a) => a.nome));
             await adicionarPecas([
-              ...itensProva.map((p) => ({ ...p, criadoEm: dataAto })),
               // Modo "anexo": SÓ o termo de juntada — ele já é a peça
               // "relatorio_instrucao" (é o que destrava o passo seguinte
               // do processo), sem uma segunda folha de assinatura vazia
@@ -1170,7 +1173,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
               ...(modoRelatorio === 'sistema'
                 ? [{ tipo: 'termo_juntada' as const, titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: textoTermoJuntadaInstrucao({ destinatario: destinatarioGestor }), criadoEm: dataAto }]
                 : []),
-              { tipo: 'relatorio_instrucao', titulo: tituloPeca, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto },
+              { tipo: 'relatorio_instrucao', titulo: tituloPeca, conteudoHtml: conteudoComAnexos, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, anexosAdicionais, criadoEm: dataAto },
             ]);
             await limparRascunhoPeca(chaveRascunho);
             setFatos(""); setProvasSelecionadas([]); setProvasRascunho([]); setModoRelatorio('sistema');
@@ -1493,11 +1496,48 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             // original encaminha (ver podeEncaminhar acima) e quem recebe
             // já consegue agir, não só olhar. A regra do Firestore
             // (atualizarPas) já aceita responsavelAtualUid pra isto.
+            //
+            // Inserir o Auto de Infração (e o termo vinculado) é o PRIMEIRO
+            // ato formal da Instauração, não algo automático — a autoridade
+            // confirma o que está entrando nos autos antes de seguir. Só
+            // depois disso "Iniciar Instrução" libera (ver temDocumentoOrigem).
             (isAutuante || pas.responsavelAtualUid === profile?.uid) ? (
-              <div className="flex items-center gap-2">
-                <Button onClick={handleIniciarInstrucao} className="bg-[#0E4A44] hover:bg-[#0B3A35]">
-                  <FileStack className="h-4 w-4 mr-2" /> Iniciar Instrução
-                </Button>
+              <div className="space-y-5">
+                <div className={cn("flex items-start gap-3 pb-4", !temDocumentoOrigem && "border-b border-[#F1EEE4]")}>
+                  <span className={cn("h-6 w-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-black mt-0.5", temDocumentoOrigem ? "bg-[#E3F1EA] text-[#1F7A5C]" : "bg-[#F5F2EA] text-[#A39D8C]")}>
+                    {temDocumentoOrigem ? <CheckCircle2 className="h-3.5 w-3.5" /> : "1"}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#262420]">Auto de Infração e termo de origem</p>
+                    {temDocumentoOrigem ? (
+                      <p className="text-xs text-[#A39D8C] mt-1">Registrado nos autos.</p>
+                    ) : autoInfracao ? (
+                      <div className="flex items-center gap-2 mt-2">
+                        <Button onClick={handleAnexarDocumentosOrigem} disabled={isAnexandoOrigem} className="bg-[#0E4A44] hover:bg-[#0B3A35]">
+                          {isAnexandoOrigem ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Paperclip className="h-4 w-4 mr-2" />}
+                          Inserir {termoVinculadoIntimacao ? 'Auto de Infração e termo vinculado' : 'Auto de Infração'}
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-[#A39D8C] mt-1">Auto de Infração de origem não encontrado.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <span className="h-6 w-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-black mt-0.5 bg-[#F5F2EA] text-[#A39D8C]">2</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#262420]">Despacho de instauração</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Button onClick={handleIniciarInstrucao} disabled={!temDocumentoOrigem} className="bg-[#0E4A44] hover:bg-[#0B3A35]">
+                        <FileStack className="h-4 w-4 mr-2" /> Iniciar Instrução
+                      </Button>
+                    </div>
+                    {!temDocumentoOrigem && (
+                      <p className="text-xs text-[#A39D8C] mt-1">Insira o Auto de Infração (passo 1) antes de iniciar a instrução.</p>
+                    )}
+                  </div>
+                </div>
               </div>
             ) : (
               <p className="text-sm text-[#A39D8C]">Aguardando o fiscal autuante iniciar a instrução.</p>
@@ -1892,7 +1932,11 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
               </DropdownMenu>
             </div>
           </div>
-          {autoInfracao && !pecas.some(p => p.tipo === 'documento_origem') && (
+          {/* Só aparece fora da Instauração — dentro dela, o passo 1 da régua
+              já é este mesmo botão (ver pas.fase === 'instauracao' acima).
+              Aqui é só pra alcançar processos abertos antes deste passo
+              existir, já em fases mais adiante. */}
+          {pas.fase !== 'instauracao' && autoInfracao && !temDocumentoOrigem && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
               <p className="text-xs text-amber-800">
                 O Auto de Infração{termoVinculadoIntimacao ? ' e o termo vinculado' : ''} que deram origem a este PAS ainda não estão anexados nos autos.
@@ -2031,6 +2075,11 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                           <Download className="h-3.5 w-3.5" /> Baixar anexo
                         </a>
                       )}
+                      {peca.anexosAdicionais?.map((anexo, i) => (
+                        <a key={i} href={anexo.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0E4A44] hover:underline">
+                          <Download className="h-3.5 w-3.5" /> {anexo.nome}
+                        </a>
+                      ))}
                       {peca.tipo !== 'documento_origem' && !retificadaPor && (
                         <button
                           type="button"
@@ -2283,15 +2332,28 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             </div>
           )}
 
-          {/* Uma peça = um documento = uma folha nova. O `data-pdf-anexo-url`
-              faz o arquivo juntado (defesa escaneada, prova, peça assinada
-              fora do sistema) entrar logo depois dela, no tamanho real. */}
-          {pecasParaBaixar?.map((peca) => (
+          {/* Uma peça = um documento = uma folha nova. `data-pdf-anexos` (lista
+              em JSON) faz cada arquivo juntado — o anexo principal e, quando
+              houver, os anexosAdicionais entregues na mesma peça (ver
+              handleSalvarRelatorio) — entrar logo depois dela, em sequência,
+              no tamanho real. `data-pdf-anexo-anuncia-paginas` pede ao
+              gerador (renderPasIntoPdf) pra citar "constante das páginas X a
+              Y destes autos" no fim do texto — só faz sentido pra um
+              documento de fato JUNTADO (Termo de Juntada, ou o relatório com
+              anexos), não pra peça assinada fora do sistema cujo anexo é o
+              escaneado dela mesma. */}
+          {pecasParaBaixar?.map((peca) => {
+            const anexos = [
+              ...(peca.anexoUrl ? [{ url: peca.anexoUrl, nome: `${peca.numero}. ${peca.titulo}` }] : []),
+              ...(peca.anexosAdicionais || []),
+            ];
+            const anunciaPaginas = peca.tipo === 'termo_juntada' || !!peca.anexosAdicionais?.length;
+            return (
             <div
               key={peca.id}
               data-pdf-doc
-              data-pdf-anexo-url={peca.anexoUrl || undefined}
-              data-pdf-anexo-nome={peca.anexoUrl ? `${peca.numero}. ${peca.titulo}` : undefined}
+              data-pdf-anexos={anexos.length > 0 ? JSON.stringify(anexos) : undefined}
+              data-pdf-anexo-anuncia-paginas={anunciaPaginas ? "true" : undefined}
             >
               <div data-pdf-block className="mb-4">
                 <div className="sub-header-row text-center">{peca.numero}. {peca.titulo.toUpperCase()}</div>
@@ -2326,7 +2388,8 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
 
           <div
             data-pdf-footer
