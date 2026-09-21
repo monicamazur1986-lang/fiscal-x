@@ -396,6 +396,20 @@ export type Pas = {
    * pra sair da lista principal, e devolvido dali a qualquer momento. */
   arquivado?: boolean;
   arquivadoEm?: string;
+  /** Rascunho de um despacho/termo ainda não assinado — texto que se
+   * perderia se o fiscal saísse da revisão antes de confirmar. Chave é o
+   * tipo da peça (ou tipo+número da peça original, no caso da
+   * retificação); some da lista assim que a peça de verdade é gravada
+   * (ver limparRascunhoPeca em pas/[id]/page.tsx). */
+  rascunhosPecas?: Record<string, {
+    titulo: string;
+    conteudoHtml: string;
+    atualizadoEm: string;
+    /** Só no rascunho do relatório: provas já enviadas ao Storage nesse
+     * rascunho (um `File` do navegador não sobrevive à troca de aparelho,
+     * só a URL depois de já estar na nuvem). */
+    provas?: { url: string; nome: string }[];
+  }>;
   createdBy: string;
   createdByName?: string;
   createdAt: string;

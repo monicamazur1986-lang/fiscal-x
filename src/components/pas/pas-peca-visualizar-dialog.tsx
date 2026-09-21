@@ -109,7 +109,7 @@ export function PasPecaVisualizarDialog({
               </div>
             )}
 
-            <div className="pt-10 pb-2 text-center space-y-4">
+            <div className="pt-10 pb-2 text-center space-y-6">
               <p className="text-[10pt]">
                 {nomeMunicipioExibicao.toUpperCase()}, {format(new Date(peca.criadoEm), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.
               </p>

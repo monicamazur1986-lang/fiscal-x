@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { Loader2, PenTool, Check, Paperclip, X } from "lucide-react"
+import { Loader2, PenTool, Check, Paperclip, X, Save } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { FolhaEscalada } from "@/components/folha-escalada"
 import { SignaturePad } from "@/components/signature-pad"
@@ -26,6 +28,13 @@ export interface PasPecaConfirmacao {
    * como fazer o upload (`uploadArquivoPas`, já usado nas outras peças).
    */
   anexoExternoFile?: File;
+  /** Data do ato (ISO, meio-dia local) — vem pré-preenchida com hoje, mas é
+   * editável: montar o processo com atraso não pode deixar toda peça datada
+   * do dia em que alguém finalmente sentou pra digitar. Quem chama usa isto
+   * como `criadoEm` da peça (ver adicionarPeca/adicionarPecas) e, quando o
+   * próprio texto da peça carrega um prazo contado a partir desta data (ex.:
+   * TIP e o prazo recursal), recalcula a partir dela em vez de `new Date()`. */
+  dataAto: string;
 }
 
 export interface PasPecaRevisao {
@@ -36,6 +45,19 @@ export interface PasPecaRevisao {
    * de erro, deve mostrar o próprio toast e deixar o diálogo aberto pra
    * tentar de novo. */
   onConfirmar: (conteudoFinal: string, confirmacao: PasPecaConfirmacao) => Promise<void>;
+  /**
+   * Chave do rascunho (tipo da peça, ou tipo+número da peça original na
+   * retificação) — presente só nas revisões que fazem sentido salvar antes
+   * de assinar. Ausente, por exemplo, na defesa: ela já depende de um
+   * arquivo escolhido antes de abrir a revisão, então "guardar rascunho"
+   * não resolveria o problema de perder o que foi digitado.
+   */
+  chaveRascunho?: string;
+  /** Grava o texto atual como rascunho (sem assinatura, sem gerar peça de
+   * verdade) — quem chama decide onde guardar (ver salvarRascunhoPeca em
+   * pas/[id]/page.tsx). Ausente junto com chaveRascunho quando esta revisão
+   * não suporta rascunho. */
+  onSalvarRascunho?: (chave: string, titulo: string, conteudoHtml: string) => Promise<void>;
 }
 
 interface PasPecaReviewDialogProps {
@@ -80,8 +102,15 @@ export function PasPecaReviewDialog({
   const [assinadoForaDoSistema, setAssinadoForaDoSistema] = useState(false);
   const [isSignPadOpen, setIsSignPadOpen] = useState(false);
   const [isSalvando, setIsSalvando] = useState(false);
+  const [isSalvandoRascunho, setIsSalvandoRascunho] = useState(false);
   const [anexoExternoFile, setAnexoExternoFile] = useState<File | undefined>(undefined);
   const anexoExternoRef = useRef<HTMLInputElement>(null);
+  // "yyyy-MM-dd" pro <input type="date"> — convertido pra ISO só na hora de
+  // confirmar (ver handleConfirmar). Pré-preenchida com hoje porque é o caso
+  // comum; editável porque montar o processo com atraso não pode deixar
+  // toda peça datada do dia em que alguém sentou pra digitar os autos.
+  const hojeStr = format(new Date(), "yyyy-MM-dd");
+  const [dataAtoStr, setDataAtoStr] = useState(hojeStr);
 
   useEffect(() => {
     if (revisao) {
@@ -89,20 +118,37 @@ export function PasPecaReviewDialog({
       setAssinaturaUrl(undefined);
       setAssinadoForaDoSistema(false);
       setAnexoExternoFile(undefined);
+      setDataAtoStr(format(new Date(), "yyyy-MM-dd"));
     }
   }, [revisao]);
 
   if (!revisao) return null;
 
   const podeConfirmar = !!assinaturaUrl || assinadoForaDoSistema || !!anexoExternoFile;
+  // Meio-dia local (não meia-noite UTC) — "2026-08-10" interpretado como UTC
+  // vira 09/08 à noite no horário do Brasil, o que dataria a peça um dia
+  // antes do escolhido (mesmo cuidado já usado em defesaData, pas/[id]/page.tsx).
+  const dataAtoIso = new Date(`${dataAtoStr}T12:00:00`).toISOString();
 
   const handleConfirmar = async () => {
     if (!podeConfirmar) return;
     setIsSalvando(true);
     try {
-      await revisao.onConfirmar(conteudo, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile });
+      await revisao.onConfirmar(conteudo, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto: dataAtoIso });
     } finally {
       setIsSalvando(false);
+    }
+  };
+
+  const podeSalvarRascunho = !!revisao.chaveRascunho && !!revisao.onSalvarRascunho;
+  const handleSalvarRascunho = async () => {
+    if (!revisao.chaveRascunho || !revisao.onSalvarRascunho) return;
+    setIsSalvandoRascunho(true);
+    try {
+      await revisao.onSalvarRascunho(revisao.chaveRascunho, revisao.titulo, conteudo);
+      onFechar();
+    } finally {
+      setIsSalvandoRascunho(false);
     }
   };
 
@@ -111,7 +157,10 @@ export function PasPecaReviewDialog({
       <DialogContent className="sm:max-w-[900px] w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-serif">{revisao.titulo}</DialogTitle>
-          <DialogDescription>Revise e ajuste o texto se precisar. Depois, assine na tela, marque que vai assinar no papel, ou anexe o documento já pronto — sem uma dessas três coisas, a peça não é gravada.</DialogDescription>
+          <DialogDescription>
+            Revise e ajuste o texto se precisar. Depois, assine na tela, marque que vai assinar no papel, ou anexe o documento já pronto — sem uma dessas três coisas, a peça não é gravada.
+            {podeSalvarRascunho && ' Falta algo pra concluir agora? "Salvar rascunho" guarda o texto sem assinar, pra continuar depois.'}
+          </DialogDescription>
         </DialogHeader>
 
         {/* Folha A4 de verdade (timbre + corpo + fechamento juntos, numa peça
@@ -122,7 +171,7 @@ export function PasPecaReviewDialog({
             tela estreita as duas partes desalinhavam e o editor cortava
             palavra/letra na borda em vez de encolher junto. */}
         <div className="document-paper-wrapper custom-scrollbar">
-          <FolhaEscalada deps={[revisao.titulo, assinaturaUrl, assinadoForaDoSistema]}>
+          <FolhaEscalada deps={[revisao.titulo, assinaturaUrl, assinadoForaDoSistema, dataAtoStr]}>
             <div className="flex flex-row items-center justify-between gap-4 mb-1 pb-2 border-b border-zinc-200">
               <PasTimbreOficial
                 logoUrl={logoUrl}
@@ -155,8 +204,8 @@ export function PasPecaReviewDialog({
             {/* Fechamento — local/data automáticos + nome de quem vai assinar.
                 Sem imagem de assinatura quando for assinar fisicamente depois
                 de impresso — a linha e o nome ficam prontos pra caneta. */}
-            <div className="pt-8 pb-2 text-center space-y-4">
-              <p className="text-[10pt]">{nomeMunicipioExibicao.toUpperCase()}, {format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.</p>
+            <div className="pt-8 pb-2 text-center space-y-6">
+              <p className="text-[10pt]">{nomeMunicipioExibicao.toUpperCase()}, {format(new Date(`${dataAtoStr}T12:00:00`), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.</p>
               {assinaturaUrl && !assinadoForaDoSistema && <img src={assinaturaUrl} alt="Assinatura" className="h-14 mx-auto object-contain" />}
               <div className="pt-1 mx-auto w-full max-w-[260pt] border-t border-black">
                 <p className="font-bold uppercase text-[10pt] mt-1">{nomeAssinante}</p>
@@ -166,6 +215,22 @@ export function PasPecaReviewDialog({
         </div>
 
         <div className="space-y-2.5 py-2 border-t border-[#E4DFD1]">
+          {/* Pré-preenchida com hoje, mas editável — sem isso, montar o
+              processo com atraso (comum na prática) fazia toda peça sair
+              datada do dia em que alguém finalmente sentou pra digitar os
+              autos, mesmo peças de etapas que na realidade aconteceram em
+              datas diferentes. */}
+          <div className="space-y-1">
+            <Label className="text-xs font-medium text-[#6B6659]">Data do ato</Label>
+            <Input
+              type="date"
+              value={dataAtoStr}
+              max={hojeStr}
+              onChange={(e) => setDataAtoStr(e.target.value || hojeStr)}
+              className="h-9 rounded-md border-[#E4DFD1] w-auto"
+            />
+          </div>
+
           <div className="flex items-center gap-3">
             {assinaturaUrl && !assinadoForaDoSistema ? (
               <div className="flex items-center gap-3">
@@ -211,11 +276,28 @@ export function PasPecaReviewDialog({
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onFechar} disabled={isSalvando} className="rounded-md">Cancelar</Button>
-          <Button onClick={handleConfirmar} disabled={isSalvando || !podeConfirmar} className="rounded-md bg-[#0E4A44] hover:bg-[#0B3A35]">
-            {isSalvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />} Confirmar e Prosseguir
-          </Button>
+        <DialogFooter className="flex-wrap gap-2 sm:justify-between">
+          {/* Guardar sem assinar — pra quando falta algo (confirmar um dado,
+              esperar a assinatura de outra pessoa) e o texto já digitado não
+              pode ficar arriscado a se perder. Sem exigir assinatura/anexo:
+              é exatamente o oposto de "Confirmar e Prosseguir". */}
+          {podeSalvarRascunho ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleSalvarRascunho}
+              disabled={isSalvando || isSalvandoRascunho}
+              className="rounded-md gap-1.5 text-[#6B6659]"
+            >
+              {isSalvandoRascunho ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Salvar rascunho
+            </Button>
+          ) : <span />}
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={onFechar} disabled={isSalvando || isSalvandoRascunho} className="rounded-md">Cancelar</Button>
+            <Button onClick={handleConfirmar} disabled={isSalvando || isSalvandoRascunho || !podeConfirmar} className="rounded-md bg-[#0E4A44] hover:bg-[#0B3A35]">
+              {isSalvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />} Confirmar e Prosseguir
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

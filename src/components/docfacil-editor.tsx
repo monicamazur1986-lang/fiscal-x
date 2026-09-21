@@ -47,13 +47,24 @@ interface DocfacilEditorProps {
    * conteúdo feita fora da digitação do próprio usuário (autofocus)
    * precisa passar por aqui pra realmente aparecer na tela. */
   forceContent?: string;
+  /**
+   * Intercepta a inserção de imagem pelo botão da barra de ferramentas —
+   * sem isto, o SunEditor embute a imagem em base64 dentro do próprio HTML,
+   * que é como o documento é gravado no Firestore (limite de 1 MiB por
+   * documento; foi exatamente essa combinação — foto em base64 dentro do
+   * campo — que já travou a fila de gravações da vistoria, ver
+   * saveInspecao em use-inspecoes.ts). Quem passa este prop deve fazer o
+   * próprio upload (ex.: Storage) e chamar `uploadHandler({ result: [{ url,
+   * name, size }] })` — sem isso, a imagem nunca aparece no editor.
+   */
+  onImageUploadBefore?: (files: File[], info: unknown, uploadHandler: (response: unknown) => void) => any;
 }
 
 /** Editor de texto rico usado nos modelos e documentos do DOCFACIL — envolve
  * o SunEditor (MIT, github.com/JiHong88/suneditor) num "papel" A4 com
  * margens reais e timbre, para a edição já parecer com a página final
  * (como num editor de texto tipo Word), em vez de uma caixa de texto solta. */
-export function DocfacilEditor({ defaultValue, onChange, placeholder, disable, showLetterhead = true, forceContent }: DocfacilEditorProps) {
+export function DocfacilEditor({ defaultValue, onChange, placeholder, disable, showLetterhead = true, forceContent, onImageUploadBefore }: DocfacilEditorProps) {
   return (
     <div className="bg-zinc-100 p-4 sm:p-10 overflow-x-auto">
       <div className="docfacil-paper mx-auto bg-white border border-zinc-200 shadow-sm" style={{ width: "210mm", minWidth: "210mm" }}>
@@ -66,6 +77,7 @@ export function DocfacilEditor({ defaultValue, onChange, placeholder, disable, s
           defaultValue={sanitizeHtml(defaultValue)}
           setContents={forceContent !== undefined ? sanitizeHtml(forceContent) : undefined}
           onChange={onChange}
+          onImageUploadBefore={onImageUploadBefore}
           disable={disable}
           lang={lang.pt_br}
           placeholder={placeholder || "Redija o conteúdo do documento..."}

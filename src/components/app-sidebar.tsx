@@ -28,7 +28,7 @@ const navItems: { href: string; icon: typeof Home; label: string; emDesenvolvime
   { href: "/recados", icon: MessageSquare, label: "Recados" },
   { href: "/agenda", icon: CalendarDays, label: "Agenda" },
   { href: "/roteiros", icon: ClipboardList, label: "Roteiros" },
-  { href: "/pas", icon: Scale, label: "PAS", emDesenvolvimento: true },
+  { href: "/pas", icon: Scale, label: "PAS" },
   { href: "/legislacao", icon: Library, label: "Biblioteca" },
   { href: "/risco-sanitario", icon: ShieldAlert, label: "Risco Sanitário" },
 ]

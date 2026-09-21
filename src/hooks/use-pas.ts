@@ -144,7 +144,16 @@ export function usePasPecas(pasId: string | null) {
     return () => unsubscribe();
   }, [pasId]);
 
-  type NovaPeca = { tipo: PasPecaTipo; titulo: string; conteudoHtml: string; anexoUrl?: string; assinaturaUrl?: string; assinadoForaDoSistema?: boolean; refPecaId?: string; refPecaNumero?: number };
+  type NovaPeca = {
+    tipo: PasPecaTipo; titulo: string; conteudoHtml: string; anexoUrl?: string; assinaturaUrl?: string;
+    assinadoForaDoSistema?: boolean; refPecaId?: string; refPecaNumero?: number;
+    /** Data do ato (ISO) escolhida na revisão da peça (ver PasPecaReviewDialog)
+     * — sem isso, um processo montado com atraso saía com toda peça datada do
+     * dia em que alguém sentou pra digitar os autos, em vez do dia real de
+     * cada ato. Ausente (peças programáticas, sem revisão própria: juntada de
+     * prova avulsa, etc.) cai no comportamento de sempre, "agora". */
+    criadoEm?: string;
+  };
 
   // Aceita uma ou várias peças de uma vez, numerando sequencialmente a partir
   // de `pecas.length` — necessário pra respeitar a "regra de ouro" do manual
@@ -176,7 +185,7 @@ export function usePasPecas(pasId: string | null) {
         ...(item.refPecaNumero !== undefined ? { refPecaNumero: item.refPecaNumero } : {}),
         criadoPorUid: profile.uid,
         criadoPorNome: profile.displayName || 'Fiscal',
-        criadoEm: new Date().toISOString(),
+        criadoEm: item.criadoEm || new Date().toISOString(),
       };
       // doc(collection(...)) gera o id sem precisar de rede — mesmo raciocínio
       // de criarPas acima, necessário aqui pra numeração sequencial não travar

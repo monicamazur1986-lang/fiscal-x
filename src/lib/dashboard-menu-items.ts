@@ -34,7 +34,7 @@ export const DASHBOARD_MENU_ITEMS: DashboardMenuItem[] = [
   { href: "/rascunho", label: "Fiscal AI", description: "Gerar rascunho ou tirar dúvidas com inteligência artificial", icon: Sparkles, color: "#9C7A3C" },
   { href: "/agenda", label: "Agenda", description: "Compromissos e inspeções do dia", icon: CalendarDays, color: "#3D5A73" },
   { href: "/roteiros", label: "Roteiros", description: "Checklists técnicos de inspeção", icon: ClipboardList, color: "#6B4C80" },
-  { href: "/pas", label: "PAS", description: "Processo Administrativo Sanitário", icon: Scale, color: "#7A2E3B", emDesenvolvimento: true },
+  { href: "/pas", label: "PAS", description: "Processo Administrativo Sanitário", icon: Scale, color: "#7A2E3B" },
   { href: "/biblioteca", label: "Biblioteca", description: "Legislação e normas aplicáveis", icon: Library, color: "#8A4B5C" },
   { href: "/consulta-anvisa", label: "Consulta ANVISA", description: "Registros e processos sanitários", icon: Landmark, color: "#2F6668" },
   { href: "/risco-sanitario", label: "Risco Sanitário", description: "Classificação de risco por CNPJ/CNAE", icon: ShieldAlert, color: "#1F6B5C" },

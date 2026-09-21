@@ -7,7 +7,7 @@ import { ptBR } from "date-fns/locale"
 import {
   Loader2, Timer, FileStack, Send, Paperclip, CheckCircle2,
   AlertTriangle, ChevronDown, Download, X, FileDown, Landmark, Pencil, Trash2,
-  Sparkles, MoreHorizontal, Eye, Undo2,
+  Sparkles, MoreHorizontal, Eye, Undo2, Save,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
@@ -23,6 +23,7 @@ import {
   AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
 } from "@/components/ui/alert-dialog"
 import { PasDica } from "@/components/pas/pas-dica"
+import { DocfacilEditor } from "@/components/docfacil-editor"
 import { PasTimbreOficial } from "@/components/pas/pas-timbre-oficial"
 import { PasPecaReviewDialog, type PasPecaRevisao } from "@/components/pas/pas-peca-review-dialog"
 import { PasPecaVisualizarDialog } from "@/components/pas/pas-peca-visualizar-dialog"
@@ -185,13 +186,15 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
           recebidaEm: pas.defesa?.recebidaEm ? format(new Date(pas.defesa.recebidaEm), "dd/MM/yyyy") : undefined,
         },
         termoVinculado,
-        quantidadeProvas: provasSelecionadas.length,
+        quantidadeProvas: provasSelecionadas.length + provasRascunho.length,
         pecas: pecas.map(pc => pc.titulo),
         // Só entra como nota se o fiscal escreveu algo À MÃO. Depois de uma
         // geração, o campo guarda o próprio rascunho da IA — reenviá-lo faria
         // o modelo reescrever em cima do que ele mesmo produziu, acumulando
-        // desvios a cada nova tentativa.
-        notasDoFiscal: geradoPelaIaRef.current ? undefined : (fatos.trim() || undefined),
+        // desvios a cada nova tentativa. fatos agora é HTML (documento
+        // rico, com foto inserível) — despe a marcação antes de mandar pro
+        // prompt, que é texto corrido, não HTML.
+        notasDoFiscal: geradoPelaIaRef.current ? undefined : (fatos.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() || undefined),
       });
 
       if (r.error) {
@@ -199,9 +202,12 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         return;
       }
 
-      // O rascunho vem em HTML; os campos da tela são textarea. A conversão
-      // preserva as quebras de parágrafo e descarta o resto da marcação — a
-      // formatação de verdade acontece depois, no editor da revisão.
+      // Julgamento continua em campo de texto simples — a conversão abaixo
+      // preserva as quebras de parágrafo e descarta o resto da marcação.
+      // O relatório NÃO passa mais por isso: agora é editado como
+      // documento rico (DocfacilEditor, com foto inserível no meio do
+      // texto), então o HTML da IA entra direto, preservando os títulos em
+      // negrito de cada seção em vez de achatar tudo pra texto puro.
       const comoTexto = (html?: string) => (html || '')
         .replace(/<\/p>|<br\s*\/?>/gi, '\n')
         .replace(/<[^>]*>/g, '')
@@ -213,7 +219,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         if (r.julgamentoDecisaoHtml) setJulgamentoDecisao(comoTexto(r.julgamentoDecisaoHtml));
         toast({ title: "Rascunho do julgamento gerado", description: "Revise cada afirmação antes de emitir — a decisão é ato seu, não da IA." });
       } else {
-        setFatos(comoTexto(r.relatorioInstrucaoHtml));
+        setFatos(r.relatorioInstrucaoHtml || '');
         geradoPelaIaRef.current = true;
         toast({ title: "Rascunho do relatório gerado", description: "Confira os fatos e os artigos citados antes de registrar." });
       }
@@ -232,6 +238,54 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const [fatos, setFatos] = useState("");
   const provasInputRef = useRef<HTMLInputElement>(null);
   const [provasSelecionadas, setProvasSelecionadas] = useState<File[]>([]);
+  // RASCUNHO DO RELATÓRIO. Diferente dos despachos (só existem depois de
+  // abrir a revisão — ver salvarRascunhoPeca mais abaixo), o relatório é
+  // digitado num campo livre ANTES da revisão. "Edita no computador, assina
+  // depois no tablet" perdia esse texto inteiro ao trocar de aparelho,
+  // mesmo com o rascunho dos despachos já resolvido — fatos era só estado
+  // local, sem sincronizar em lugar nenhum. fatos é o HTML de verdade
+  // (o mesmo formato de conteudoHtml — o relatório é um documento rico,
+  // com foto inserível no meio do texto, não texto puro), então o rascunho
+  // entra direto, sem conversão. provasRascunho guarda os arquivos
+  // ANEXADOS (não as fotos inseridas no corpo — essas já foram enviadas ao
+  // Storage na hora da inserção, ver handleImagemRelatorio) já enviados ao
+  // Storage neste rascunho — um `File` do navegador não sobrevive à troca
+  // de aparelho, só a URL depois de já estar na nuvem.
+  const [provasRascunho, setProvasRascunho] = useState<{ url: string; nome: string }[]>([]);
+  const [isSalvandoRascunhoRelatorio, setIsSalvandoRascunhoRelatorio] = useState(false);
+  const rascunhoRelatorioCarregadoRef = useRef(false);
+  useEffect(() => {
+    if (rascunhoRelatorioCarregadoRef.current || !pas) return;
+    rascunhoRelatorioCarregadoRef.current = true;
+    const rascunho = pas.rascunhosPecas?.relatorio_instrucao;
+    if (!rascunho) return;
+    setFatos((atual) => atual.trim() ? atual : rascunho.conteudoHtml);
+    if (rascunho.provas?.length) setProvasRascunho(rascunho.provas);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pas]);
+
+  // Cada foto inserida pelo botão de imagem do editor sobe pro Storage na
+  // hora (mesmo caminho de uploadArquivoPas já usado nos outros anexos do
+  // PAS) — sem isto, o SunEditor embutiria a foto em base64 dentro do
+  // próprio HTML do relatório, e é exatamente essa combinação (foto em
+  // base64 dentro do campo) que já travou a fila de gravações da vistoria
+  // antes (ver comentário em saveInspecao, use-inspecoes.ts).
+  const handleImagemRelatorio = (files: File[], _info: unknown, uploadHandler: (response: unknown) => void) => {
+    if (!pas) return;
+    (async () => {
+      try {
+        const resultado = await Promise.all(files.map(async (file) => ({
+          url: await uploadArquivoPas(pas.id, file),
+          name: file.name,
+          size: file.size,
+        })));
+        uploadHandler({ result: resultado });
+      } catch (e) {
+        console.error('Erro ao enviar imagem do relatório do PAS:', e);
+        uploadHandler('Não foi possível enviar a imagem — tente de novo.');
+      }
+    })();
+  };
 
   const defesaArquivoRef = useRef<HTMLInputElement>(null);
   const [defesaArquivo, setDefesaArquivo] = useState<File | null>(null);
@@ -641,6 +695,53 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const temTip = pecas.some(p => p.tipo === 'termo_imposicao_penalidade');
   const podeEmitirJulgamento = temRelatorioInstrucao && temDefesaOuInformacao;
 
+  // RASCUNHO DE DESPACHO/TERMO ANTES DE ASSINAR.
+  //
+  // A revisão (PasPecaReviewDialog) só grava a peça de verdade quando tem
+  // assinatura, anexo ou "assinado fora do sistema" — até lá, fechar o
+  // diálogo (ou sair da tela) perdia qualquer ajuste feito no texto padrão.
+  // Guardado no próprio documento do PAS (não como peça dos autos: um
+  // rascunho não é ato processual, não tem número, não deveria aparecer na
+  // lista de peças), por tipo — cada despacho/termo só tem um rascunho
+  // pendente por vez, e ele some assim que a peça de verdade é gravada.
+  const salvarRascunhoPeca = async (chave: string, titulo: string, conteudoHtml: string, provas?: { url: string; nome: string }[]) => {
+    try {
+      // `provas` só vem preenchido quando quem chama tem provas pra guardar
+      // (hoje, só o relatório) — omitido (undefined), preserva as que já
+      // estavam salvas em vez de apagá-las (ex.: um "salvar rascunho" feito
+      // de dentro da revisão, depois de provas já terem sido guardadas na
+      // tela anterior).
+      const existente = pas.rascunhosPecas?.[chave];
+      await atualizarPas(pas.id, {
+        rascunhosPecas: {
+          ...(pas.rascunhosPecas || {}),
+          [chave]: {
+            titulo,
+            conteudoHtml,
+            atualizadoEm: new Date().toISOString(),
+            ...(provas !== undefined ? { provas } : (existente?.provas ? { provas: existente.provas } : {})),
+          },
+        },
+      });
+      toast({ title: "Rascunho salvo", description: "Continue quando quiser — abra a mesma ação de novo pra retomar." });
+    } catch (e) {
+      console.error('Erro ao salvar rascunho de peça do PAS:', e);
+      toast({ variant: "destructive", title: "Erro ao salvar o rascunho" });
+    }
+  };
+
+  const limparRascunhoPeca = async (chave: string) => {
+    if (!pas.rascunhosPecas?.[chave]) return;
+    const { [chave]: _removido, ...restantes } = pas.rascunhosPecas;
+    try {
+      await atualizarPas(pas.id, { rascunhosPecas: restantes });
+    } catch (e) {
+      // A peça já foi gravada — um rascunho velho sobrando não trava nada,
+      // só reaparece (inofensivamente) na próxima vez que essa ação abrir.
+      console.error('Erro ao limpar rascunho de peça do PAS já gravada:', e);
+    }
+  };
+
   const handleEmitirJulgamento = () => {
     if (!julgamentoFundamentacao.trim()) {
       toast({ variant: "destructive", title: "Escreva a fundamentação antes de emitir" });
@@ -655,18 +756,22 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       `<p><strong>2. FUNDAMENTAÇÃO</strong></p><p>${julgamentoFundamentacao.replace(/\n/g, '<br>')}</p>`,
       `<p><strong>3. DECISÃO</strong></p><p>${(julgamentoDecisao || 'A definir.').replace(/\n/g, '<br>')}</p>`,
     ].join('');
+    const chaveRascunho = 'julgamento_primeira_instancia';
     setRevisao({
       titulo: PAS_PECA_TITULOS.julgamento_primeira_instancia,
-      conteudoInicial: julgamentoHtml,
-      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile }) => {
+      conteudoInicial: pas.rascunhosPecas?.[chaveRascunho]?.conteudoHtml || julgamentoHtml,
+      chaveRascunho,
+      onSalvarRascunho: salvarRascunhoPeca,
+      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
         setIsEmitindoJulgamento(true);
         try {
           const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
           await adicionarPecas([
-            { tipo: 'termo_juntada', titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: `Junto aos autos o Julgamento em 1ª Instância proferido nesta data, para os devidos fins.` },
-            { tipo: 'julgamento_primeira_instancia', titulo: PAS_PECA_TITULOS.julgamento_primeira_instancia, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl },
+            { tipo: 'termo_juntada', titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: `Junto aos autos o Julgamento em 1ª Instância proferido nesta data, para os devidos fins.`, criadoEm: dataAto },
+            { tipo: 'julgamento_primeira_instancia', titulo: PAS_PECA_TITULOS.julgamento_primeira_instancia, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto },
           ]);
           await atualizarPas(pas.id, { fase: 'julgamento' });
+          await limparRascunhoPeca(chaveRascunho);
           setJulgamentoFundamentacao(""); setJulgamentoDecisao("");
           toast({ title: "Julgamento emitido" });
           await limparEncaminhamento();
@@ -682,24 +787,32 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   };
 
   const handleEncaminharTip = () => {
-    // O prazo recursal sai da lei aplicável ao município: 10 dias úteis no
-    // rito estadual, 10 (multa) ou 15 (demais casos) em Prudentópolis.
-    const baseLegal = baseLegalDoMunicipio(profile?.municipioId);
-    const prazoRecursal = addPrazo(new Date(), baseLegal.recurso.dias, baseLegal.contagemPrazo);
-    const prazoRecursalFormatada = format(prazoRecursal, "dd/MM/yyyy");
-    const prazoRecursalMultaData = baseLegal.recurso.diasMulta
-      ? format(addPrazo(new Date(), baseLegal.recurso.diasMulta, baseLegal.contagemPrazo), "dd/MM/yyyy")
-      : undefined;
+    const chaveRascunho = 'despacho_encaminhamento_tip';
     setRevisao({
       titulo: PAS_PECA_TITULOS.despacho_encaminhamento_tip,
-      conteudoInicial: textoDespachoEncaminhamentoTip({ destinatario: destinatarioGestor }),
-      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile }) => {
+      conteudoInicial: pas.rascunhosPecas?.[chaveRascunho]?.conteudoHtml || textoDespachoEncaminhamentoTip({ destinatario: destinatarioGestor }),
+      chaveRascunho,
+      onSalvarRascunho: salvarRascunhoPeca,
+      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
         setIsEncaminhandoTip(true);
         try {
+          // O prazo recursal conta a partir da CIÊNCIA da decisão — a data do
+          // ato escolhida na revisão (não "hoje"), pra o TIP não sair com um
+          // prazo calculado do dia em que alguém sentou pra digitar os autos
+          // quando o processo é montado com atraso. Por isso o cálculo (e o
+          // texto do TIP, que o cita) só acontece aqui, depois de a data ser
+          // escolhida — nunca antes de abrir a revisão.
+          const baseLegal = baseLegalDoMunicipio(profile?.municipioId);
+          const dataDoAto = new Date(dataAto);
+          const prazoRecursal = addPrazo(dataDoAto, baseLegal.recurso.dias, baseLegal.contagemPrazo);
+          const prazoRecursalFormatada = format(prazoRecursal, "dd/MM/yyyy");
+          const prazoRecursalMultaData = baseLegal.recurso.diasMulta
+            ? format(addPrazo(dataDoAto, baseLegal.recurso.diasMulta, baseLegal.contagemPrazo), "dd/MM/yyyy")
+            : undefined;
           const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
           await adicionarPecas([
-            { tipo: 'despacho_encaminhamento_tip', titulo: PAS_PECA_TITULOS.despacho_encaminhamento_tip, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl },
-            { tipo: 'termo_imposicao_penalidade', titulo: PAS_PECA_TITULOS.termo_imposicao_penalidade, conteudoHtml: textoTermoImposicaoPenalidade({ numeroAI: pas.numeroProcesso, prazoRecursalData: prazoRecursalFormatada, prazoRecursalMultaData, municipioId: profile?.municipioId }) },
+            { tipo: 'despacho_encaminhamento_tip', titulo: PAS_PECA_TITULOS.despacho_encaminhamento_tip, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto },
+            { tipo: 'termo_imposicao_penalidade', titulo: PAS_PECA_TITULOS.termo_imposicao_penalidade, conteudoHtml: textoTermoImposicaoPenalidade({ numeroAI: pas.numeroProcesso, prazoRecursalData: prazoRecursalFormatada, prazoRecursalMultaData, municipioId: profile?.municipioId }), criadoEm: dataAto },
           ]);
           const lembreteId = await criarLembretePrazo(saveInspecao, {
             titulo: `Prazo recursal (PAS) vence em breve — ${pas.estabelecimento.fantasia}`,
@@ -709,6 +822,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             municipioId: profile!.municipioId,
           });
           await atualizarPas(pas.id, { fase: 'recursal', agendaLembreteId: lembreteId });
+          await limparRascunhoPeca(chaveRascunho);
           toast({ title: "TIP emitido — prazo recursal em andamento" });
           await limparEncaminhamento();
           setRevisao(null);
@@ -767,10 +881,14 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   // pré-preenchida com o conteúdo da peça errada como ponto de partida, e
   // grava um Termo de Retificação novo que referencia a original por número.
   const handleRetificarPeca = (pecaOriginal: PasPeca) => {
+    const chaveRascunho = `termo_retificacao_${pecaOriginal.numero}`;
     setRevisao({
       titulo: `${PAS_PECA_TITULOS.termo_retificacao} — Peça nº ${pecaOriginal.numero}`,
-      conteudoInicial: textoTermoRetificacao({ pecaOriginalTitulo: pecaOriginal.titulo, pecaOriginalNumero: pecaOriginal.numero }) + pecaOriginal.conteudoHtml,
-      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile }) => {
+      conteudoInicial: pas.rascunhosPecas?.[chaveRascunho]?.conteudoHtml
+        || textoTermoRetificacao({ pecaOriginalTitulo: pecaOriginal.titulo, pecaOriginalNumero: pecaOriginal.numero }) + pecaOriginal.conteudoHtml,
+      chaveRascunho,
+      onSalvarRascunho: salvarRascunhoPeca,
+      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
         try {
           const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
           await adicionarPeca({
@@ -782,7 +900,9 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             anexoUrl,
             refPecaId: pecaOriginal.id,
             refPecaNumero: pecaOriginal.numero,
+            criadoEm: dataAto,
           });
+          await limparRascunhoPeca(chaveRascunho);
           toast({ title: "Termo de retificação registrado" });
           await limparEncaminhamento();
           setRevisao(null);
@@ -795,14 +915,19 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   };
 
   const handleIniciarInstrucao = () => {
+    const chaveRascunho = 'despacho_inicial';
     setRevisao({
       titulo: PAS_PECA_TITULOS.despacho_inicial,
-      conteudoInicial: textoDespachoInicial({ numeroAI: pas.numeroProcesso, estabelecimento: pas.estabelecimento.fantasia, destinatario: destinatarioGestor }),
-      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile }) => {
+      conteudoInicial: pas.rascunhosPecas?.[chaveRascunho]?.conteudoHtml
+        || textoDespachoInicial({ numeroAI: pas.numeroProcesso, estabelecimento: pas.estabelecimento.fantasia, destinatario: destinatarioGestor }),
+      chaveRascunho,
+      onSalvarRascunho: salvarRascunhoPeca,
+      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
         try {
           const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
-          await adicionarPeca({ tipo: 'despacho_inicial', titulo: PAS_PECA_TITULOS.despacho_inicial, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl });
+          await adicionarPeca({ tipo: 'despacho_inicial', titulo: PAS_PECA_TITULOS.despacho_inicial, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto });
           await atualizarPas(pas.id, { fase: 'instrucao' });
+          await limparRascunhoPeca(chaveRascunho);
           toast({ title: "Instrução iniciada" });
           await limparEncaminhamento();
           setRevisao(null);
@@ -819,13 +944,17 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
     const baseLegal = baseLegalDoMunicipio(profile.municipioId);
     const prazoData = addPrazo(new Date(pas.dataCienciaAI), baseLegal.defesa.dias, baseLegal.contagemPrazo);
     const prazoFormatada = format(prazoData, "dd/MM/yyyy");
+    const chaveRascunho = 'despacho_instrucao';
     setRevisao({
       titulo: PAS_PECA_TITULOS.despacho_instrucao,
-      conteudoInicial: textoDespachoInstrucao({ numeroAI: pas.numeroProcesso, prazoDefesaData: prazoFormatada, municipioId: profile.municipioId }),
-      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile }) => {
+      conteudoInicial: pas.rascunhosPecas?.[chaveRascunho]?.conteudoHtml
+        || textoDespachoInstrucao({ numeroAI: pas.numeroProcesso, prazoDefesaData: prazoFormatada, municipioId: profile.municipioId }),
+      chaveRascunho,
+      onSalvarRascunho: salvarRascunhoPeca,
+      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
         try {
           const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
-          await adicionarPeca({ tipo: 'despacho_instrucao', titulo: PAS_PECA_TITULOS.despacho_instrucao, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl });
+          await adicionarPeca({ tipo: 'despacho_instrucao', titulo: PAS_PECA_TITULOS.despacho_instrucao, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto });
           const lembreteId = await criarLembretePrazo(saveInspecao, {
             titulo: `Prazo de defesa (PAS) vence em breve — ${pas.estabelecimento.fantasia}`,
             prazoISO: prazoData.toISOString(),
@@ -834,6 +963,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             municipioId: profile.municipioId!,
           });
           await atualizarPas(pas.id, { prazoDefesaData: prazoData.toISOString(), agendaLembreteId: lembreteId });
+          await limparRascunhoPeca(chaveRascunho);
           toast({ title: "Despacho de instrução emitido" });
           await limparEncaminhamento();
           setRevisao(null);
@@ -846,7 +976,11 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   };
 
   const handleSalvarRelatorio = async () => {
-    if (!fatos.trim()) {
+    // fatos é HTML de um editor rico — vazio de verdade não é "" (o
+    // SunEditor sem nada digitado costuma devolver "<p><br></p>"), e uma
+    // foto sem nenhuma palavra ao redor ainda é conteúdo válido.
+    const temConteudoReal = /<img[\s>]/i.test(fatos) || fatos.replace(/<[^>]*>/g, '').trim().length > 0;
+    if (!temConteudoReal) {
       toast({ variant: "destructive", title: "Descreva os fatos antes de salvar" });
       return;
     }
@@ -858,42 +992,41 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       // conteúdo); o Relatório em si (que é o texto de verdade) ainda passa
       // pela revisão antes de ser gravado, junto com essas juntadas no mesmo
       // lote (adicionarPecas numera tudo sequencialmente, sem risco de
-      // corrida entre chamadas).
-      const itensProva: { tipo: 'termo_juntada'; titulo: string; conteudoHtml: string; anexoUrl: string }[] = [];
+      // corrida entre chamadas). As já salvas num rascunho (provasRascunho)
+      // entram direto — foram enviadas ao Storage quando o rascunho foi
+      // salvo, reenviar de novo duplicaria o arquivo.
+      const itensProva: { tipo: 'termo_juntada'; titulo: string; conteudoHtml: string; anexoUrl: string }[] =
+        provasRascunho.map((p) => ({ tipo: 'termo_juntada' as const, titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: textoTermoJuntadaProva(p.nome), anexoUrl: p.url }));
       for (const file of provasSelecionadas) {
         const url = await uploadArquivoPas(pas.id, file);
         itensProva.push({ tipo: 'termo_juntada' as const, titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: textoTermoJuntadaProva(file.name), anexoUrl: url });
       }
-      // O texto já chega estruturado (a IA escreve as seções, ou o fiscal
-      // escreve como quiser) — um campo só, sem embrulhar em "1. DOS FATOS"
-      // (duplicava o cabeçalho que o próprio texto traz) e sem uma segunda
-      // caixa separada pra antecedentes: quem tiver histórico a relatar
-      // escreve no mesmo texto, como faria numa peça datilografada.
-      const comoParagrafos = (texto: string) => texto
-        .split(/\n{2,}/)
-        .map(bloco => bloco.trim())
-        .filter(Boolean)
-        .map(bloco => `<p>${bloco.replace(/\n/g, '<br>')}</p>`)
-        .join('');
-      const relatorioHtml = comoParagrafos(fatos);
+      // fatos já É o HTML de verdade (documento rico, com foto inserível no
+      // meio do texto) — entra direto, sem conversão nem cabeçalho "1. DOS
+      // FATOS" embrulhando por fora (duplicaria o que o próprio texto traz).
+      const relatorioHtml = fatos;
+      const chaveRascunho = 'relatorio_instrucao';
 
       setRevisao({
         titulo: PAS_PECA_TITULOS.relatorio_instrucao,
         conteudoInicial: relatorioHtml,
-        onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile }) => {
+        chaveRascunho,
+        onSalvarRascunho: salvarRascunhoPeca,
+        onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
           try {
             const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
             await adicionarPecas([
-              ...itensProva,
+              ...itensProva.map((p) => ({ ...p, criadoEm: dataAto })),
               // Regra de ouro do manual: o relatório precisa do próprio Termo
               // de Juntada imediatamente antes dele, mesmo sem prova anexada
               // em arquivo (Título III, Cap.2, item 2.4, Figura 14) — sem
               // isso, ele entrava nos autos desacompanhado sempre que nenhum
               // arquivo era anexado.
-              { tipo: 'termo_juntada', titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: textoTermoJuntadaInstrucao({ destinatario: destinatarioGestor }) },
-              { tipo: 'relatorio_instrucao', titulo: PAS_PECA_TITULOS.relatorio_instrucao, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl },
+              { tipo: 'termo_juntada', titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: textoTermoJuntadaInstrucao({ destinatario: destinatarioGestor }), criadoEm: dataAto },
+              { tipo: 'relatorio_instrucao', titulo: PAS_PECA_TITULOS.relatorio_instrucao, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto },
             ]);
-            setFatos(""); setProvasSelecionadas([]);
+            await limparRascunhoPeca(chaveRascunho);
+            setFatos(""); setProvasSelecionadas([]); setProvasRascunho([]);
             toast({ title: "Relatório técnico registrado" });
             await limparEncaminhamento();
             setRevisao(null);
@@ -908,6 +1041,31 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       toast({ variant: "destructive", title: "Erro ao anexar as provas" });
     } finally {
       setIsSalvandoRelatorio(false);
+    }
+  };
+
+  // Diferente dos despachos (só existem depois de abrir a revisão), o
+  // relatório é digitado num campo livre antes disso — sem este botão, o
+  // "salvar rascunho" da revisão nunca entraria em cena pra quem larga o
+  // relatório na metade, antes mesmo de clicar em "Salvar Relatório".
+  const handleSalvarRascunhoRelatorio = async () => {
+    if (!fatos.trim() && provasSelecionadas.length === 0 && provasRascunho.length === 0) return;
+    setIsSalvandoRascunhoRelatorio(true);
+    try {
+      const novasProvas: { url: string; nome: string }[] = [];
+      for (const file of provasSelecionadas) {
+        const url = await uploadArquivoPas(pas.id, file);
+        novasProvas.push({ url, nome: file.name });
+      }
+      const todasProvas = [...provasRascunho, ...novasProvas];
+      await salvarRascunhoPeca('relatorio_instrucao', PAS_PECA_TITULOS.relatorio_instrucao, fatos, todasProvas);
+      setProvasRascunho(todasProvas);
+      setProvasSelecionadas([]);
+    } catch (e) {
+      console.error('Erro ao salvar rascunho do relatório do PAS:', e);
+      toast({ variant: "destructive", title: "Erro ao salvar o rascunho" });
+    } finally {
+      setIsSalvandoRascunhoRelatorio(false);
     }
   };
 
@@ -931,12 +1089,15 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       setRevisao({
         titulo: `${PAS_PECA_TITULOS.termo_juntada} — Defesa Administrativa`,
         conteudoInicial: textoTermoJuntadaDefesa({ tempestividade, dataRecebimento: dataFormatada, numeroProtocolo: defesaProtocolo.trim() || undefined, destinatario: destinatarioGestor }),
-        onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile }) => {
+        onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
           try {
             // O anexo principal aqui já é a própria defesa (url, escolhida
             // antes de abrir esta revisão) — um "anexo externo" adicional só
             // reforça que o Termo em si foi tratado fora do sistema, sem
-            // substituir o documento da defesa.
+            // substituir o documento da defesa. dataAto aqui é a data do ATO
+            // de juntada (quando o termo foi lavrado), diferente de
+            // defesaData (quando a defesa em si foi recebida) — os dois
+            // podem ser dias diferentes.
             await adicionarPeca({
               tipo: 'termo_juntada',
               titulo: `${PAS_PECA_TITULOS.termo_juntada} — Defesa Administrativa`,
@@ -944,6 +1105,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
               anexoUrl: url,
               assinaturaUrl,
               assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile,
+              criadoEm: dataAto,
             });
             await atualizarPas(pas.id, { defesa: { recebidaEm: recebidaEm.toISOString(), tempestividade, anexoUrl: url } });
             await cancelarLembretePrazo(deleteInspecao, pas.agendaLembreteId);
@@ -966,14 +1128,19 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
 
   const handleGerarTermoInformacao = () => {
     const prazoFormatada = pas.prazoDefesaData ? format(new Date(pas.prazoDefesaData), "dd/MM/yyyy") : '';
+    const chaveRascunho = 'termo_informacao';
     setRevisao({
       titulo: PAS_PECA_TITULOS.termo_informacao,
-      conteudoInicial: textoTermoInformacaoSemDefesa({ numeroAI: pas.numeroProcesso, prazoDefesaData: prazoFormatada, municipioId: profile?.municipioId }),
-      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile }) => {
+      conteudoInicial: pas.rascunhosPecas?.[chaveRascunho]?.conteudoHtml
+        || textoTermoInformacaoSemDefesa({ numeroAI: pas.numeroProcesso, prazoDefesaData: prazoFormatada, municipioId: profile?.municipioId }),
+      chaveRascunho,
+      onSalvarRascunho: salvarRascunhoPeca,
+      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
         try {
           const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
-          await adicionarPeca({ tipo: 'termo_informacao', titulo: PAS_PECA_TITULOS.termo_informacao, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl });
+          await adicionarPeca({ tipo: 'termo_informacao', titulo: PAS_PECA_TITULOS.termo_informacao, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto });
           await cancelarLembretePrazo(deleteInspecao, pas.agendaLembreteId);
+          await limparRascunhoPeca(chaveRascunho);
           toast({ title: "Termo de Informação gerado" });
           await limparEncaminhamento();
           setRevisao(null);
@@ -986,14 +1153,19 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   };
 
   const handleEncaminharJulgamento = () => {
+    const chaveRascunho = 'despacho_encerramento_instrucao';
     setRevisao({
       titulo: PAS_PECA_TITULOS.despacho_encerramento_instrucao,
-      conteudoInicial: textoDespachoEncerramentoInstrucao({ destinatario: destinatarioGestor }),
-      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile }) => {
+      conteudoInicial: pas.rascunhosPecas?.[chaveRascunho]?.conteudoHtml
+        || textoDespachoEncerramentoInstrucao({ destinatario: destinatarioGestor }),
+      chaveRascunho,
+      onSalvarRascunho: salvarRascunhoPeca,
+      onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
         try {
           const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
-          await adicionarPeca({ tipo: 'despacho_encerramento_instrucao', titulo: PAS_PECA_TITULOS.despacho_encerramento_instrucao, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl });
+          await adicionarPeca({ tipo: 'despacho_encerramento_instrucao', titulo: PAS_PECA_TITULOS.despacho_encerramento_instrucao, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto });
           await atualizarPas(pas.id, { fase: 'aguardando_julgamento' });
+          await limparRascunhoPeca(chaveRascunho);
           await limparEncaminhamento();
           // "Retornem-se os autos conclusos" — o próprio texto do despacho de
           // instrução já promete isso (ver textoDespachoInstrucao). Instrução
@@ -1245,19 +1417,33 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between gap-2">
                           <Label className="text-xs text-[#6B6659]">Texto do relatório</Label>
-                          {fatos.trim() && (
-                            <button type="button" onClick={() => setFatos("")} className="text-[10px] font-bold uppercase tracking-widest text-[#A39D8C] hover:text-rose-600 transition-colors">
+                          {fatos.replace(/<[^>]*>/g, '').trim() && (
+                            // Também apaga o rascunho salvo (se houver) — senão um
+                            // recarregamento da página trazia o texto "limpo" de
+                            // volta, restaurado do rascunho que continuava lá.
+                            <button type="button" onClick={() => { setFatos(""); limparRascunhoPeca('relatorio_instrucao'); }} className="text-[10px] font-bold uppercase tracking-widest text-[#A39D8C] hover:text-rose-600 transition-colors">
                               Limpar
                             </button>
                           )}
                         </div>
-                        <Textarea
-                          value={fatos}
-                          onChange={(e) => setFatos(e.target.value)}
-                          rows={10}
-                          placeholder="Gere o rascunho acima e revise aqui, ou escreva do zero — fatos, antecedentes, o que for preciso relatar."
-                          className="rounded-md border-[#E4DFD1] resize-y text-[13px] leading-relaxed"
-                        />
+                        {/* Documento de verdade em vez de caixa de texto solta —
+                            a foto entra pelo próprio botão de imagem da barra de
+                            ferramentas, no meio do parágrafo onde ela faz
+                            sentido (redimensiona arrastando o canto), em vez de
+                            uma lista de arquivos à parte. Cada foto sobe pro
+                            Storage na hora da inserção (handleImagemRelatorio),
+                            não em base64 — o mesmo cuidado já tomado nos outros
+                            anexos do PAS. */}
+                        <div className="rounded-md border border-[#E4DFD1] overflow-hidden">
+                          <DocfacilEditor
+                            defaultValue={fatos}
+                            forceContent={fatos}
+                            onChange={setFatos}
+                            onImageUploadBefore={handleImagemRelatorio}
+                            showLetterhead={false}
+                            placeholder="Gere o rascunho acima e revise aqui, ou escreva do zero — fatos, antecedentes, o que for preciso relatar. Insira fotos pelo botão de imagem da barra de ferramentas."
+                          />
+                        </div>
                       </div>
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-2">
@@ -1266,6 +1452,16 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                         </div>
                         <input ref={provasInputRef} type="file" multiple className="hidden" onChange={(e) => setProvasSelecionadas(prev => [...prev, ...Array.from(e.target.files || [])])} />
                         <div className="flex flex-wrap gap-1.5">
+                          {/* Já salvas num rascunho anterior — enviadas ao Storage
+                              na hora, então sobrevivem à troca de aparelho.
+                              Removê-las aqui só tira da lista local; some de
+                              vez do rascunho salvo na próxima gravação. */}
+                          {provasRascunho.map((p, i) => (
+                            <span key={`rascunho-${i}`} className="flex items-center gap-1 bg-[#E3F1EA] rounded px-2 py-1 text-xs text-[#1F7A5C]">
+                              {p.nome}
+                              <button type="button" onClick={() => setProvasRascunho(prev => prev.filter((_, idx) => idx !== i))}><X className="h-3 w-3 text-[#1F7A5C]/60 hover:text-rose-500" /></button>
+                            </span>
+                          ))}
                           {provasSelecionadas.map((f, i) => (
                             <span key={i} className="flex items-center gap-1 bg-[#F5F2EA] rounded px-2 py-1 text-xs text-[#6B6659]">
                               {f.name}
@@ -1275,9 +1471,18 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                           <Button type="button" variant="outline" size="sm" onClick={() => provasInputRef.current?.click()} className="h-7 rounded-md text-[11px] gap-1"><Paperclip className="h-3 w-3" /> Anexar arquivo</Button>
                         </div>
                       </div>
-                      <Button onClick={handleSalvarRelatorio} disabled={isSalvandoRelatorio} className="bg-[#0E4A44] hover:bg-[#0B3A35]">
-                        {isSalvandoRelatorio ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Salvar Relatório
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button onClick={handleSalvarRelatorio} disabled={isSalvandoRelatorio || isSalvandoRascunhoRelatorio} className="bg-[#0E4A44] hover:bg-[#0B3A35]">
+                          {isSalvandoRelatorio ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Salvar Relatório
+                        </Button>
+                        {/* Falta algo pra concluir agora (confirmar um fato,
+                            esperar mais provas) e vai assinar só depois, talvez
+                            no tablet — guarda o texto e as provas já anexadas
+                            sem virar peça de verdade ainda. */}
+                        <Button type="button" variant="outline" onClick={handleSalvarRascunhoRelatorio} disabled={isSalvandoRelatorio || isSalvandoRascunhoRelatorio} className="rounded-md gap-1.5 text-[#6B6659]">
+                          {isSalvandoRascunhoRelatorio ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Salvar rascunho
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1834,12 +2039,15 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                 dangerouslySetInnerHTML={{ __html: sanitizeHtml(peca.conteudoHtml) }}
               />
 
-              {/* O vão antes da assinatura era de 64px + 40px embaixo. Numa
-                  peça curta — um termo de juntada tem três linhas — isso
-                  respondia por boa parte da folha em branco, e numa peça longa
-                  era o que fazia o bloco não caber e migrar sozinho para a
-                  folha seguinte. */}
-              <div data-pdf-block className="mt-10 mb-6 text-center space-y-5" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+              {/* O vão antes da assinatura já foi de 64px + 40px embaixo — isso
+                  respondia por boa parte da folha em branco numa peça curta
+                  (um termo de juntada tem três linhas) e fazia o bloco não
+                  caber, migrando sozinho pra folha seguinte. O espaço entre a
+                  data e a assinatura em si (space-y, abaixo) é outra medida —
+                  aumentá-lo um pouco não reintroduz aquele problema porque a
+                  paginação (renderPasIntoPdf) mede a altura real do bloco a
+                  cada peça, não presume um tamanho fixo. */}
+              <div data-pdf-block className="mt-10 mb-6 text-center space-y-7" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
                 <p className="text-[10pt]">{nomeMunicipioExibicao.toUpperCase()}, {format(new Date(peca.criadoEm), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.</p>
                 {peca.assinaturaUrl && (
                   <img src={peca.assinaturaUrl} alt="Assinatura" className="h-16 mx-auto object-contain" />
