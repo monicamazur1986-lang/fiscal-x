@@ -34,7 +34,7 @@ function PasPageInner() {
   // nas regras do Firestore.
   const [selectedMunicipio, setSelectedMunicipio] = useState("");
   const municipioOverride = isRoot ? { municipioIdOverride: selectedMunicipio || undefined } : undefined;
-  const { processos, loading, criarPas, atualizarPas, excluirPas, needsMunicipioSelection } = usePas(municipioOverride);
+  const { processos, loading, criarPas, anexarDocumentosOrigemAoPas, atualizarPas, excluirPas, needsMunicipioSelection } = usePas(municipioOverride);
   const { intimacoes, updateIntimacaoMeta } = useIntimacoes(municipioOverride);
   const { deleteInspecao } = useInspecoes();
   const { folders: pastas, createFolder } = useFolders('pas');
@@ -138,6 +138,13 @@ function PasPageInner() {
     setIsCreating(true);
     try {
       const dataCiencia = ai.dataRecebimento || ai.dataIntimacao;
+      // O PAS nasce COM o Auto de Infração (e o Termo de Apreensão/
+      // Interdição vinculado, quando houver — mesmo ato de fiscalização,
+      // ver documentoOrigemId/autoInfracaoVinculadaId) já referenciados nos
+      // autos. Sem isso, o processo corria sem os documentos que o
+      // originaram, e só apareciam ao gerar o PDF.
+      const termoVinculadoId = ai.documentoOrigemId || ai.autoInfracaoVinculadaId;
+      const termoVinculado = termoVinculadoId ? intimacoes.find(i => String(i.id) === String(termoVinculadoId)) : undefined;
       const id = await criarPas({
         numeroProcesso: ai.numeroProcesso,
         autoInfracaoId: ai.id,
@@ -161,6 +168,24 @@ function PasPageInner() {
         ...(ai.compartilhadoComNomes?.length ? { compartilhadoComNomes: ai.compartilhadoComNomes } : {}),
       });
       await updateIntimacaoMeta(ai.id, { pasId: id });
+      // Referencia o Auto de Infração (e o termo vinculado, se houver) como
+      // peça dos autos — a autuação em si, na íntegra, não um resumo. Não
+      // gera nem guarda PDF nenhum aqui: essa peça só aponta pro id da
+      // autuação (ver origemIntimacaoId, lib/types.ts); "ver"/"baixar" abre
+      // /intimacoes/{id}, que já sabe renderizar aquele documento.
+      try {
+        const documentosOrigem = [ai, ...(termoVinculado ? [termoVinculado] : [])];
+        const anexos = documentosOrigem.map((documento) => ({
+          id: documento.id,
+          titulo: documento.id === ai.id
+            ? `Auto de Infração nº ${documento.numeroProcesso}`
+            : `${documento.tipoTermo || 'Termo Vinculado'}${documento.numeroProcesso ? ` nº ${documento.numeroProcesso}` : ''}`,
+        }));
+        await anexarDocumentosOrigemAoPas(id, anexos, 0);
+      } catch (e) {
+        console.error('Falha ao referenciar o(s) documento(s) de origem no PAS:', e);
+        toast({ title: "PAS criado", description: "Não foi possível registrar automaticamente o documento de origem nos autos." });
+      }
       setIsPickerOpen(false);
       router.push(`/pas/${id}`);
     } catch (e) {

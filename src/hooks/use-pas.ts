@@ -20,6 +20,7 @@ import {
 import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
 import { attemptFirestoreWrite } from '@/lib/firestore-offline';
+import { textoDocumentoOrigem } from '@/lib/pas-textos-padrao';
 
 const LOCAL_STORAGE_KEY = 'fiscal_x_pas_v1';
 
@@ -84,8 +85,13 @@ export function usePas(options?: { municipioIdOverride?: string }) {
   }, [user, profile, configError, options?.municipioIdOverride]);
 
   /** Cria o PAS já na fase de instauração — a peça de despacho inicial é
-   * gravada à parte, por quem chamar, via usePasPecas(id).adicionarPeca. */
-  const criarPas = useCallback(async (data: Omit<Pas, 'id' | 'municipioId' | 'createdBy' | 'createdByName' | 'createdAt' | 'fase'>) => {
+   * gravada à parte, por quem chamar, via usePasPecas(id).adicionarPeca; os
+   * documentos que deram origem ao processo (Auto de Infração e termo
+   * vinculado) entram depois, via anexarDocumentosOrigemAoPas abaixo, que
+   * precisa do id devolvido aqui pra montar o caminho no Storage. */
+  const criarPas = useCallback(async (
+    data: Omit<Pas, 'id' | 'municipioId' | 'createdBy' | 'createdByName' | 'createdAt' | 'fase'>
+  ) => {
     if (!user || !profile?.municipioId) throw new Error('Não autenticado.');
     if (!db || configError) throw new Error('Sem conexão com o banco de dados.');
     const mid = normalizeId(profile.municipioId);
@@ -106,6 +112,46 @@ export function usePas(options?: { municipioIdOverride?: string }) {
     return ref.id;
   }, [user, profile, configError]);
 
+  /** Referencia, como peças dos autos, o Auto de Infração e, se houver, o
+   * Termo de Apreensão/Interdição vinculado — os documentos que deram
+   * origem ao PAS. NÃO duplica o documento nem gera/guarda um PDF próprio:
+   * "ver"/"baixar" essa peça abre a autuação original em /intimacoes/{id},
+   * que já sabe renderizar e baixar o PDF dela (mesmo raciocínio da
+   * observação em `origemIntimacaoId`, lib/types.ts). Evita depender do
+   * Storage — cujas regras neste projeto não conseguem ler o Firestore pra
+   * checar permissão (firestore.get() cross-service sempre nega, ver
+   * storage.rules), o que fazia todo upload aqui falhar. */
+  const anexarDocumentosOrigemAoPas = useCallback(async (
+    pasId: string,
+    documentos: { id: string; titulo: string }[],
+    // Quantas peças o processo já tem — quem chama passa `pecas.length` (ver
+    // usePasPecas). Sem isto, anexar depois de o PAS já ter outras peças
+    // (ex.: acrescentar o documento de origem que faltava num processo já
+    // em andamento) gravaria de novo os números 1, 2..., colidindo com
+    // peças já existentes.
+    numeroInicial: number
+  ) => {
+    if (!user || !profile) throw new Error('Não autenticado.');
+    if (!db || configError) throw new Error('Sem conexão com o banco de dados.');
+    const criadoEm = new Date().toISOString();
+    let numero = numeroInicial;
+    for (const documento of documentos) {
+      numero += 1;
+      // eslint-disable-next-line no-await-in-loop -- numeração sequencial precisa ser em ordem
+      await attemptFirestoreWrite(setDoc(doc(collection(db, 'pas', pasId, 'pecas')), {
+        numero,
+        tipo: 'documento_origem' as PasPecaTipo,
+        titulo: documento.titulo,
+        conteudoHtml: textoDocumentoOrigem(),
+        origemIntimacaoId: documento.id,
+        assinadoForaDoSistema: true,
+        criadoPorUid: user.uid,
+        criadoPorNome: profile.displayName || 'Fiscal',
+        criadoEm,
+      }));
+    }
+  }, [user, profile, configError]);
+
   const atualizarPas = useCallback(async (id: string, data: Partial<Pas>) => {
     if (!db) return;
     await attemptFirestoreWrite(setDoc(doc(db, 'pas', id), { ...data, updatedAt: new Date().toISOString() }, { merge: true }));
@@ -121,7 +167,7 @@ export function usePas(options?: { municipioIdOverride?: string }) {
     await attemptFirestoreWrite(deleteDoc(doc(db, 'pas', id)));
   }, []);
 
-  return { processos, loading, criarPas, atualizarPas, excluirPas, needsMunicipioSelection };
+  return { processos, loading, criarPas, anexarDocumentosOrigemAoPas, atualizarPas, excluirPas, needsMunicipioSelection };
 }
 
 /** Peças (autos) de um processo específico — subcoleção `pas/{pasId}/pecas`,
@@ -246,5 +292,38 @@ export function usePasPecas(pasId: string | null) {
     }
   }, [pasId, pecas]);
 
-  return { pecas, loading, adicionarPeca, adicionarPecas, excluirPeca };
+  /**
+   * CORRIGIR UM DADO DE IDENTIFICAÇÃO ERRADO EM TODA PEÇA ONDE ELE APARECE.
+   *
+   * Número do processo digitado errado na abertura do PAS é o caso que deu
+   * origem a isto: corrigir só `pas.numeroProcesso` arruma a capa e o
+   * cabeçalho, mas cada despacho/termo já lavrado guarda o número ERRADO no
+   * próprio texto (foi digitado ali, na hora em que a peça foi composta —
+   * ver textoDespachoInicial etc. em pas-textos-padrao.ts), e não muda
+   * sozinho quando o campo do processo é corrigido depois.
+   *
+   * NÃO é uma ferramenta de editar peça — troca só a ocorrência exata da
+   * string antiga pela nova, sem tocar em mais nada do texto (mesmo
+   * raciocínio de `String.split/join`, sem regex, pra não casar por
+   * engano um pedaço de outra palavra). Quem chama decide se cabe aqui
+   * (número do processo, nome do estabelecimento) — não é apropriado pra
+   * tudo: quem lavrou/assinou uma peça é fato histórico, não "erro" a
+   * corrigir em massa.
+   */
+  const corrigirTextoNasPecas = useCallback(async (buscar: string, substituir: string): Promise<{ pecasCorrigidas: number }> => {
+    if (!pasId || !db) throw new Error('Processo não carregado.');
+    if (!buscar || buscar === substituir) return { pecasCorrigidas: 0 };
+    const afetadas = pecas.filter((p) => p.conteudoHtml.includes(buscar));
+    for (const p of afetadas) {
+      // eslint-disable-next-line no-await-in-loop -- poucas peças, e cada uma reporta o próprio erro se falhar
+      await attemptFirestoreWrite(
+        updateDoc(doc(db, 'pas', pasId, 'pecas', p.id), {
+          conteudoHtml: p.conteudoHtml.split(buscar).join(substituir),
+        })
+      );
+    }
+    return { pecasCorrigidas: afetadas.length };
+  }, [pasId, pecas]);
+
+  return { pecas, loading, adicionarPeca, adicionarPecas, excluirPeca, corrigirTextoNasPecas };
 }

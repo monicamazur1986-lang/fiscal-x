@@ -72,6 +72,22 @@ export function textoTermoJuntadaProva(nomeArquivo: string): string {
   return `Junto ao presente processo o documento "<strong>${nomeArquivo}</strong>", para instrução do feito.`;
 }
 
+/**
+ * O PAS nasce de um Auto de Infração — e, quando o auto tiver um Termo de
+ * Apreensão/Interdição vinculado (mesmo ato de fiscalização, ver
+ * documentoOrigemId/autoInfracaoVinculadaId em lib/types.ts), esse termo
+ * também precisa estar nos autos: sem ele, o processo administrativo corre
+ * sem o documento que, por exemplo, decretou a interdição que está sendo
+ * apurada. Esta peça não guarda um PDF nem resumo em texto do documento —
+ * referencia a autuação original (ver origemIntimacaoId em lib/types.ts e
+ * anexarDocumentosOrigemAoPas em use-pas.ts), aberta na íntegra em
+ * /intimacoes/{id} ao clicar. Sem assinatura: não é ato de ninguém, é só o
+ * registro de onde os autos nascem.
+ */
+export function textoDocumentoOrigem(): string {
+  return `Documento de origem deste Processo Administrativo Sanitário — abra a autuação completa pelo botão abaixo.`;
+}
+
 export function textoTermoJuntadaDefesa(params: {
   tempestividade: 'tempestiva' | 'intempestiva';
   dataRecebimento: string; // formatada
@@ -148,6 +164,7 @@ export function textoTermoRetificacao(params: { pecaOriginalTitulo: string; peca
 }
 
 export const PAS_PECA_TITULOS: Record<string, string> = {
+  documento_origem: 'Documento de Origem',
   despacho_inicial: 'Despacho — Instauração do PAS',
   despacho_instrucao: 'Despacho de Instrução',
   relatorio_instrucao: 'Relatório Técnico de Instrução',

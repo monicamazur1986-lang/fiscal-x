@@ -255,19 +255,39 @@ service cloud.firestore {
         allow create: if isAuthenticated() && (
           isRoot() || get(/databases/$(database)/documents/pas/$(id)).data.municipioId == getUserData().municipioId
         );
+        // responsavelAtualUid (encaminhado) age no lugar do autuante — sem
+        // isso, quem recebe o processo por encaminhamento (ver
+        // podeEncaminhar/handleEscolherEncaminhamento) conseguia emitir
+        // despacho e registrar defesa, mas não corrigir uma peça lavrada
+        // errada nem usar "Voltar etapa".
         allow delete: if isAuthenticated() && (
           isRoot() || (
             get(/databases/$(database)/documents/pas/$(id)).data.municipioId == getUserData().municipioId &&
-            (get(/databases/$(database)/documents/pas/$(id)).data.createdBy == request.auth.uid || isAdmin())
+            (
+              get(/databases/$(database)/documents/pas/$(id)).data.createdBy == request.auth.uid ||
+              get(/databases/$(database)/documents/pas/$(id)).data.responsavelAtualUid == request.auth.uid ||
+              isAdmin()
+            )
           )
         );
-        // Só a renumeração: nenhum campo de conteúdo da peça pode mudar aqui.
+        // A renumeração (excluirPeca) e, à parte, a correção de um dado de
+        // IDENTIFICAÇÃO errado — número do processo digitado errado na
+        // abertura, por exemplo — que precisa ser trocado no texto de toda
+        // peça onde apareceu (ver corrigirTextoNasPecas em use-pas.ts,
+        // ligado a "Editar nº" em pas/[id]/page.tsx). Não é edição de
+        // mérito: o app só chama isto pra uma troca de string pontual,
+        // sempre com o fiscal revendo antes quantas peças/ocorrências vão
+        // mudar. Nenhum outro campo de conteúdo muda por aqui.
         allow update: if isAuthenticated() && (
           isRoot() || (
             get(/databases/$(database)/documents/pas/$(id)).data.municipioId == getUserData().municipioId &&
-            (get(/databases/$(database)/documents/pas/$(id)).data.createdBy == request.auth.uid || isAdmin())
+            (
+              get(/databases/$(database)/documents/pas/$(id)).data.createdBy == request.auth.uid ||
+              get(/databases/$(database)/documents/pas/$(id)).data.responsavelAtualUid == request.auth.uid ||
+              isAdmin()
+            )
           )
-        ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['numero', 'refPecaNumero']);
+        ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['numero', 'refPecaNumero', 'conteudoHtml']);
       }
     }
 

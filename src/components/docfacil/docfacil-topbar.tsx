@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface DocfacilTopbarProps {
   /** Navega para uma rota. Use isto OU onBack, nunca os dois. */
@@ -11,6 +12,12 @@ interface DocfacilTopbarProps {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  /** Título/subtítulo maiores e em cor de destaque, pra telas de detalhe
+   * onde saber "em qual processo eu estou" de imediato importa mais do
+   * que numa lista — sem isso, o título do PAS (por exemplo) tinha o
+   * mesmo peso visual discreto de qualquer outro cabeçalho do sistema.
+   * Padrão: false, olhar de sempre. */
+  destaque?: boolean;
 }
 
 /**
@@ -24,7 +31,7 @@ interface DocfacilTopbarProps {
  * a partir de uma tela de detalhe). Sem nenhum dos dois, o botão nem
  * aparece, evitando duplicar a mesma ação de voltar em cada tela.
  */
-export function DocfacilTopbar({ backHref, onBack, title, subtitle, actions }: DocfacilTopbarProps) {
+export function DocfacilTopbar({ backHref, onBack, title, subtitle, actions, destaque = false }: DocfacilTopbarProps) {
   const showBack = Boolean(backHref || onBack);
   const backButton = (
     <span className="flex items-center gap-1.5 text-sm font-medium text-[#6B6659] hover:text-[#0E4A44] transition-colors">
@@ -33,7 +40,10 @@ export function DocfacilTopbar({ backHref, onBack, title, subtitle, actions }: D
   );
 
   return (
-    <header className="flex items-center gap-4 border-b border-[#E4DFD1] bg-[#F5F2EA] px-4 sm:px-6 h-14 no-print">
+    <header className={cn(
+      "flex items-center gap-4 border-b border-[#E4DFD1] bg-[#F5F2EA] px-4 sm:px-6 no-print",
+      destaque ? "h-16 sm:h-[4.5rem]" : "h-14"
+    )}>
       {showBack && (
         <>
           {backHref ? (
@@ -45,8 +55,16 @@ export function DocfacilTopbar({ backHref, onBack, title, subtitle, actions }: D
         </>
       )}
       <div className="min-w-0 flex-1">
-        <p className="font-serif text-base text-[#262420] truncate">{title}</p>
-        {subtitle && <p className="text-xs text-[#A39D8C] truncate">{subtitle}</p>}
+        <p className={cn(
+          "font-serif truncate",
+          destaque ? "text-xl sm:text-2xl font-bold text-[#0E4A44]" : "text-base text-[#262420]"
+        )}>{title}</p>
+        {subtitle && (
+          <p className={cn(
+            "truncate",
+            destaque ? "text-sm font-semibold text-[#9C7A3C]" : "text-xs text-[#A39D8C]"
+          )}>{subtitle}</p>
+        )}
       </div>
       {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
     </header>

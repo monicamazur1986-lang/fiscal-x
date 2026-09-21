@@ -306,7 +306,14 @@ export type PasPecaTipo =
   | 'julgamento_primeira_instancia'
   | 'despacho_encaminhamento_tip'
   | 'termo_imposicao_penalidade'
-  | 'termo_retificacao';
+  | 'termo_retificacao'
+  /** O próprio Auto de Infração (e o Termo de Apreensão/Interdição vinculado,
+   * quando houver) que deu origem ao PAS — o PDF oficial completo, anexado
+   * automaticamente ao abrir o processo. Não é "termo_juntada": juntada é
+   * trazer algo de fora pra dentro de um processo que já existe, e são
+   * justamente esses documentos que dão origem ao PAS, não algo recebido
+   * depois (ver anexarDocumentosOrigemAoPas em use-pas.ts). */
+  | 'documento_origem';
 
 /** Uma peça dos autos — sempre numerada e cronológica, nunca reordenada nem
  * editada depois de criada (autos de processo real não se "corrigem", se
@@ -340,6 +347,14 @@ export type PasPeca = {
    * marcar visualmente "retificada pela peça nº X" na trilha. */
   refPecaId?: string;
   refPecaNumero?: number;
+  /** Só em peças do tipo `documento_origem` — id do documento (Auto de
+   * Infração ou termo vinculado) em `intimacoes/{id}` que deu origem ao PAS.
+   * Não guarda um PDF nem anexo próprio: "ver"/"baixar" esta peça abre a
+   * autuação original em /intimacoes/{id}, que já sabe renderizar e gerar o
+   * PDF dela. Evita duplicar esse documento (e o próprio PDF) dentro do PAS
+   * — e evita depender do Storage, cujas regras neste projeto não conseguem
+   * ler o Firestore pra checar permissão (ver storage.rules). */
+  origemIntimacaoId?: string;
   criadoPorUid: string;
   criadoPorNome: string;
   criadoEm: string;

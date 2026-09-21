@@ -40,7 +40,7 @@ import { baseLegalDoMunicipio } from "@/lib/base-legal-municipal"
 import { criarLembretePrazo, cancelarLembretePrazo } from "@/lib/prazo-lembrete"
 import { storage } from "@/lib/firebase"
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage"
-import { blobToDataUrl } from "@/lib/compress-image"
+import { blobToDataUrl, compressImage } from "@/lib/compress-image"
 import { sanitizeHtml } from "@/lib/sanitize-html"
 import { renderPasIntoPdf } from "@/lib/generate-pas-pdf"
 import type { PasPeca, PasFase } from "@/lib/types"
@@ -76,9 +76,9 @@ function descreverErro(e: unknown): string {
   return 'Tente novamente.';
 }
 
-async function uploadAnexoExterno(pasId: string, file?: File): Promise<string | undefined> {
+async function uploadAnexoExterno(pas: { id: string; municipioId: string }, file?: File): Promise<string | undefined> {
   if (!file) return undefined;
-  return uploadArquivoPas(pasId, file);
+  return uploadArquivoPas(pas, file);
 }
 
 // Acima disso, cair pra base64 dentro do próprio documento do Firestore
@@ -91,20 +91,46 @@ async function uploadAnexoExterno(pasId: string, file?: File): Promise<string | 
 // termina de gravar, o processo não avança, e não fica claro por quê.
 const TETO_BASE64_ANEXO_BYTES = 700 * 1024;
 
-async function uploadArquivoPas(pasId: string, file: File): Promise<string> {
+/** Foto tirada direto da câmera do aparelho facilmente passa de vários MB —
+ * sem reduzir antes, o upload é lento/instável numa conexão de campo fraca
+ * e, quando falha, cai no fallback abaixo, que aí sim recusa arquivo
+ * grande. Mesma compressão já usada nas fotos de vistoria
+ * (compress-image.ts) — 1280px/q0.7 mantém o suficiente pra ler um rótulo
+ * ou enxergar sujidade num equipamento, mas fica ~leve o bastante pra
+ * subir rápido e até caber no fallback base64 se precisar. PDF (relatório
+ * pronto) e outros formatos passam direto — comprimir é coisa de imagem. */
+async function comoAnexoPas(file: File): Promise<File | Blob> {
+  const ehImagem = file.type.startsWith('image/') || /\.(heic|heif)$/i.test(file.name);
+  if (!ehImagem) return file;
+  try {
+    return await compressImage(file);
+  } catch (e) {
+    console.warn('Falha ao comprimir imagem antes do upload — enviando original:', e);
+    return file;
+  }
+}
+
+async function uploadArquivoPas(pas: { id: string; municipioId: string }, file: File): Promise<string> {
+  const paraEnviar = await comoAnexoPas(file);
   try {
     if (!storage) throw new Error('Storage indisponível.');
-    const path = `pas/${pasId}/${Date.now()}_${file.name}`;
+    // municipioId no caminho — não no Firestore — porque as regras do
+    // Storage não conseguem checar o dono/gestor do processo lendo o
+    // documento em pas/{id} (firestore.get() cross-service sempre nega
+    // neste projeto, ver storage.rules); o município já vem junto no
+    // caminho, sem precisar dessa leitura.
+    const path = `pas/${pas.municipioId}/${pas.id}/${Date.now()}_${file.name}`;
     const ref = storageRef(storage, path);
-    await uploadBytes(ref, file);
+    await uploadBytes(ref, paraEnviar);
     return await getDownloadURL(ref);
   } catch (e) {
-    if (file.size > TETO_BASE64_ANEXO_BYTES) {
-      throw new Error(`Não foi possível enviar "${file.name}" (${Math.round(file.size / 1024)} KB) — sem conexão com o Storage neste momento, e o arquivo é grande demais para gravar direto no documento. Tente de novo.`);
+    if (paraEnviar.size > TETO_BASE64_ANEXO_BYTES) {
+      throw new Error(`Não foi possível enviar "${file.name}" (${Math.round(paraEnviar.size / 1024)} KB) — sem conexão com o Storage neste momento, e o arquivo é grande demais para gravar direto no documento. Tente de novo.`);
     }
-    // Arquivo pequeno (ex.: assinatura) e Storage indisponível — guarda
-    // direto no documento (mesmo fallback já usado nas fotos de roteiro).
-    return blobToDataUrl(file);
+    // Arquivo pequeno (ex.: assinatura, ou foto já comprimida) e Storage
+    // indisponível — guarda direto no documento (mesmo fallback já usado
+    // nas fotos de roteiro).
+    return blobToDataUrl(paraEnviar);
   }
 }
 
@@ -113,8 +139,8 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const router = useRouter();
   const { toast } = useToast();
   const { profile } = useAuth();
-  const { processos, loading: loadingPas, atualizarPas, excluirPas } = usePas();
-  const { pecas, loading: loadingPecas, adicionarPeca, adicionarPecas, excluirPeca } = usePasPecas(id);
+  const { processos, loading: loadingPas, atualizarPas, excluirPas, anexarDocumentosOrigemAoPas } = usePas();
+  const { pecas, loading: loadingPecas, adicionarPeca, adicionarPecas, excluirPeca, corrigirTextoNasPecas } = usePasPecas(id);
   const { inspecoes, saveInspecao, deleteInspecao } = useInspecoes();
   const { intimacoes, updateIntimacaoMeta } = useIntimacoes();
   const { config } = useAppConfig({ municipioIdOverride: profile?.municipioId });
@@ -133,10 +159,15 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
     () => intimacoes.find(i => String(i.id) === String(pas?.autoInfracaoId)),
     [intimacoes, pas?.autoInfracaoId]
   );
-  const termoVinculado = useMemo(() => {
+  // Objeto cru (Intimacao) do termo vinculado — usado pra gerar o PDF real
+  // dele (ver handleAnexarDocumentosOrigem). `termoVinculado` abaixo é só a
+  // versão resumida, pro texto do relatório/capa.
+  const termoVinculadoIntimacao = useMemo(() => {
     const idVinculado = autoInfracao?.documentoOrigemId || autoInfracao?.autoInfracaoVinculadaId;
-    if (!idVinculado) return undefined;
-    const t = intimacoes.find(i => String(i.id) === String(idVinculado));
+    return idVinculado ? intimacoes.find(i => String(i.id) === String(idVinculado)) : undefined;
+  }, [intimacoes, autoInfracao?.documentoOrigemId, autoInfracao?.autoInfracaoVinculadaId]);
+  const termoVinculado = useMemo(() => {
+    const t = termoVinculadoIntimacao;
     if (!t) return undefined;
     return {
       tipo: t.tipoTermo || 'Termo vinculado',
@@ -146,7 +177,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         .map((b: any) => [b.produto, b.marcaLote, b.quantidade && `${b.quantidade} ${b.unidade || ''}`.trim()].filter(Boolean).join(' — '))
         .filter(Boolean),
     };
-  }, [intimacoes, autoInfracao?.documentoOrigemId, autoInfracao?.autoInfracaoVinculadaId]);
+  }, [termoVinculadoIntimacao]);
 
   const inspecaoOrigem = useMemo(() => {
     const idInspecao = autoInfracao?.inspecaoId;
@@ -294,7 +325,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
     (async () => {
       try {
         const resultado = await Promise.all(files.map(async (file) => ({
-          url: await uploadArquivoPas(pas.id, file),
+          url: await uploadArquivoPas(pas, file),
           name: file.name,
           size: file.size,
         })));
@@ -471,13 +502,36 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const [novoNumero, setNovoNumero] = useState("");
   const [isSalvandoNumero, setIsSalvandoNumero] = useState(false);
 
+  // Quantas peças JÁ LAVRADAS citam o número atual no próprio texto — cada
+  // despacho/termo guarda o número digitado na hora em que foi composto
+  // (ver textoDespachoInicial etc.), então só corrigir pas.numeroProcesso
+  // arruma a capa e o cabeçalho, e deixa o texto de cada peça com o número
+  // errado pra sempre. Mostrado ANTES de salvar, pra não pegar o fiscal de
+  // surpresa quando a correção também reescrever essas peças.
+  const pecasComNumeroAtual = pas ? pecas.filter(p => p.conteudoHtml.includes(pas.numeroProcesso)).length : 0;
+
   const handleSalvarNumero = async () => {
     if (!pas || !novoNumero.trim()) return;
+    const numeroAntigo = pas.numeroProcesso;
+    const numeroNovo = novoNumero.trim();
     setIsSalvandoNumero(true);
     try {
-      await atualizarPas(pas.id, { numeroProcesso: novoNumero.trim() });
+      await atualizarPas(pas.id, { numeroProcesso: numeroNovo });
+      if (numeroNovo !== numeroAntigo) {
+        // Troca só a ocorrência exata da string antiga pela nova — não é
+        // reescrever a peça, é corrigir o dado de identificação errado que
+        // ficou preso no texto (ver corrigirTextoNasPecas, use-pas.ts).
+        const { pecasCorrigidas } = await corrigirTextoNasPecas(numeroAntigo, numeroNovo);
+        toast({
+          title: "Número do processo atualizado",
+          description: pecasCorrigidas > 0
+            ? `Corrigido também no texto de ${pecasCorrigidas} ${pecasCorrigidas === 1 ? 'peça' : 'peças'} que citavam o número anterior.`
+            : undefined,
+        });
+      } else {
+        toast({ title: "Número do processo atualizado" });
+      }
       setIsEditarNumeroOpen(false);
-      toast({ title: "Número do processo atualizado" });
     } catch (e) {
       console.error('Erro ao editar o número do PAS:', e);
       toast({ variant: "destructive", title: "Erro ao salvar" });
@@ -503,7 +557,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
     }
     setIsSalvandoDocComplementar(true);
     try {
-      const url = await uploadArquivoPas(pas.id, docComplementarArquivo);
+      const url = await uploadArquivoPas(pas, docComplementarArquivo);
       await adicionarPeca({
         tipo: 'termo_juntada',
         titulo: `${PAS_PECA_TITULOS.termo_juntada} — Documento Complementar`,
@@ -567,13 +621,44 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
     }
   };
 
+  // Processos abertos antes deste mecanismo existir ficam sem a referência
+  // ao documento de origem nos autos — este botão registra depois, sem
+  // precisar apagar e recriar o processo. `pecas.length` vira o número
+  // inicial pra não colidir com peças já existentes (ver
+  // anexarDocumentosOrigemAoPas em use-pas.ts).
+  const [isAnexandoOrigem, setIsAnexandoOrigem] = useState(false);
+  const handleAnexarDocumentosOrigem = async () => {
+    if (!pas || !autoInfracao) return;
+    setIsAnexandoOrigem(true);
+    try {
+      const documentosOrigem = [autoInfracao, ...(termoVinculadoIntimacao ? [termoVinculadoIntimacao] : [])];
+      const anexos = documentosOrigem.map((documento) => ({
+        id: documento.id,
+        titulo: documento.id === autoInfracao.id
+          ? `Auto de Infração nº ${documento.numeroProcesso}`
+          : `${documento.tipoTermo || 'Termo Vinculado'}${documento.numeroProcesso ? ` nº ${documento.numeroProcesso}` : ''}`,
+      }));
+      await anexarDocumentosOrigemAoPas(pas.id, anexos, pecas.length);
+      toast({ title: "Documento de origem registrado nos autos" });
+    } catch (e) {
+      console.error('Erro ao referenciar documento(s) de origem:', e);
+      toast({ variant: "destructive", title: "Erro ao registrar", description: descreverErro(e) });
+    } finally {
+      setIsAnexandoOrigem(false);
+    }
+  };
+
   // Remoção de peça juntada por engano (documento errado ou duplicado). Não
   // é edição dos autos: pra corrigir o CONTEÚDO de uma peça válida o caminho
   // continua sendo o Termo de Retificação, que preserva a original. Aqui é o
   // caso em que a peça simplesmente não deveria existir.
   const [pecaParaExcluir, setPecaParaExcluir] = useState<PasPeca | null>(null);
   const [isExcluindoPeca, setIsExcluindoPeca] = useState(false);
-  const podeExcluirPeca = isGestor || isAutuante;
+  // Quem está com o processo encaminhado (responsavelAtualUid) age no lugar
+  // do autuante — inconsistente deixar essa pessoa emitir despacho e
+  // registrar defesa, mas não conseguir corrigir uma peça lavrada errada
+  // nem usar "Voltar etapa" (ver podeEncaminhar, mesmo raciocínio).
+  const podeExcluirPeca = isGestor || isAutuante || pas?.responsavelAtualUid === profile?.uid;
   // "Fazer o colega assumir o PAS no meu lugar" é isso: encaminhar já não é
   // trava de permissão nenhuma (ver PasEncaminharDialog — a regra do
   // Firestore já aceita responsavelAtualUid pra agir), só faltava o próprio
@@ -805,7 +890,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
         setIsEmitindoJulgamento(true);
         try {
-          const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
+          const anexoUrl = await uploadAnexoExterno(pas, anexoExternoFile);
           await adicionarPecas([
             { tipo: 'termo_juntada', titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: `Junto aos autos o Julgamento em 1ª Instância proferido nesta data, para os devidos fins.`, criadoEm: dataAto },
             { tipo: 'julgamento_primeira_instancia', titulo: PAS_PECA_TITULOS.julgamento_primeira_instancia, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto },
@@ -849,7 +934,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
           const prazoRecursalMultaData = baseLegal.recurso.diasMulta
             ? format(addPrazo(dataDoAto, baseLegal.recurso.diasMulta, baseLegal.contagemPrazo), "dd/MM/yyyy")
             : undefined;
-          const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
+          const anexoUrl = await uploadAnexoExterno(pas, anexoExternoFile);
           await adicionarPecas([
             { tipo: 'despacho_encaminhamento_tip', titulo: PAS_PECA_TITULOS.despacho_encaminhamento_tip, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto },
             { tipo: 'termo_imposicao_penalidade', titulo: PAS_PECA_TITULOS.termo_imposicao_penalidade, conteudoHtml: textoTermoImposicaoPenalidade({ numeroAI: pas.numeroProcesso, prazoRecursalData: prazoRecursalFormatada, prazoRecursalMultaData, municipioId: profile?.municipioId }), criadoEm: dataAto },
@@ -931,7 +1016,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       onSalvarRascunho: salvarRascunhoPeca,
       onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
         try {
-          const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
+          const anexoUrl = await uploadAnexoExterno(pas, anexoExternoFile);
           await adicionarPeca({
             tipo: 'termo_retificacao',
             titulo: `${PAS_PECA_TITULOS.termo_retificacao} — Peça nº ${pecaOriginal.numero}`,
@@ -965,7 +1050,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       onSalvarRascunho: salvarRascunhoPeca,
       onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
         try {
-          const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
+          const anexoUrl = await uploadAnexoExterno(pas, anexoExternoFile);
           await adicionarPeca({ tipo: 'despacho_inicial', titulo: PAS_PECA_TITULOS.despacho_inicial, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto });
           await atualizarPas(pas.id, { fase: 'instrucao' });
           await limparRascunhoPeca(chaveRascunho);
@@ -994,7 +1079,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       onSalvarRascunho: salvarRascunhoPeca,
       onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
         try {
-          const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
+          const anexoUrl = await uploadAnexoExterno(pas, anexoExternoFile);
           await adicionarPeca({ tipo: 'despacho_instrucao', titulo: PAS_PECA_TITULOS.despacho_instrucao, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto });
           const lembreteId = await criarLembretePrazo(saveInspecao, {
             titulo: `Prazo de defesa (PAS) vence em breve — ${pas.estabelecimento.fantasia}`,
@@ -1046,7 +1131,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       const itensProva: { tipo: 'termo_juntada'; titulo: string; conteudoHtml: string; anexoUrl: string }[] =
         provasRascunho.map((p) => ({ tipo: 'termo_juntada' as const, titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: textoTermoJuntadaProva(p.nome), anexoUrl: p.url }));
       for (const file of provasSelecionadas) {
-        const url = await uploadArquivoPas(pas.id, file);
+        const url = await uploadArquivoPas(pas, file);
         itensProva.push({ tipo: 'termo_juntada' as const, titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: textoTermoJuntadaProva(file.name), anexoUrl: url });
       }
       // Modo "sistema": fatos já É o HTML de verdade (documento rico, com
@@ -1072,7 +1157,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         ...(modoRelatorio === 'sistema' ? { chaveRascunho, onSalvarRascunho: salvarRascunhoPeca } : {}),
         onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
           try {
-            const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
+            const anexoUrl = await uploadAnexoExterno(pas, anexoExternoFile);
             await adicionarPecas([
               ...itensProva.map((p) => ({ ...p, criadoEm: dataAto })),
               // Modo "anexo": SÓ o termo de juntada — ele já é a peça
@@ -1116,7 +1201,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
     try {
       const novasProvas: { url: string; nome: string }[] = [];
       for (const file of provasSelecionadas) {
-        const url = await uploadArquivoPas(pas.id, file);
+        const url = await uploadArquivoPas(pas, file);
         novasProvas.push({ url, nome: file.name });
       }
       const todasProvas = [...provasRascunho, ...novasProvas];
@@ -1138,7 +1223,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
     }
     setIsRegistrandoDefesa(true);
     try {
-      const url = await uploadArquivoPas(pas.id, defesaArquivo);
+      const url = await uploadArquivoPas(pas, defesaArquivo);
       // Meio-dia local (não meia-noite UTC) — "2026-09-06" interpretado como
       // UTC vira 05/09 à noite no horário do Brasil, o que podia classificar
       // errado uma defesa recebida bem na borda do prazo.
@@ -1199,7 +1284,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       onSalvarRascunho: salvarRascunhoPeca,
       onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
         try {
-          const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
+          const anexoUrl = await uploadAnexoExterno(pas, anexoExternoFile);
           await adicionarPeca({ tipo: 'termo_informacao', titulo: PAS_PECA_TITULOS.termo_informacao, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto });
           await cancelarLembretePrazo(deleteInspecao, pas.agendaLembreteId);
           await limparRascunhoPeca(chaveRascunho);
@@ -1224,7 +1309,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       onSalvarRascunho: salvarRascunhoPeca,
       onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
         try {
-          const anexoUrl = await uploadAnexoExterno(pas.id, anexoExternoFile);
+          const anexoUrl = await uploadAnexoExterno(pas, anexoExternoFile);
           await adicionarPeca({ tipo: 'despacho_encerramento_instrucao', titulo: PAS_PECA_TITULOS.despacho_encerramento_instrucao, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto });
           await atualizarPas(pas.id, { fase: 'aguardando_julgamento' });
           await limparRascunhoPeca(chaveRascunho);
@@ -1252,18 +1337,24 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   return (
     <div className="min-h-screen bg-[#F5F2EA]">
       <DocfacilTopbar
-        title={`PAS — AI nº ${pas.numeroProcesso}`}
+        destaque
+        title={`PAS nº ${pas.numeroProcesso}`}
         subtitle={pas.estabelecimento.fantasia}
         backHref="/pas"
         actions={
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            {/* Era um ícone solto, sem borda, quase invisível contra o fundo
+                claro da barra — quem quisesse corrigir o número do processo
+                (erro de digitação, número do AI mudou) não achava onde
+                clicar. Ganha borda, rótulo e cor de destaque, igual a um
+                botão de verdade. */}
             <button
               type="button"
               onClick={() => { setNovoNumero(pas.numeroProcesso); setIsEditarNumeroOpen(true); }}
               title="Editar número do processo"
-              className="h-8 w-8 rounded-md flex items-center justify-center text-[#6B6659] hover:text-[#0E4A44] hover:bg-[#E4EEEC] transition-colors"
+              className="h-9 px-3 rounded-md flex items-center gap-1.5 border border-[#0E4A44]/30 bg-white text-[#0E4A44] hover:bg-[#0E4A44] hover:text-white hover:border-[#0E4A44] transition-colors text-xs font-semibold shrink-0"
             >
-              <Pencil className="h-4 w-4" />
+              <Pencil className="h-3.5 w-3.5" /> Editar nº
             </button>
             {(isGestor || isAutuante) && (
               <AlertDialog>
@@ -1271,7 +1362,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                   <button
                     type="button"
                     title="Excluir processo"
-                    className="h-8 w-8 rounded-md flex items-center justify-center text-[#A39D8C] hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                    className="h-9 w-9 rounded-md flex items-center justify-center border border-[#E4DFD1] bg-white text-[#A39D8C] hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-colors shrink-0"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -1325,12 +1416,21 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             <div key={step.key} className="flex items-center flex-1 last:flex-none">
               <div className="flex flex-col items-center gap-1.5 shrink-0">
                 <span className={cn(
-                  "h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-black shrink-0",
-                  i < roadmapIndexAtual ? "bg-[#E3F1EA] text-[#1F7A5C]" : i === roadmapIndexAtual ? "bg-[#0E4A44] text-white" : "bg-[#F1EEE4] text-[#A39D8C]"
+                  "rounded-full flex items-center justify-center font-black shrink-0 transition-all",
+                  i === roadmapIndexAtual ? "h-9 w-9 text-sm" : "h-7 w-7 text-[11px]",
+                  i < roadmapIndexAtual ? "bg-[#E3F1EA] text-[#1F7A5C]" : i === roadmapIndexAtual ? "bg-[#0E4A44] text-white shadow-md shadow-[#0E4A44]/30" : "bg-[#F1EEE4] text-[#A39D8C]"
                 )}>
                   {i < roadmapIndexAtual ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
                 </span>
-                <span className={cn("text-[10px] font-bold uppercase whitespace-nowrap", i === roadmapIndexAtual ? "text-[#0E4A44]" : "text-[#A39D8C]")}>{step.label}</span>
+                {/* A etapa atual precisa saltar aos olhos entre as quatro —
+                    antes todas tinham o mesmo tamanho, só mudando a cor do
+                    texto, e "onde estamos agora" exigia ler uma por uma. */}
+                <span className={cn(
+                  "uppercase whitespace-nowrap",
+                  i === roadmapIndexAtual
+                    ? "text-[12px] font-black text-[#0E4A44] tracking-wide"
+                    : "text-[10px] font-bold text-[#A39D8C]"
+                )}>{step.label}</span>
               </div>
               {i < ROADMAP_STEPS.length - 1 && (
                 <div className={cn("h-0.5 flex-1 mx-2 mb-4", i < roadmapIndexAtual ? "bg-[#1F7A5C]" : "bg-[#E4DFD1]")} />
@@ -1792,6 +1892,24 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
               </DropdownMenu>
             </div>
           </div>
+          {autoInfracao && !pecas.some(p => p.tipo === 'documento_origem') && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-xs text-amber-800">
+                O Auto de Infração{termoVinculadoIntimacao ? ' e o termo vinculado' : ''} que deram origem a este PAS ainda não estão anexados nos autos.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={handleAnexarDocumentosOrigem}
+                disabled={isAnexandoOrigem}
+                className="h-8 rounded-lg text-xs shrink-0 border-amber-300 bg-white text-amber-800 hover:bg-amber-100"
+              >
+                {isAnexandoOrigem ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Paperclip className="h-3.5 w-3.5 mr-1.5" />}
+                Anexar documento de origem
+              </Button>
+            </div>
+          )}
           {pecas.length === 0 ? (
             <p className="text-sm text-[#A39D8C] px-1">Nenhuma peça ainda.</p>
           ) : (
@@ -1851,23 +1969,41 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                         conferir uma folha não pode exigir baixar o processo
                         inteiro. O acordeão continua abrindo o texto cru; este
                         botão mostra o DOCUMENTO, como ele foi lavrado. */}
-                    <button
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPecaEmLeitura(peca); }}
-                      title="Visualizar esta peça como documento"
-                      className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-[#6B6659] hover:bg-[#F5F2EA] hover:border-[#0E4A44]/30 transition-colors shrink-0"
-                    >
-                      <Eye className="h-5 w-5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleBaixarPeca(peca); }}
-                      disabled={isBaixandoPdf}
-                      title="Baixar PDF desta peça"
-                      className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC] hover:border-[#0E4A44]/40 transition-colors shrink-0 disabled:opacity-50"
-                    >
-                      {isBaixandoPdf && pecasParaBaixar?.length === 1 && pecasParaBaixar[0].id === peca.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <FileDown className="h-5 w-5" />}
-                    </button>
+                    {/* Documento de origem não tem PDF próprio pra visualizar/baixar
+                        aqui dentro — é a autuação original em /intimacoes/{id}, que já
+                        sabe renderizar e gerar o PDF dela (ver origemIntimacaoId,
+                        lib/types.ts). Os dois botões abrem essa mesma tela em vez de
+                        tentar montar um documento que não existe neste lugar. */}
+                    {peca.tipo === 'documento_origem' && peca.origemIntimacaoId ? (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(`/intimacoes/${peca.origemIntimacaoId}`, '_blank'); }}
+                        title="Abrir a autuação original"
+                        className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC] hover:border-[#0E4A44]/40 transition-colors shrink-0"
+                      >
+                        <Eye className="h-5 w-5" />
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPecaEmLeitura(peca); }}
+                          title="Visualizar esta peça como documento"
+                          className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-[#6B6659] hover:bg-[#F5F2EA] hover:border-[#0E4A44]/30 transition-colors shrink-0"
+                        >
+                          <Eye className="h-5 w-5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleBaixarPeca(peca); }}
+                          disabled={isBaixandoPdf}
+                          title="Baixar PDF desta peça"
+                          className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC] hover:border-[#0E4A44]/40 transition-colors shrink-0 disabled:opacity-50"
+                        >
+                          {isBaixandoPdf && pecasParaBaixar?.length === 1 && pecasParaBaixar[0].id === peca.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <FileDown className="h-5 w-5" />}
+                        </button>
+                      </>
+                    )}
                     {podeExcluirPeca && (
                       <button
                         type="button"
@@ -1886,12 +2022,16 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                       <p className="text-xs text-[#A39D8C] pl-9">Retifica a peça nº {peca.refPecaNumero}.</p>
                     )}
                     <div className="flex items-center gap-3 pl-9 pt-1">
-                      {peca.anexoUrl && (
+                      {peca.tipo === 'documento_origem' && peca.origemIntimacaoId ? (
+                        <a href={`/intimacoes/${peca.origemIntimacaoId}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0E4A44] hover:underline">
+                          <Download className="h-3.5 w-3.5" /> Abrir autuação completa
+                        </a>
+                      ) : peca.anexoUrl && (
                         <a href={peca.anexoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0E4A44] hover:underline">
                           <Download className="h-3.5 w-3.5" /> Baixar anexo
                         </a>
                       )}
-                      {!retificadaPor && (
+                      {peca.tipo !== 'documento_origem' && !retificadaPor && (
                         <button
                           type="button"
                           onClick={() => handleRetificarPeca(peca)}
@@ -1984,9 +2124,14 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             <DialogTitle className="font-serif">Editar número do processo</DialogTitle>
             <DialogDescription>Não muda o número do Auto de Infração original — só a referência deste PAS.</DialogDescription>
           </DialogHeader>
-          <div className="py-2">
+          <div className="py-2 space-y-2">
             <Label className="text-xs font-semibold uppercase text-[#6B6659]">Número</Label>
-            <Input value={novoNumero} onChange={(e) => setNovoNumero(e.target.value)} className="h-10 rounded-md border-[#E4DFD1] mt-1.5" />
+            <Input value={novoNumero} onChange={(e) => setNovoNumero(e.target.value)} className="h-10 rounded-md border-[#E4DFD1]" />
+            {novoNumero.trim() && novoNumero.trim() !== pas.numeroProcesso && pecasComNumeroAtual > 0 && (
+              <p className="text-[11px] text-amber-700 bg-amber-50 rounded-md px-2.5 py-2 leading-snug">
+                O número atual ({pas.numeroProcesso}) aparece no texto de {pecasComNumeroAtual} {pecasComNumeroAtual === 1 ? 'peça já lavrada' : 'peças já lavradas'} — ao salvar, essas peças também são corrigidas.
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditarNumeroOpen(false)} className="rounded-md">Cancelar</Button>
@@ -1997,7 +2142,17 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isDocComplementarOpen} onOpenChange={setIsDocComplementarOpen}>
+      <Dialog
+        open={isDocComplementarOpen}
+        onOpenChange={(open) => {
+          setIsDocComplementarOpen(open);
+          // Sem isso, cancelar e reabrir mantinha a descrição e o arquivo
+          // escolhidos antes — quem tivesse escolhido o arquivo errado e
+          // cancelado via de novo o mesmo arquivo errado ali, sem perceber,
+          // sem nenhum jeito de "limpar" a seleção.
+          if (!open) { setDocComplementarDescricao(""); setDocComplementarArquivo(null); }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="font-serif">Adicionar documento</DialogTitle>
@@ -2011,9 +2166,23 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase text-[#6B6659]">Arquivo</Label>
               <input ref={docComplementarArquivoRef} type="file" className="hidden" onChange={(e) => setDocComplementarArquivo(e.target.files?.[0] || null)} />
-              <Button type="button" variant="outline" onClick={() => docComplementarArquivoRef.current?.click()} className="w-full h-10 rounded-md justify-start gap-2 text-[#6B6659]">
-                <Paperclip className="h-4 w-4" /> {docComplementarArquivo ? docComplementarArquivo.name : "Escolher arquivo"}
-              </Button>
+              {docComplementarArquivo ? (
+                // Nome + tamanho + um jeito de tirar sem precisar escolher
+                // outro arquivo por cima — antes, a única forma de "desistir"
+                // de um arquivo era substituí-lo por outro.
+                <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-[#E4DFD1] bg-white">
+                  <Paperclip className="h-4 w-4 text-[#6B6659] shrink-0" />
+                  <span className="flex-1 text-sm text-[#262420] truncate">{docComplementarArquivo.name}</span>
+                  <span className="text-[11px] text-[#A39D8C] shrink-0 tabular-nums">{Math.round(docComplementarArquivo.size / 1024)} KB</span>
+                  <button type="button" onClick={() => setDocComplementarArquivo(null)} title="Remover arquivo" className="shrink-0">
+                    <X className="h-4 w-4 text-[#A39D8C] hover:text-rose-500" />
+                  </button>
+                </div>
+              ) : (
+                <Button type="button" variant="outline" onClick={() => docComplementarArquivoRef.current?.click()} className="w-full h-10 rounded-md justify-start gap-2 text-[#6B6659]">
+                  <Paperclip className="h-4 w-4" /> Escolher arquivo
+                </Button>
+              )}
             </div>
           </div>
           <DialogFooter>
