@@ -618,6 +618,10 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   // mais abaixo (relatório + defesa/informação já completos).
   const [julgamentoFundamentacao, setJulgamentoFundamentacao] = useState("");
   const [julgamentoDecisao, setJulgamentoDecisao] = useState("");
+  // Mesma ideia do modoRelatorio: ou o gestor redige a decisão aqui dentro,
+  // ou ela já foi feita fora do sistema e só entra como anexo — não as
+  // duas ao mesmo tempo.
+  const [modoJulgamento, setModoJulgamento] = useState<'sistema' | 'anexo'>('sistema');
   const [isEmitindoJulgamento, setIsEmitindoJulgamento] = useState(false);
   const [isEncaminhandoTip, setIsEncaminhandoTip] = useState(false);
   const [isArquivando, setIsArquivando] = useState(false);
@@ -906,7 +910,12 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   };
 
   const handleEmitirJulgamento = () => {
-    if (!julgamentoFundamentacao.trim()) {
+    // Modo "anexo": a decisão já foi redigida fora do sistema (documento
+    // pronto) — mesma lógica do Relatório de Instrução (modoRelatorio).
+    // Sem essa saída, o gestor era obrigado a digitar uma fundamentação
+    // aqui só pra destravar a revisão, mesmo já tendo o PDF pronto pra
+    // anexar lá dentro.
+    if (modoJulgamento === 'sistema' && !julgamentoFundamentacao.trim()) {
       toast({ variant: "destructive", title: "Escreva a fundamentação antes de emitir" });
       return;
     }
@@ -914,28 +923,41 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       temDefesa: !!pas.defesa,
       tempestividade: pas.defesa?.tempestividade,
     });
-    const julgamentoHtml = [
-      `<p><strong>1. ADMISSIBILIDADE</strong></p><p>${admissibilidade}</p>`,
-      `<p><strong>2. FUNDAMENTAÇÃO</strong></p><p>${julgamentoFundamentacao.replace(/\n/g, '<br>')}</p>`,
-      `<p><strong>3. DECISÃO</strong></p><p>${(julgamentoDecisao || 'A definir.').replace(/\n/g, '<br>')}</p>`,
-    ].join('');
+    const julgamentoHtml = modoJulgamento === 'anexo'
+      ? 'Junto aos presentes autos o Julgamento em 1ª Instância, anexo a este termo, para os devidos fins.'
+      : [
+          `<p><strong>1. ADMISSIBILIDADE</strong></p><p>${admissibilidade}</p>`,
+          `<p><strong>2. FUNDAMENTAÇÃO</strong></p><p>${julgamentoFundamentacao.replace(/\n/g, '<br>')}</p>`,
+          `<p><strong>3. DECISÃO</strong></p><p>${(julgamentoDecisao || 'A definir.').replace(/\n/g, '<br>')}</p>`,
+        ].join('');
+    const tituloPeca = modoJulgamento === 'anexo'
+      ? `${PAS_PECA_TITULOS.termo_juntada} — ${PAS_PECA_TITULOS.julgamento_primeira_instancia}`
+      : PAS_PECA_TITULOS.julgamento_primeira_instancia;
     const chaveRascunho = 'julgamento_primeira_instancia';
     setRevisao({
-      titulo: PAS_PECA_TITULOS.julgamento_primeira_instancia,
-      conteudoInicial: pas.rascunhosPecas?.[chaveRascunho]?.conteudoHtml || julgamentoHtml,
-      chaveRascunho,
-      onSalvarRascunho: salvarRascunhoPeca,
+      titulo: tituloPeca,
+      conteudoInicial: modoJulgamento === 'anexo' ? julgamentoHtml : (pas.rascunhosPecas?.[chaveRascunho]?.conteudoHtml || julgamentoHtml),
+      // Rascunho só faz sentido no modo "sistema" — no modo "anexo" o
+      // documento já está pronto, não há redação em andamento pra guardar.
+      ...(modoJulgamento === 'sistema' ? { chaveRascunho, onSalvarRascunho: salvarRascunhoPeca } : {}),
       onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
         setIsEmitindoJulgamento(true);
         try {
           const anexoUrl = await uploadAnexoExterno(pas, anexoExternoFile);
           await adicionarPecas([
-            { tipo: 'termo_juntada', titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: `Junto aos autos o Julgamento em 1ª Instância proferido nesta data, para os devidos fins.`, criadoEm: dataAto },
-            { tipo: 'julgamento_primeira_instancia', titulo: PAS_PECA_TITULOS.julgamento_primeira_instancia, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto },
+            // Modo "anexo": SÓ o termo de juntada — ele já é a peça
+            // "julgamento_primeira_instancia" (destrava o TIP a seguir),
+            // sem uma segunda folha de assinatura vazia atrás. Modo
+            // "sistema": regra de ouro do manual, o Termo de Juntada vem
+            // sempre antes do documento a que se refere.
+            ...(modoJulgamento === 'sistema'
+              ? [{ tipo: 'termo_juntada' as const, titulo: PAS_PECA_TITULOS.termo_juntada, conteudoHtml: `Junto aos autos o Julgamento em 1ª Instância proferido nesta data, para os devidos fins.`, criadoEm: dataAto }]
+              : []),
+            { tipo: 'julgamento_primeira_instancia', titulo: tituloPeca, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto },
           ]);
           await atualizarPas(pas.id, { fase: 'julgamento' });
           await limparRascunhoPeca(chaveRascunho);
-          setJulgamentoFundamentacao(""); setJulgamentoDecisao("");
+          setJulgamentoFundamentacao(""); setJulgamentoDecisao(""); setModoJulgamento('sistema');
           toast({ title: "Julgamento emitido" });
           await limparEncaminhamento();
           setRevisao(null);
@@ -1848,34 +1870,64 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                   {!podeEmitirJulgamento && (
                     <p className="text-xs text-[#A39D8C]">Pode redigir desde já — a emissão só libera depois de relatório técnico e defesa (ou termo de informação) prontos.</p>
                   )}
-                  <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-violet-900">Rascunho da decisão com IA</p>
-                      <p className="text-[11px] text-violet-800/80 leading-snug mt-0.5">
-                        Propõe fundamentação e dispositivo a partir dos autos. <strong>O julgamento é ato seu</strong> — a IA não arbitra valor de multa e deixa entre colchetes o que exige seu juízo.
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={isGerandoIa}
-                      onClick={() => handleGerarComIa('julgamento')}
-                      className="shrink-0 h-9 gap-1.5 border-violet-300 bg-white text-violet-700 hover:bg-violet-100 text-xs font-bold"
+
+                  {/* Mesma escolha do Relatório de Instrução: ou redige aqui
+                      dentro, ou a decisão já foi proferida fora do sistema e
+                      só entra como anexo — sem precisar digitar nada nos
+                      campos abaixo só pra passar da validação. */}
+                  <div className="inline-flex items-center gap-1 bg-[#F5F2EA] rounded-lg p-1">
+                    <button
+                      type="button"
+                      onClick={() => setModoJulgamento('sistema')}
+                      className={cn("px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-colors", modoJulgamento === 'sistema' ? "bg-white text-[#0E4A44] shadow-sm" : "text-[#A39D8C] hover:text-[#6B6659]")}
                     >
-                      {isGerandoIa ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                      Gerar rascunho
-                    </Button>
+                      Redigir no sistema
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModoJulgamento('anexo')}
+                      className={cn("px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-colors", modoJulgamento === 'anexo' ? "bg-white text-[#0E4A44] shadow-sm" : "text-[#A39D8C] hover:text-[#6B6659]")}
+                    >
+                      Já pronto (anexar PDF)
+                    </button>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-[#6B6659]">Fundamentação</Label>
-                    <Textarea value={julgamentoFundamentacao} onChange={(e) => setJulgamentoFundamentacao(e.target.value)} rows={5} placeholder="Análise dos fatos, das provas e do enquadramento legal..." className="rounded-md border-[#E4DFD1] resize-none" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-[#6B6659]">Decisão</Label>
-                    <Textarea value={julgamentoDecisao} onChange={(e) => setJulgamentoDecisao(e.target.value)} rows={3} placeholder="Procedência/improcedência e sanção aplicada..." className="rounded-md border-[#E4DFD1] resize-none" />
-                  </div>
+
+                  {modoJulgamento === 'anexo' ? (
+                    <p className="text-xs text-[#6B6659] bg-[#F5F2EA] rounded-md px-3 py-2.5">
+                      O julgamento pronto é anexado na tela seguinte, junto com a assinatura — não precisa escrever nada aqui.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-violet-900">Rascunho da decisão com IA</p>
+                          <p className="text-[11px] text-violet-800/80 leading-snug mt-0.5">
+                            Propõe fundamentação e dispositivo a partir dos autos. <strong>O julgamento é ato seu</strong> — a IA não arbitra valor de multa e deixa entre colchetes o que exige seu juízo.
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isGerandoIa}
+                          onClick={() => handleGerarComIa('julgamento')}
+                          className="shrink-0 h-9 gap-1.5 border-violet-300 bg-white text-violet-700 hover:bg-violet-100 text-xs font-bold"
+                        >
+                          {isGerandoIa ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                          Gerar rascunho
+                        </Button>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-[#6B6659]">Fundamentação</Label>
+                        <Textarea value={julgamentoFundamentacao} onChange={(e) => setJulgamentoFundamentacao(e.target.value)} rows={5} placeholder="Análise dos fatos, das provas e do enquadramento legal..." className="rounded-md border-[#E4DFD1] resize-none" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-[#6B6659]">Decisão</Label>
+                        <Textarea value={julgamentoDecisao} onChange={(e) => setJulgamentoDecisao(e.target.value)} rows={3} placeholder="Procedência/improcedência e sanção aplicada..." className="rounded-md border-[#E4DFD1] resize-none" />
+                      </div>
+                    </>
+                  )}
                   <Button onClick={handleEmitirJulgamento} disabled={!podeEmitirJulgamento || isEmitindoJulgamento} className="bg-[#0E4A44] hover:bg-[#0B3A35]">
-                    {isEmitindoJulgamento ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Emitir Julgamento
+                    {isEmitindoJulgamento ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} {modoJulgamento === 'anexo' ? 'Continuar para assinatura' : 'Emitir Julgamento'}
                   </Button>
                 </div>
               )}
