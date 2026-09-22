@@ -1786,7 +1786,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-[#262420]">Defesa do Autuado</p>
-                    <PasDica chave="defesa" />
+                    <PasDica chave="defesa" municipioId={profile?.municipioId} />
                   </div>
                   {!temDefesaOuInformacao && (
                     !pas.prazoDefesaData ? (
@@ -1892,7 +1892,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <p className="text-sm font-medium text-[#262420]">Termo de Imposição de Penalidade (TIP)</p>
-                <PasDica chave="tip" />
+                <PasDica chave="tip" municipioId={profile?.municipioId} />
               </div>
               {!temTip && (
                 temJulgamento && isGestor ? (
@@ -2407,7 +2407,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                   <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Autuado:</td><td className="py-2 uppercase">{pas.estabelecimento.fantasia}</td></tr>
                   {pas.estabelecimento.cnpj && (<tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">CNPJ:</td><td className="py-2">{pas.estabelecimento.cnpj}</td></tr>)}
                   {pas.estabelecimento.endereco && (<tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Endereço:</td><td className="py-2">{pas.estabelecimento.endereco}</td></tr>)}
-                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Auto de Infração de origem:</td><td className="py-2">nº {pas.numeroProcesso}</td></tr>
+                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Auto de Infração de origem:</td><td className="py-2">nº {autoInfracao?.numeroProcesso || pas.numeroProcesso}</td></tr>
                   <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Autuante:</td><td className="py-2 uppercase">{pas.autuanteNome}</td></tr>
                   <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Data de instauração:</td><td className="py-2">{format(new Date(pas.dataCienciaAI), "dd/MM/yyyy")}</td></tr>
                   <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Fase atual:</td><td className="py-2">{PAS_FASE_LABEL[pas.fase]}</td></tr>
@@ -2531,7 +2531,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                   <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Autuado:</td><td className="py-2 uppercase">{pas.estabelecimento.fantasia}</td></tr>
                   {pas.estabelecimento.cnpj && (<tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">CNPJ:</td><td className="py-2">{pas.estabelecimento.cnpj}</td></tr>)}
                   {pas.estabelecimento.endereco && (<tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Endereço:</td><td className="py-2">{pas.estabelecimento.endereco}</td></tr>)}
-                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Auto de Infração de origem:</td><td className="py-2">nº {pas.numeroProcesso}</td></tr>
+                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Auto de Infração de origem:</td><td className="py-2">nº {autoInfracao?.numeroProcesso || pas.numeroProcesso}</td></tr>
                   <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Autuante:</td><td className="py-2 uppercase">{pas.autuanteNome}</td></tr>
                   <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Data de instauração:</td><td className="py-2">{format(new Date(pas.dataCienciaAI), "dd/MM/yyyy")}</td></tr>
                   <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Fase atual:</td><td className="py-2">{PAS_FASE_LABEL[pas.fase]}</td></tr>

@@ -2,12 +2,14 @@
 
 import { Lightbulb } from "lucide-react"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
-import { PAS_DICAS, type PasDicaChave } from "@/lib/pas-dicas"
+import { dicaPas, type PasDicaChave } from "@/lib/pas-dicas"
 
-/** Balão de ajuda contextual — conteúdo fixo extraído do Manual da SESA-PR,
- * exibido ao lado da ação correspondente na trilha do PAS. */
-export function PasDica({ chave }: { chave: PasDicaChave }) {
-  const dica = PAS_DICAS[chave];
+/** Balão de ajuda contextual — conteúdo extraído do Manual da SESA-PR,
+ * exibido ao lado da ação correspondente na trilha do PAS. "defesa" e "tip"
+ * variam por município (prazo, contagem e artigo — ver pas-dicas.ts), por
+ * isso o `municipioId` de quem está vendo a tela. */
+export function PasDica({ chave, municipioId }: { chave: PasDicaChave; municipioId?: string | null }) {
+  const dica = dicaPas(chave, municipioId);
   return (
     <Popover>
       <PopoverTrigger asChild>

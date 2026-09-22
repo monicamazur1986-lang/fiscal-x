@@ -155,7 +155,10 @@ export function CartaoPas({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-serif text-[15px] text-[#262420] shrink-0">AI nº {pas.numeroProcesso}</p>
+            {/* "PAS", não "AI" — pas.numeroProcesso é o número do PROCESSO,
+                editável à parte do Auto de Infração que o originou (ver
+                "Editar nº" em pas/[id]/page.tsx); os dois podem divergir. */}
+            <p className="font-serif text-[15px] text-[#262420] shrink-0">PAS nº {pas.numeroProcesso}</p>
             <Badge variant="outline" className={cn("text-[10px] font-medium h-5 px-2 border-none shrink-0", PAS_FASE_COR[pas.fase])}>
               {PAS_FASE_LABEL[pas.fase]}
             </Badge>
@@ -248,7 +251,7 @@ export function CartaoPas({
                 <AlertDialogHeader>
                   <AlertDialogTitle>Excluir este processo?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    O PAS do AI nº {pas.numeroProcesso} e todas as peças já juntadas aos autos são apagados de vez — não é lixeira, não tem como desfazer. Use "Arquivar" se só quiser tirar da lista.
+                    O PAS nº {pas.numeroProcesso} e todas as peças já juntadas aos autos são apagados de vez — não é lixeira, não tem como desfazer. Use "Arquivar" se só quiser tirar da lista.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

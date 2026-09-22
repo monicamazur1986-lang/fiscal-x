@@ -1,10 +1,17 @@
+import { baseLegalDoMunicipio, porExtensoComUnidade } from '@/lib/base-legal-municipal';
+
 /**
  * Conteúdo dos balões de ajuda da trilha do PAS — trechos/orientações do
  * Manual de Apoio Teórico-Prático da SESA-PR (Manual 012/2023), condensados
  * pra aparecer no contexto certo de cada ação. Conteúdo estático (sem IA,
- * sem busca) porque é sempre o mesmo texto legal, independente do processo.
+ * sem busca) porque é sempre o mesmo texto legal, independente do processo —
+ * EXCETO defesa/tip (abaixo), cujo prazo e citação variam por município (ver
+ * base-legal-municipal.ts): antes essas duas diziam sempre "dias úteis" e
+ * citavam só a Lei Estadual, mesmo num município com código sanitário
+ * próprio contando em dias corridos por outro artigo — a dica cita a lei
+ * errada e a contagem errada bem no meio do processo real.
  */
-export const PAS_DICAS = {
+export const PAS_DICAS_ESTATICAS = {
   despachoInstrucao: {
     titulo: 'O que o despacho de instrução verifica',
     texto:
@@ -25,11 +32,6 @@ export const PAS_DICAS = {
     texto:
       'Um Termo de Juntada é sempre inserido nos autos ANTES do documento a que se refere (primeiro o termo, depois o relatório/prova/defesa). O sistema já cuida dessa ordem automaticamente sempre que você anexa algo.',
   },
-  defesa: {
-    titulo: 'Tempestiva ou intempestiva?',
-    texto:
-      'O prazo de defesa é de 15 dias úteis contados da ciência do Auto de Infração (Art. 69, Lei Estadual nº 13.331/2001, c/c Art. 88, §2º, da Lei Estadual nº 20.656/2021 — é essa segunda lei que transforma a contagem em dias úteis). O sistema classifica automaticamente comparando a data de recebimento da defesa com esse prazo — mas mesmo uma defesa intempestiva deve ser juntada aos autos; quem decide se ela ainda pode ser considerada é a autoridade julgadora, não quem recebe o documento.',
-  },
   encerramentoInstrucao: {
     titulo: 'Antes de encaminhar para julgamento',
     texto:
@@ -38,12 +40,7 @@ export const PAS_DICAS = {
   julgamento: {
     titulo: 'Fundamentação obrigatória, mesmo à revelia',
     texto:
-      'O julgamento sempre exige avaliar a admissibilidade da defesa (tempestiva, intempestiva ou ausente/à revelia) e apresentar fundamentação de fato e de direito — mesmo quando o autuado não se manifestou. Decisão sem motivação suficiente é nula (Art. 50 da Lei Federal nº 9.784/99 c/c Art. 67 da Lei Estadual nº 20.656/2021). Você pode ir escrevendo a fundamentação a qualquer momento; só a emissão de verdade exige que o relatório técnico e a defesa (ou o Termo de Informação) já estejam completos.',
-  },
-  tip: {
-    titulo: 'TIP: ciência da decisão e prazo recursal',
-    texto:
-      'O Termo de Imposição de Penalidade é o instrumento que dá ciência ao autuado da decisão proferida — é a partir dele que corre o prazo de recurso, de 10 (dez) dias úteis (Art. 73 da Lei Estadual nº 13.331/2001), diferente dos 15 dias úteis da defesa inicial (Art. 69 da mesma lei).',
+      'O julgamento sempre exige avaliar a admissibilidade da defesa (tempestiva, intempestiva ou ausente/à revelia) e apresentar fundamentação de fato e de direito — mesmo quando o autuado não se manifestou. Decisão sem motivação suficiente é nula (Art. 50 da Lei Federal nº 9.784/99). Você pode ir escrevendo a fundamentação a qualquer momento; só a emissão de verdade exige que o relatório técnico e a defesa (ou o Termo de Informação) já estejam completos.',
   },
   retificacao: {
     titulo: 'Corrigir sem apagar',
@@ -52,4 +49,38 @@ export const PAS_DICAS = {
   },
 } as const;
 
-export type PasDicaChave = keyof typeof PAS_DICAS;
+/** defesa/tip: prazo, contagem (útil/corrido) e artigo mudam por município
+ * (ver base-legal-municipal.ts) — por isso são calculadas, não um texto
+ * fixo como as demais acima. */
+function dicaDefesa(municipioId?: string | null) {
+  const base = baseLegalDoMunicipio(municipioId);
+  const prazo = porExtensoComUnidade(base.defesa.dias, base.contagemPrazo);
+  return {
+    titulo: 'Tempestiva ou intempestiva?',
+    texto:
+      `O prazo de defesa é de ${prazo} contados da ciência do Auto de Infração, nos termos do ${base.defesa.citacao}. O sistema classifica automaticamente comparando a data de recebimento da defesa com esse prazo — mas mesmo uma defesa intempestiva deve ser juntada aos autos; quem decide se ela ainda pode ser considerada é a autoridade julgadora, não quem recebe o documento.`,
+  };
+}
+
+function dicaTip(municipioId?: string | null) {
+  const base = baseLegalDoMunicipio(municipioId);
+  const prazoRecursal = base.recurso.diasMulta
+    ? `${porExtensoComUnidade(base.recurso.diasMulta, base.contagemPrazo)} na hipótese específica de aplicação de pena de multa, ou de ${porExtensoComUnidade(base.recurso.dias, base.contagemPrazo)} nos demais casos`
+    : porExtensoComUnidade(base.recurso.dias, base.contagemPrazo);
+  const prazoDefesa = porExtensoComUnidade(base.defesa.dias, base.contagemPrazo);
+  return {
+    titulo: 'TIP: ciência da decisão e prazo recursal',
+    texto:
+      `O Termo de Imposição de Penalidade é o instrumento que dá ciência ao autuado da decisão proferida — é a partir dele que corre o prazo de recurso, de ${prazoRecursal}, nos termos do ${base.recurso.citacao}, diferente dos ${prazoDefesa} da defesa inicial (${base.defesa.citacao}).`,
+  };
+}
+
+export type PasDicaChave = keyof typeof PAS_DICAS_ESTATICAS | 'defesa' | 'tip';
+
+/** Ponto único de leitura — resolve a estática ou calcula a que depende do
+ * município, sem quem usa (PasDica) precisar saber qual é qual. */
+export function dicaPas(chave: PasDicaChave, municipioId?: string | null): { titulo: string; texto: string } {
+  if (chave === 'defesa') return dicaDefesa(municipioId);
+  if (chave === 'tip') return dicaTip(municipioId);
+  return PAS_DICAS_ESTATICAS[chave];
+}
