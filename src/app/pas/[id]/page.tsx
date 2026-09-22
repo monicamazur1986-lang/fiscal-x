@@ -2124,23 +2124,24 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                       </div>
                       <p className="text-[11px] text-[#A39D8C]">{peca.criadoPorNome} — {format(new Date(peca.criadoEm), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
                     </div>
-                    {/* Visualizar, baixar e excluir na própria linha da peça:
-                        conferir uma folha não pode exigir baixar o processo
-                        inteiro. O acordeão continua abrindo o texto cru; este
-                        botão mostra o DOCUMENTO, como ele foi lavrado.
-                        Documento de origem e a peça "já pronto (anexar PDF)"
-                        são exceção: o "texto" da peça é só uma legenda genérica
-                        — quem quer ver o documento quer o ANEXO ORIGINAL, não
-                        a legenda com timbre/assinatura do PAS por cima dele.
-                        Os dois botões abrem o anexo (o PDF de verdade) direto,
-                        sem o embrulho genérico de peça (ver ehPecaSoLegendaDeAnexo). */}
-                    {(peca.tipo === 'documento_origem' || ehPecaSoLegendaDeAnexo(peca)) && peca.anexoUrl ? (
+                    {/* Visualizar e baixar abrem o ANEXO direto sempre que a
+                        peça tiver um — é o documento de verdade (termo de
+                        juntada de prova, documento complementar, defesa,
+                        documento de origem, relatório/julgamento "já
+                        pronto"...); o texto da peça (legenda, ato de
+                        juntada) já está no acordeão abaixo, e o PDF
+                        consolidado do processo continua trazendo os dois
+                        juntos. Só quando NÃO há anexo (peça é só texto —
+                        despacho, termo redigido no sistema) é que
+                        "visualizar" faz sentido mostrar o documento com
+                        timbre/assinatura do PAS. */}
+                    {peca.anexoUrl ? (
                       <a
                         href={peca.anexoUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        title="Abrir a autuação original"
+                        title="Abrir o documento anexado"
                         className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC] hover:border-[#0E4A44]/40 transition-colors shrink-0"
                       >
                         <Eye className="h-5 w-5" />
