@@ -111,6 +111,22 @@ async function comoAnexoPas(file: File): Promise<File | Blob> {
   }
 }
 
+/** Nome de arquivo digital raramente é um bom nome pro documento nos autos —
+ * vem com sufixo de data/hora do celular/scanner (ex.: "..._260921_153309.pdf")
+ * e sublinhados em vez de espaço. É só um PONTO DE PARTIDA editável: quem
+ * anexa uma prova sempre confirma/digita o nome de verdade antes dele entrar
+ * no texto do relatório (ver handleSalvarRelatorio) — o arquivo em si
+ * continua o mesmo, só o nome exibido nos autos deixa de ser esse. */
+function sugerirNomeDocumento(nomeArquivo: string): string {
+  const semExtensao = nomeArquivo.replace(/\.[^.\s]+$/, '');
+  const limpo = semExtensao
+    .replace(/[_-]?\d{6}[_-]\d{6}(_compressed)?$/i, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return limpo || nomeArquivo;
+}
+
 async function uploadArquivoPas(pas: { id: string; municipioId: string }, file: File): Promise<string> {
   const paraEnviar = await comoAnexoPas(file);
   try {
@@ -288,7 +304,14 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   // pra passar da validação de conteúdo).
   const [modoRelatorio, setModoRelatorio] = useState<'sistema' | 'anexo'>('sistema');
   const provasInputRef = useRef<HTMLInputElement>(null);
-  const [provasSelecionadas, setProvasSelecionadas] = useState<File[]>([]);
+  // Nome digitado pela autoridade, não o nome bruto do arquivo (ver
+  // sugerirNomeDocumento acima e provaParaNomear abaixo) — é o que entra no
+  // texto do relatório, nos autos.
+  const [provasSelecionadas, setProvasSelecionadas] = useState<{ file: File; nome: string }[]>([]);
+  // Arquivo recém-escolhido, ainda sem nome confirmado — abre o diálogo de
+  // nomear antes de entrar na lista (ver input de "Anexar arquivo" abaixo).
+  const [provaParaNomear, setProvaParaNomear] = useState<File | null>(null);
+  const [nomeProvaParaNomear, setNomeProvaParaNomear] = useState("");
   // RASCUNHO DO RELATÓRIO. Diferente dos despachos (só existem depois de
   // abrir a revisão — ver salvarRascunhoPeca mais abaixo), o relatório é
   // digitado num campo livre ANTES da revisão. "Edita no computador, assina
@@ -1133,9 +1156,9 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       // quando o rascunho foi salvo, reenviar de novo duplicaria o arquivo.
       const anexosAdicionais: { url: string; nome: string }[] =
         provasRascunho.map((p) => ({ url: p.url, nome: p.nome }));
-      for (const file of provasSelecionadas) {
-        const url = await uploadArquivoPas(pas, file);
-        anexosAdicionais.push({ url, nome: file.name });
+      for (const prova of provasSelecionadas) {
+        const url = await uploadArquivoPas(pas, prova.file);
+        anexosAdicionais.push({ url, nome: prova.nome });
       }
       // Modo "sistema": fatos já É o HTML de verdade (documento rico, com
       // foto inserível no meio do texto) — entra direto, sem conversão nem
@@ -1207,9 +1230,9 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
     setIsSalvandoRascunhoRelatorio(true);
     try {
       const novasProvas: { url: string; nome: string }[] = [];
-      for (const file of provasSelecionadas) {
-        const url = await uploadArquivoPas(pas, file);
-        novasProvas.push({ url, nome: file.name });
+      for (const prova of provasSelecionadas) {
+        const url = await uploadArquivoPas(pas, prova.file);
+        novasProvas.push({ url, nome: prova.nome });
       }
       const todasProvas = [...provasRascunho, ...novasProvas];
       await salvarRascunhoPeca('relatorio_instrucao', PAS_PECA_TITULOS.relatorio_instrucao, fatos, todasProvas);
@@ -1690,7 +1713,21 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                           <Label className="text-xs text-[#6B6659]">Provas anexadas</Label>
                           <PasDica chave="provas" />
                         </div>
-                        <input ref={provasInputRef} type="file" multiple className="hidden" onChange={(e) => setProvasSelecionadas(prev => [...prev, ...Array.from(e.target.files || [])])} />
+                        {/* Um arquivo por vez, não `multiple` — cada anexo passa
+                            pelo diálogo de nomear antes de entrar na lista (ver
+                            provaParaNomear abaixo). O nome do arquivo puro (cheio
+                            de sublinhado e data/hora do celular) nunca é o que
+                            aparece nos autos. */}
+                        <input
+                          ref={provasInputRef}
+                          type="file"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) { setProvaParaNomear(file); setNomeProvaParaNomear(sugerirNomeDocumento(file.name)); }
+                            e.target.value = '';
+                          }}
+                        />
                         <div className="flex flex-wrap gap-1.5">
                           {/* Já salvas num rascunho anterior — enviadas ao Storage
                               na hora, então sobrevivem à troca de aparelho.
@@ -1702,9 +1739,9 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                               <button type="button" onClick={() => setProvasRascunho(prev => prev.filter((_, idx) => idx !== i))}><X className="h-3 w-3 text-[#1F7A5C]/60 hover:text-rose-500" /></button>
                             </span>
                           ))}
-                          {provasSelecionadas.map((f, i) => (
+                          {provasSelecionadas.map((p, i) => (
                             <span key={i} className="flex items-center gap-1 bg-[#F5F2EA] rounded px-2 py-1 text-xs text-[#6B6659]">
-                              {f.name}
+                              {p.nome}
                               <button type="button" onClick={() => setProvasSelecionadas(prev => prev.filter((_, idx) => idx !== i))}><X className="h-3 w-3 text-[#A39D8C] hover:text-rose-500" /></button>
                             </span>
                           ))}
@@ -2241,6 +2278,42 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             <Button variant="outline" onClick={() => setIsDocComplementarOpen(false)} className="rounded-md">Cancelar</Button>
             <Button onClick={handleSalvarDocComplementar} disabled={isSalvandoDocComplementar} className="rounded-md bg-[#0E4A44] hover:bg-[#0B3A35]">
               {isSalvandoDocComplementar ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Adicionar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!provaParaNomear} onOpenChange={(open) => { if (!open) { setProvaParaNomear(null); setNomeProvaParaNomear(""); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-serif">Como identificar este documento?</DialogTitle>
+            <DialogDescription>
+              O nome do arquivo ("{provaParaNomear?.name}") não vira o nome do documento nos autos — digite como ele deve ser identificado no texto do relatório.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Label className="text-xs font-semibold uppercase text-[#6B6659]">Nome do documento</Label>
+            <Input
+              autoFocus
+              value={nomeProvaParaNomear}
+              onChange={(e) => setNomeProvaParaNomear(e.target.value)}
+              placeholder="Ex.: Nota fiscal do produto apreendido"
+              className="rounded-md border-[#E4DFD1] mt-1.5"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setProvaParaNomear(null); setNomeProvaParaNomear(""); }} className="rounded-md">Cancelar</Button>
+            <Button
+              disabled={!nomeProvaParaNomear.trim()}
+              onClick={() => {
+                if (!provaParaNomear) return;
+                setProvasSelecionadas(prev => [...prev, { file: provaParaNomear, nome: nomeProvaParaNomear.trim() }]);
+                setProvaParaNomear(null);
+                setNomeProvaParaNomear("");
+              }}
+              className="rounded-md bg-[#0E4A44] hover:bg-[#0B3A35]"
+            >
+              Anexar
             </Button>
           </DialogFooter>
         </DialogContent>
