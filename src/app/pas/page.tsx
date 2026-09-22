@@ -7,6 +7,9 @@ import { Plus, Loader2, ChevronRight, Building2, Archive, Folder, FolderPlus } f
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -15,11 +18,13 @@ import { useFolders } from "@/hooks/use-folders"
 import { useIntimacoes } from "@/hooks/use-intimacoes"
 import { useInspecoes } from "@/hooks/use-inspecoes"
 import { useAuth } from "@/hooks/use-auth"
+import { useAppConfig } from "@/hooks/use-app-config"
 import { useToast } from "@/hooks/use-toast"
 import { cancelarLembretePrazo } from "@/lib/prazo-lembrete"
 import { agruparProcessos, CartaoPas, FiltroPastaPas, SecaoPas, VazioPas } from "@/components/pas/lista-pas"
-import type { Pas } from "@/lib/types"
-import { cn } from "@/lib/utils"
+import { gerarPdfBlobDeIntimacao } from "@/lib/generate-intimacao-pdf"
+import type { Pas, Intimacao } from "@/lib/types"
+import { cn, normalizeId } from "@/lib/utils"
 import municipiosPR from "@/lib/municipios-pr.json"
 
 function PasPageInner() {
@@ -34,10 +39,11 @@ function PasPageInner() {
   // nas regras do Firestore.
   const [selectedMunicipio, setSelectedMunicipio] = useState("");
   const municipioOverride = isRoot ? { municipioIdOverride: selectedMunicipio || undefined } : undefined;
-  const { processos, loading, criarPas, atualizarPas, excluirPas, needsMunicipioSelection } = usePas(municipioOverride);
+  const { processos, loading, criarPas, anexarDocumentosOrigemAoPas, atualizarPas, excluirPas, needsMunicipioSelection } = usePas(municipioOverride);
   const { intimacoes, updateIntimacaoMeta } = useIntimacoes(municipioOverride);
   const { deleteInspecao } = useInspecoes();
   const { folders: pastas, createFolder } = useFolders('pas');
+  const { config } = useAppConfig(municipioOverride);
 
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -132,9 +138,30 @@ function PasPageInner() {
     if (abrirId) setIsPickerOpen(true);
   }, [abrirId]);
 
+  // Termo de Apreensão/Interdição vinculado ao Auto (mesmo ato de
+  // fiscalização, ver documentoOrigemId/autoInfracaoVinculadaId) — quando
+  // existe, pergunta antes de criar o PAS se ele também deve ser anexado
+  // (ver aiParaConfirmarTermo abaixo). Sem termo vinculado, segue direto.
+  const [aiParaConfirmarTermo, setAiParaConfirmarTermo] = useState<{ ai: Intimacao; termoVinculado: Intimacao } | null>(null);
+
   const handleCriarPas = async (autoInfracaoId: string) => {
     const ai = intimacoes.find(i => i.id === autoInfracaoId);
     if (!ai || !profile) return;
+    const termoVinculadoId = ai.documentoOrigemId || ai.autoInfracaoVinculadaId;
+    const termoVinculado = termoVinculadoId ? intimacoes.find(i => String(i.id) === String(termoVinculadoId)) : undefined;
+    if (termoVinculado) {
+      setAiParaConfirmarTermo({ ai, termoVinculado });
+      return;
+    }
+    await criarPasEAnexarOrigem(ai, null);
+  };
+
+  // Cria o PAS e, em seguida, anexa o PDF de verdade do Auto de Infração (e
+  // do termo vinculado, se a autoridade confirmou) — o Auto sempre entra
+  // sozinho, sem perguntar (é o próprio motivo do PAS existir); o termo
+  // vinculado só entra se `termoVinculado` vier preenchido.
+  const criarPasEAnexarOrigem = async (ai: Intimacao, termoVinculado: Intimacao | null) => {
+    if (!profile) return;
     setIsCreating(true);
     try {
       const dataCiencia = ai.dataRecebimento || ai.dataIntimacao;
@@ -161,12 +188,29 @@ function PasPageInner() {
         ...(ai.compartilhadoComNomes?.length ? { compartilhadoComNomes: ai.compartilhadoComNomes } : {}),
       });
       await updateIntimacaoMeta(ai.id, { pasId: id });
-      // NÃO referencia o Auto de Infração/termo vinculado aqui — isso agora
-      // é o passo 1, manual, da fase de Instauração (ver "instauracao" em
-      // pas/[id]/page.tsx, handleAnexarDocumentosOrigem): a autoridade
-      // confirma o que entra nos autos antes de seguir, em vez do sistema
-      // inserir isso sozinho na hora de abrir o PAS.
+      // Anexa o PDF DE VERDADE do Auto de Infração (e do termo, se
+      // confirmado) — não é Termo de Juntada, são os documentos que dão
+      // origem ao PAS. Uma falha aqui não pode impedir o PAS de abrir: o
+      // processo já existe, e o botão "Anexar documento de origem" na tela
+      // do PAS cobre o que faltar.
+      try {
+        const documentosOrigem = [ai, ...(termoVinculado ? [termoVinculado] : [])];
+        const anexos = [];
+        for (const documento of documentosOrigem) {
+          const titulo = documento.id === ai.id
+            ? `Auto de Infração nº ${documento.numeroProcesso}`
+            : `${documento.tipoTermo || 'Termo Vinculado'}${documento.numeroProcesso ? ` nº ${documento.numeroProcesso}` : ''}`;
+          // eslint-disable-next-line no-await-in-loop -- geração de PDF é pesada, uma por vez
+          const blob = await gerarPdfBlobDeIntimacao(documento, config);
+          anexos.push({ id: documento.id, titulo, blob });
+        }
+        await anexarDocumentosOrigemAoPas(id, normalizeId(profile.municipioId!), anexos, []);
+      } catch (e) {
+        console.error('Falha ao anexar o(s) documento(s) de origem ao PAS:', e);
+        toast({ title: "PAS criado", description: "Não foi possível anexar automaticamente o documento de origem — use o botão na tela do processo." });
+      }
       setIsPickerOpen(false);
+      setAiParaConfirmarTermo(null);
       router.push(`/pas/${id}`);
     } catch (e) {
       console.error('Erro ao criar o PAS:', e);
@@ -336,6 +380,33 @@ function PasPageInner() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!aiParaConfirmarTermo} onOpenChange={(aberto) => !aberto && setAiParaConfirmarTermo(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-serif">Anexar o termo vinculado também?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Este Auto de Infração tem {aiParaConfirmarTermo?.termoVinculado.tipoTermo || 'um termo'} nº <strong>{aiParaConfirmarTermo?.termoVinculado.numeroProcesso}</strong> vinculado (mesmo ato de fiscalização). O Auto de Infração já vai ser anexado ao PAS de qualquer forma — quer anexar esse termo junto?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={isCreating}
+              onClick={() => aiParaConfirmarTermo && criarPasEAnexarOrigem(aiParaConfirmarTermo.ai, null)}
+              className="rounded-xl font-black uppercase text-[10px] tracking-widest"
+            >
+              Só o Auto de Infração
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isCreating}
+              onClick={() => aiParaConfirmarTermo && criarPasEAnexarOrigem(aiParaConfirmarTermo.ai, aiParaConfirmarTermo.termoVinculado)}
+              className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-[#0E4A44] hover:bg-[#0B3A35]"
+            >
+              {isCreating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Anexar também
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

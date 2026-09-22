@@ -17,6 +17,8 @@ import {
   or,
   and,
 } from 'firebase/firestore';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '@/lib/firebase';
 import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
 import { attemptFirestoreWrite } from '@/lib/firestore-offline';
@@ -115,34 +117,60 @@ export function usePas(options?: { municipioIdOverride?: string }) {
   /** Referencia, como peças dos autos, o Auto de Infração e, se houver, o
    * Termo de Apreensão/Interdição vinculado — os documentos que deram
    * origem ao PAS. NÃO duplica o documento nem gera/guarda um PDF próprio:
-   * "ver"/"baixar" essa peça abre a autuação original em /intimacoes/{id},
-   * que já sabe renderizar e baixar o PDF dela (mesmo raciocínio da
-   * observação em `origemIntimacaoId`, lib/types.ts). Evita depender do
-   * Storage — cujas regras neste projeto não conseguem ler o Firestore pra
-   * checar permissão (firestore.get() cross-service sempre nega, ver
-   * storage.rules), o que fazia todo upload aqui falhar. */
+   * "Anexado" de verdade (não uma juntada): o PDF oficial completo do
+   * documento sobe pro Storage e vira o `anexoUrl` da peça, exatamente como
+   * qualquer outro anexo — aparece no "Baixar anexo" e entra nas páginas do
+   * PDF consolidado do PAS. `origemIntimacaoId` continua guardado, pra
+   * rastrear de onde veio, mas não é mais o único jeito de ver o documento
+   * (antes disto, um bug nas regras do Storage impedia qualquer upload
+   * aqui — já corrigido, ver storage.rules e /api/sync-claims). NÃO é
+   * `termo_juntada`: o Auto/Termo dão origem ao PAS, não são trazidos de
+   * fora pra um processo que já existe.
+   *
+   * SEMPRE entram logo após a capa (números 1, 2...), NUNCA no fim — são os
+   * documentos que deram origem ao processo, isso não muda pelo fato de
+   * serem anexados depois (processo já em fases mais adiante, ver o botão
+   * na tela do PAS). Por isso `pecasExistentes` é obrigatório: toda peça já
+   * gravada sobe seu próprio número pela quantidade de documentos novos, e
+   * o `refPecaNumero` de uma retificação sobe junto (mesmo deslocamento,
+   * senão a retificação passaria a apontar pra peça errada). */
   const anexarDocumentosOrigemAoPas = useCallback(async (
     pasId: string,
-    documentos: { id: string; titulo: string }[],
-    // Quantas peças o processo já tem — quem chama passa `pecas.length` (ver
-    // usePasPecas). Sem isto, anexar depois de o PAS já ter outras peças
-    // (ex.: acrescentar o documento de origem que faltava num processo já
-    // em andamento) gravaria de novo os números 1, 2..., colidindo com
-    // peças já existentes.
-    numeroInicial: number
+    municipioId: string,
+    documentos: { id: string; titulo: string; blob: Blob }[],
+    pecasExistentes: { id: string; numero: number; refPecaNumero?: number }[]
   ) => {
     if (!user || !profile) throw new Error('Não autenticado.');
-    if (!db || configError) throw new Error('Sem conexão com o banco de dados.');
+    if (!db || !storage || configError) throw new Error('Sem conexão com o banco de dados.');
     const criadoEm = new Date().toISOString();
-    let numero = numeroInicial;
+    const deslocamento = documentos.length;
+
+    for (const peca of pecasExistentes) {
+      // eslint-disable-next-line no-await-in-loop -- mesmo raciocínio sequencial de excluirPeca
+      await attemptFirestoreWrite(updateDoc(doc(db, 'pas', pasId, 'pecas', peca.id), {
+        numero: peca.numero + deslocamento,
+        ...(peca.refPecaNumero !== undefined ? { refPecaNumero: peca.refPecaNumero + deslocamento } : {}),
+      }));
+    }
+
+    let numero = 0;
     for (const documento of documentos) {
       numero += 1;
+      // Município ANTES do id do processo no caminho — as regras do Storage
+      // checam "é deste município" pelo caminho, não lendo o documento do
+      // PAS (ver storage.rules).
+      const arquivoRef = storageRef(storage, `pas/${municipioId}/${pasId}/origem_${documento.id}.pdf`);
       // eslint-disable-next-line no-await-in-loop -- numeração sequencial precisa ser em ordem
+      await uploadBytes(arquivoRef, documento.blob);
+      // eslint-disable-next-line no-await-in-loop
+      const anexoUrl = await getDownloadURL(arquivoRef);
+      // eslint-disable-next-line no-await-in-loop
       await attemptFirestoreWrite(setDoc(doc(collection(db, 'pas', pasId, 'pecas')), {
         numero,
         tipo: 'documento_origem' as PasPecaTipo,
         titulo: documento.titulo,
         conteudoHtml: textoDocumentoOrigem(),
+        anexoUrl,
         origemIntimacaoId: documento.id,
         assinadoForaDoSistema: true,
         criadoPorUid: user.uid,

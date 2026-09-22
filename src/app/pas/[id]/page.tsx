@@ -43,6 +43,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage
 import { blobToDataUrl, compressImage } from "@/lib/compress-image"
 import { sanitizeHtml } from "@/lib/sanitize-html"
 import { renderPasIntoPdf } from "@/lib/generate-pas-pdf"
+import { gerarPdfBlobDeIntimacao } from "@/lib/generate-intimacao-pdf"
 import type { PasPeca, PasFase } from "@/lib/types"
 import {
   textoDespachoInicial,
@@ -621,28 +622,31 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
     }
   };
 
-  // Processos abertos antes deste mecanismo existir ficam sem a referência
-  // ao documento de origem nos autos — este botão registra depois, sem
-  // precisar apagar e recriar o processo. `pecas.length` vira o número
-  // inicial pra não colidir com peças já existentes (ver
-  // anexarDocumentosOrigemAoPas em use-pas.ts).
+  // Processos abertos antes deste mecanismo existir ficam sem o documento de
+  // origem anexado nos autos — este botão anexa depois, sem precisar apagar
+  // e recriar o processo. `pecas.length` vira o número inicial pra não
+  // colidir com peças já existentes (ver anexarDocumentosOrigemAoPas em
+  // use-pas.ts).
   const [isAnexandoOrigem, setIsAnexandoOrigem] = useState(false);
   const handleAnexarDocumentosOrigem = async () => {
     if (!pas || !autoInfracao) return;
     setIsAnexandoOrigem(true);
     try {
       const documentosOrigem = [autoInfracao, ...(termoVinculadoIntimacao ? [termoVinculadoIntimacao] : [])];
-      const anexos = documentosOrigem.map((documento) => ({
-        id: documento.id,
-        titulo: documento.id === autoInfracao.id
+      const anexos = [];
+      for (const documento of documentosOrigem) {
+        const titulo = documento.id === autoInfracao.id
           ? `Auto de Infração nº ${documento.numeroProcesso}`
-          : `${documento.tipoTermo || 'Termo Vinculado'}${documento.numeroProcesso ? ` nº ${documento.numeroProcesso}` : ''}`,
-      }));
-      await anexarDocumentosOrigemAoPas(pas.id, anexos, pecas.length);
-      toast({ title: "Documento de origem registrado nos autos" });
+          : `${documento.tipoTermo || 'Termo Vinculado'}${documento.numeroProcesso ? ` nº ${documento.numeroProcesso}` : ''}`;
+        // eslint-disable-next-line no-await-in-loop -- geração de PDF é pesada, uma por vez
+        const blob = await gerarPdfBlobDeIntimacao(documento, config);
+        anexos.push({ id: documento.id, titulo, blob });
+      }
+      await anexarDocumentosOrigemAoPas(pas.id, pas.municipioId, anexos, pecas);
+      toast({ title: "Documento de origem anexado aos autos" });
     } catch (e) {
-      console.error('Erro ao referenciar documento(s) de origem:', e);
-      toast({ variant: "destructive", title: "Erro ao registrar", description: descreverErro(e) });
+      console.error('Erro ao anexar documento(s) de origem:', e);
+      toast({ variant: "destructive", title: "Erro ao anexar", description: descreverErro(e) });
     } finally {
       setIsAnexandoOrigem(false);
     }
@@ -2012,21 +2016,24 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                     {/* Visualizar, baixar e excluir na própria linha da peça:
                         conferir uma folha não pode exigir baixar o processo
                         inteiro. O acordeão continua abrindo o texto cru; este
-                        botão mostra o DOCUMENTO, como ele foi lavrado. */}
-                    {/* Documento de origem não tem PDF próprio pra visualizar/baixar
-                        aqui dentro — é a autuação original em /intimacoes/{id}, que já
-                        sabe renderizar e gerar o PDF dela (ver origemIntimacaoId,
-                        lib/types.ts). Os dois botões abrem essa mesma tela em vez de
-                        tentar montar um documento que não existe neste lugar. */}
-                    {peca.tipo === 'documento_origem' && peca.origemIntimacaoId ? (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(`/intimacoes/${peca.origemIntimacaoId}`, '_blank'); }}
+                        botão mostra o DOCUMENTO, como ele foi lavrado.
+                        Documento de origem é exceção: a peça em si é só uma
+                        legenda ("documento de origem, anexado na íntegra") —
+                        quem quer ver o documento quer a AUTUAÇÃO ORIGINAL, não
+                        a legenda com timbre/assinatura do PAS por cima dela.
+                        Os dois botões abrem o anexo (o PDF de verdade da
+                        autuação) direto, sem o embrulho genérico de peça. */}
+                    {peca.tipo === 'documento_origem' && peca.anexoUrl ? (
+                      <a
+                        href={peca.anexoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
                         title="Abrir a autuação original"
                         className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC] hover:border-[#0E4A44]/40 transition-colors shrink-0"
                       >
                         <Eye className="h-5 w-5" />
-                      </button>
+                      </a>
                     ) : (
                       <>
                         <button
@@ -2066,11 +2073,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                       <p className="text-xs text-[#A39D8C] pl-9">Retifica a peça nº {peca.refPecaNumero}.</p>
                     )}
                     <div className="flex items-center gap-3 pl-9 pt-1">
-                      {peca.tipo === 'documento_origem' && peca.origemIntimacaoId ? (
-                        <a href={`/intimacoes/${peca.origemIntimacaoId}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0E4A44] hover:underline">
-                          <Download className="h-3.5 w-3.5" /> Abrir autuação completa
-                        </a>
-                      ) : peca.anexoUrl && (
+                      {peca.anexoUrl && (
                         <a href={peca.anexoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0E4A44] hover:underline">
                           <Download className="h-3.5 w-3.5" /> Baixar anexo
                         </a>

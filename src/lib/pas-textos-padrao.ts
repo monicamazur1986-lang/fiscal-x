@@ -90,14 +90,15 @@ export function textoAnexosDoRelatorio(nomesArquivos: string[]): string {
  * documentoOrigemId/autoInfracaoVinculadaId em lib/types.ts), esse termo
  * também precisa estar nos autos: sem ele, o processo administrativo corre
  * sem o documento que, por exemplo, decretou a interdição que está sendo
- * apurada. Esta peça não guarda um PDF nem resumo em texto do documento —
- * referencia a autuação original (ver origemIntimacaoId em lib/types.ts e
- * anexarDocumentosOrigemAoPas em use-pas.ts), aberta na íntegra em
- * /intimacoes/{id} ao clicar. Sem assinatura: não é ato de ninguém, é só o
- * registro de onde os autos nascem.
+ * apurada. O documento entra ANEXADO de verdade (PDF oficial completo, ver
+ * anexarDocumentosOrigemAoPas em use-pas.ts) — não como "Termo de Juntada":
+ * juntada é trazer algo de fora pra dentro de um processo que já existe, e
+ * são justamente esses dois documentos que dão origem ao PAS, o processo
+ * nasce deles, não os recebe depois. Por isso a legenda é só o rótulo de
+ * onde os autos nascem, sem assinatura (não é ato de ninguém).
  */
 export function textoDocumentoOrigem(): string {
-  return `Documento de origem deste Processo Administrativo Sanitário — abra a autuação completa pelo botão abaixo.`;
+  return `Documento de origem deste Processo Administrativo Sanitário, anexado na íntegra.`;
 }
 
 export function textoTermoJuntadaDefesa(params: {

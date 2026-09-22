@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import { normalizeId } from "@/lib/utils";
 
 // Mesmo padrão de inicialização de src/app/api/upload/route.ts — todo
 // módulo que chama initializeApp() no projeto precisa incluir o mesmo
@@ -61,7 +62,12 @@ export async function POST(req: NextRequest) {
   }
 
   const data = snap.data()!;
-  const claims = { role: data.role ?? null, municipioId: data.municipioId ?? null };
+  // Normalizado — mesma função (normalizeId) que grava o municipioId dos
+  // documentos em pas/{id} e municipios/{id} no Storage. Sem isto, um
+  // município com acento/espaço no cadastro do usuário (raw) nunca bateria
+  // com o caminho no Storage (sempre normalizado), e belongsToMyMunicipio
+  // negaria mesmo sendo o município certo.
+  const claims = { role: data.role ?? null, municipioId: data.municipioId ? normalizeId(data.municipioId) : null };
   await auth.setCustomUserClaims(uid, claims);
 
   return NextResponse.json({ ok: true, ...claims });
