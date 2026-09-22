@@ -222,6 +222,21 @@ function PasPageInner() {
 
   return (
     <div className="min-h-screen bg-[#F5F2EA]">
+      {/* O diálogo de confirmação do termo vinculado (e o próprio picker)
+          fecham na hora do clique — mas o trabalho de verdade (gerar o PDF
+          do Auto/Termo e subir pro Storage) continua rodando por vários
+          segundos depois disso. Sem um aviso que sobrevive ao fechamento do
+          diálogo, a tela parecia simplesmente não fazer nada nesse meio
+          tempo. Cobre a tela inteira, então aparece independente de qual
+          diálogo estava aberto quando o clique aconteceu. */}
+      {isCreating && (
+        <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center">
+          <div className="bg-white rounded-2xl px-6 py-5 flex items-center gap-3 shadow-xl max-w-sm">
+            <Loader2 className="h-5 w-5 animate-spin text-[#0E4A44] shrink-0" />
+            <p className="text-sm text-[#262420]">Criando o processo e anexando os documentos de origem — isso pode levar alguns segundos.</p>
+          </div>
+        </div>
+      )}
       <DocfacilTopbar
         title="PAS"
         subtitle="Processo Administrativo Sanitário"
