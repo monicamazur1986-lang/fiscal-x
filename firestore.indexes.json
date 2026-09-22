@@ -34,6 +34,15 @@
       ]
     },
     {
+      "collectionGroup": "inspecoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "municipioId", "order": "ASCENDING" },
+        { "fieldPath": "compartilhadoCom", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "data", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "intimacoes",
       "queryScope": "COLLECTION",
       "fields": [
