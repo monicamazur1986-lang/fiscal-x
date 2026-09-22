@@ -44,7 +44,7 @@ import { blobToDataUrl, compressImage } from "@/lib/compress-image"
 import { sanitizeHtml } from "@/lib/sanitize-html"
 import { renderPasIntoPdf } from "@/lib/generate-pas-pdf"
 import { gerarPdfBlobDeIntimacao } from "@/lib/generate-intimacao-pdf"
-import type { PasPeca, PasFase } from "@/lib/types"
+import type { PasPeca, PasFase, PasPecaTipo } from "@/lib/types"
 import {
   textoDespachoInicial,
   textoDespachoInstrucao,
@@ -125,6 +125,18 @@ function sugerirNomeDocumento(nomeArquivo: string): string {
     .replace(/\s+/g, ' ')
     .trim();
   return limpo || nomeArquivo;
+}
+
+/** true quando o "texto" da peça é só uma legenda genérica de uma linha sem
+ * conteúdo próprio de verdade — o modo "já pronto (anexar PDF)" do
+ * Relatório/Julgamento (handleSalvarRelatorio/handleEmitirJulgamento) —,
+ * mesmo critério do documento de origem: "ver"/"baixar" deve mostrar o
+ * documento anexado em si, não a legenda com timbre/assinatura do PAS por
+ * cima dele. NÃO vale para um Termo de Juntada de verdade (tipo
+ * 'termo_juntada'): ali o texto é o próprio ato assinado que precede um
+ * documento SEPARADO, então importa de verdade. */
+function ehPecaSoLegendaDeAnexo(peca: { tipo: PasPecaTipo; titulo: string }): boolean {
+  return peca.tipo !== 'termo_juntada' && peca.titulo.startsWith(`${PAS_PECA_TITULOS.termo_juntada} — `);
 }
 
 async function uploadArquivoPas(pas: { id: string; municipioId: string }, file: File): Promise<string> {
@@ -2116,13 +2128,13 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                         conferir uma folha não pode exigir baixar o processo
                         inteiro. O acordeão continua abrindo o texto cru; este
                         botão mostra o DOCUMENTO, como ele foi lavrado.
-                        Documento de origem é exceção: a peça em si é só uma
-                        legenda ("documento de origem, anexado na íntegra") —
-                        quem quer ver o documento quer a AUTUAÇÃO ORIGINAL, não
-                        a legenda com timbre/assinatura do PAS por cima dela.
-                        Os dois botões abrem o anexo (o PDF de verdade da
-                        autuação) direto, sem o embrulho genérico de peça. */}
-                    {peca.tipo === 'documento_origem' && peca.anexoUrl ? (
+                        Documento de origem e a peça "já pronto (anexar PDF)"
+                        são exceção: o "texto" da peça é só uma legenda genérica
+                        — quem quer ver o documento quer o ANEXO ORIGINAL, não
+                        a legenda com timbre/assinatura do PAS por cima dele.
+                        Os dois botões abrem o anexo (o PDF de verdade) direto,
+                        sem o embrulho genérico de peça (ver ehPecaSoLegendaDeAnexo). */}
+                    {(peca.tipo === 'documento_origem' || ehPecaSoLegendaDeAnexo(peca)) && peca.anexoUrl ? (
                       <a
                         href={peca.anexoUrl}
                         target="_blank"
@@ -2182,7 +2194,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                           <Download className="h-3.5 w-3.5" /> {anexo.nome}
                         </a>
                       ))}
-                      {peca.tipo !== 'documento_origem' && !retificadaPor && (
+                      {peca.tipo !== 'documento_origem' && !ehPecaSoLegendaDeAnexo(peca) && !retificadaPor && (
                         <button
                           type="button"
                           onClick={() => handleRetificarPeca(peca)}
@@ -2451,22 +2463,28 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
           {incluirCapaNoDownload && pecasParaBaixar && pecasParaBaixar.length > 0 && (
             <div data-pdf-doc>
               <div data-pdf-block className="text-center" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
-              <p className="text-[18pt] font-black uppercase tracking-tight mt-4">Processo Administrativo Sanitário</p>
-              <p className="text-[14pt] font-bold mt-1">Nº {pas.numeroProcesso}</p>
-              <p className="text-[11pt] uppercase mt-1 text-zinc-600">{nomeArquivoBaixar}</p>
-              <table className="w-full max-w-[420px] mx-auto border-collapse mt-10 text-left text-[11pt]">
-                <tbody>
-                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Autuado:</td><td className="py-2 uppercase">{pas.estabelecimento.fantasia}</td></tr>
-                  {pas.estabelecimento.cnpj && (<tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">CNPJ:</td><td className="py-2">{pas.estabelecimento.cnpj}</td></tr>)}
-                  {pas.estabelecimento.endereco && (<tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Endereço:</td><td className="py-2">{pas.estabelecimento.endereco}</td></tr>)}
-                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Auto de Infração de origem:</td><td className="py-2">nº {autoInfracao?.numeroProcesso || pas.numeroProcesso}</td></tr>
-                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Autuante:</td><td className="py-2 uppercase">{pas.autuanteNome}</td></tr>
-                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Data de instauração:</td><td className="py-2">{format(new Date(pas.dataCienciaAI), "dd/MM/yyyy")}</td></tr>
-                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Fase atual:</td><td className="py-2">{PAS_FASE_LABEL[pas.fase]}</td></tr>
-                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Peças neste volume:</td><td className="py-2">{pecasParaBaixar[0].numero} a {pecasParaBaixar[pecasParaBaixar.length - 1].numero}</td></tr>
-                </tbody>
-              </table>
-            </div>
+                <p className="text-[19pt] font-black uppercase tracking-tight mt-6">Processo Administrativo Sanitário</p>
+                <p className="text-[14pt] font-bold mt-1.5 text-zinc-700">Nº {pas.numeroProcesso}</p>
+                <p className="text-[9.5pt] uppercase tracking-widest mt-1 text-zinc-400">{nomeArquivoBaixar}</p>
+                <div className="w-16 h-px bg-zinc-300 mx-auto mt-8" />
+                {/* Rótulo à direita, discreto; valor à esquerda, é o que se lê —
+                    antes os dois eram negrito+maiúsculo, competindo pela
+                    atenção; e o espaçamento (py-2 largo, sem linha entre as
+                    linhas) deixava a tabela parecendo maior/mais solta do
+                    que o conteúdo justificava. */}
+                <table className="w-full max-w-[360px] mx-auto border-collapse mt-8 text-[10pt]">
+                  <tbody>
+                    <tr><td className="py-1.5 pr-4 text-right align-top whitespace-nowrap text-zinc-500">Autuado</td><td className="py-1.5 text-left font-medium">{pas.estabelecimento.fantasia}</td></tr>
+                    {pas.estabelecimento.cnpj && (<tr><td className="py-1.5 pr-4 text-right align-top whitespace-nowrap text-zinc-500">CNPJ</td><td className="py-1.5 text-left">{pas.estabelecimento.cnpj}</td></tr>)}
+                    {pas.estabelecimento.endereco && (<tr><td className="py-1.5 pr-4 text-right align-top whitespace-nowrap text-zinc-500">Endereço</td><td className="py-1.5 text-left">{pas.estabelecimento.endereco}</td></tr>)}
+                    <tr><td className="py-1.5 pr-4 text-right align-top whitespace-nowrap text-zinc-500">Auto de Infração</td><td className="py-1.5 text-left">nº {autoInfracao?.numeroProcesso || pas.numeroProcesso}</td></tr>
+                    <tr><td className="py-1.5 pr-4 text-right align-top whitespace-nowrap text-zinc-500">Autuante</td><td className="py-1.5 text-left">{pas.autuanteNome}</td></tr>
+                    <tr><td className="py-1.5 pr-4 text-right align-top whitespace-nowrap text-zinc-500">Instauração</td><td className="py-1.5 text-left">{format(new Date(pas.dataCienciaAI), "dd/MM/yyyy")}</td></tr>
+                    <tr><td className="py-1.5 pr-4 text-right align-top whitespace-nowrap text-zinc-500">Fase atual</td><td className="py-1.5 text-left">{PAS_FASE_LABEL[pas.fase]}</td></tr>
+                    <tr><td className="py-1.5 pr-4 text-right align-top whitespace-nowrap text-zinc-500">Peças neste volume</td><td className="py-1.5 text-left">{pecasParaBaixar[0].numero} a {pecasParaBaixar[pecasParaBaixar.length - 1].numero}</td></tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
@@ -2486,12 +2504,18 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
               ...(peca.anexosAdicionais || []),
             ];
             const anunciaPaginas = peca.tipo === 'termo_juntada' || !!peca.anexosAdicionais?.length;
-            // Documento de origem não tem "capa própria": nenhum título,
-            // texto ou assinatura antes dele — só o documento original (o
-            // anexo) mesmo, começando direto na folha seguinte à capa do
-            // processo. Um <div data-pdf-doc> sem filhos gera zero folhas de
-            // texto (ver renderPasIntoPdf) e deixa só as páginas do anexo.
-            if (peca.tipo === 'documento_origem') {
+            // Documento de origem, e o modo "já pronto (anexar PDF)" do
+            // Relatório/Julgamento (peça cujo "texto" é só uma legenda
+            // genérica de uma linha, sem conteúdo próprio de verdade — ver
+            // handleSalvarRelatorio/handleEmitirJulgamento) não têm "capa
+            // própria": nenhum título, texto ou assinatura antes — só o
+            // documento original (o anexo) mesmo, começando direto na
+            // folha seguinte. Um <div data-pdf-doc> sem filhos gera zero
+            // folhas de texto (ver renderPasIntoPdf) e deixa só as páginas
+            // do anexo. NÃO se aplica a um Termo de Juntada de verdade
+            // (tipo 'termo_juntada'): esse é o próprio ato, assinado, que
+            // precede um documento SEPARADO — ali o texto é o que importa.
+            if (peca.tipo === 'documento_origem' || ehPecaSoLegendaDeAnexo(peca)) {
               return <div key={peca.id} data-pdf-doc data-pdf-anexos={anexos.length > 0 ? JSON.stringify(anexos) : undefined} />;
             }
             return (
@@ -2571,23 +2595,24 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             />
           </div>
 
-          <div data-pdf-block className="mt-10 text-center" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
-            <p className="text-[20pt] font-black uppercase tracking-tight">Processo Administrativo Sanitário</p>
-            <p className="text-[16pt] font-bold mt-2">Nº {pas?.numeroProcesso}</p>
+          <div data-pdf-block className="mt-8 text-center" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+            <p className="text-[19pt] font-black uppercase tracking-tight">Processo Administrativo Sanitário</p>
+            <p className="text-[14pt] font-bold mt-1.5 text-zinc-700">Nº {pas?.numeroProcesso}</p>
+            <div className="w-16 h-px bg-zinc-300 mx-auto mt-6" />
           </div>
 
           {pas && (
-            <div data-pdf-block className="mt-14 mx-auto max-w-[420px] text-[11pt]" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
+            <div data-pdf-block className="mt-8 mx-auto max-w-[360px] text-[10pt]" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
               <table className="w-full border-collapse">
                 <tbody>
-                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Autuado:</td><td className="py-2 uppercase">{pas.estabelecimento.fantasia}</td></tr>
-                  {pas.estabelecimento.cnpj && (<tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">CNPJ:</td><td className="py-2">{pas.estabelecimento.cnpj}</td></tr>)}
-                  {pas.estabelecimento.endereco && (<tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Endereço:</td><td className="py-2">{pas.estabelecimento.endereco}</td></tr>)}
-                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Auto de Infração de origem:</td><td className="py-2">nº {autoInfracao?.numeroProcesso || pas.numeroProcesso}</td></tr>
-                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Autuante:</td><td className="py-2 uppercase">{pas.autuanteNome}</td></tr>
-                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Data de instauração:</td><td className="py-2">{format(new Date(pas.dataCienciaAI), "dd/MM/yyyy")}</td></tr>
-                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Fase atual:</td><td className="py-2">{PAS_FASE_LABEL[pas.fase]}</td></tr>
-                  <tr><td className="py-2 pr-3 font-bold align-top whitespace-nowrap">Volume:</td><td className="py-2">1</td></tr>
+                  <tr><td className="py-1.5 pr-4 text-right align-top whitespace-nowrap text-zinc-500">Autuado</td><td className="py-1.5 text-left font-medium">{pas.estabelecimento.fantasia}</td></tr>
+                  {pas.estabelecimento.cnpj && (<tr><td className="py-1.5 pr-4 text-right align-top whitespace-nowrap text-zinc-500">CNPJ</td><td className="py-1.5 text-left">{pas.estabelecimento.cnpj}</td></tr>)}
+                  {pas.estabelecimento.endereco && (<tr><td className="py-1.5 pr-4 text-right align-top whitespace-nowrap text-zinc-500">Endereço</td><td className="py-1.5 text-left">{pas.estabelecimento.endereco}</td></tr>)}
+                  <tr><td className="py-1.5 pr-4 text-right align-top whitespace-nowrap text-zinc-500">Auto de Infração</td><td className="py-1.5 text-left">nº {autoInfracao?.numeroProcesso || pas.numeroProcesso}</td></tr>
+                  <tr><td className="py-1.5 pr-4 text-right align-top whitespace-nowrap text-zinc-500">Autuante</td><td className="py-1.5 text-left">{pas.autuanteNome}</td></tr>
+                  <tr><td className="py-1.5 pr-4 text-right align-top whitespace-nowrap text-zinc-500">Instauração</td><td className="py-1.5 text-left">{format(new Date(pas.dataCienciaAI), "dd/MM/yyyy")}</td></tr>
+                  <tr><td className="py-1.5 pr-4 text-right align-top whitespace-nowrap text-zinc-500">Fase atual</td><td className="py-1.5 text-left">{PAS_FASE_LABEL[pas.fase]}</td></tr>
+                  <tr><td className="py-1.5 pr-4 text-right align-top whitespace-nowrap text-zinc-500">Volume</td><td className="py-1.5 text-left">1</td></tr>
                 </tbody>
               </table>
             </div>

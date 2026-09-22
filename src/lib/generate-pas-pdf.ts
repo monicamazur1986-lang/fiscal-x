@@ -420,12 +420,27 @@ export async function renderPasIntoPdf(
   };
 
   /** Numeração carimbada direto no PDF — usada nas folhas que não têm o
-   *  rodapé institucional (anexos escaneados e avisos). */
+   *  rodapé institucional (avisos). */
   const carimbarNumero = (n: number, larguraMm: number, alturaMm: number) => {
     pdf.setFont('times', 'normal');
     pdf.setFontSize(9);
     pdf.setTextColor(0, 0, 0);
     pdf.text(`Página ${n} de ${total}`, larguraMm / 2, alturaMm - 8, { align: 'center' });
+  };
+
+  /** Numeração DE FOLHA, no canto superior direito — "fl. X" é a convenção
+   *  real de autos físicos (numeração de folhas do processo), usada só nas
+   *  páginas de ANEXO (escaneado ou PDF externo). Um anexo pode já ter o
+   *  próprio rodapé de origem impresso na folha (ex.: um PDF exportado de
+   *  outra tela deste mesmo sistema, com seu "Página X de Y" de lá) —
+   *  carimbar OUTRO "Página X de Y" no mesmo lugar de sempre (rodapé,
+   *  centro) sobrepunha os dois e parecia numeração duplicada. No canto,
+   *  sem disputar espaço com nada que o próprio documento já tenha. */
+  const carimbarNumeroFolha = (n: number, larguraMm: number) => {
+    pdf.setFont('times', 'normal');
+    pdf.setFontSize(8);
+    pdf.setTextColor(90, 90, 90);
+    pdf.text(`fl. ${n}`, larguraMm - 10, 8, { align: 'right' });
   };
 
   for (let i = 0; i < paginas.length; i++) {
@@ -480,7 +495,7 @@ export async function renderPasIntoPdf(
       await paginaPdf.render({ canvasContext: ctx, viewport: render }).promise;
       abrirPagina(larguraMm, alturaMm);
       pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, larguraMm, alturaMm);
-      carimbarNumero(numero, larguraMm, alturaMm);
+      carimbarNumeroFolha(numero, larguraMm);
       paginaPdf.cleanup?.();
       continue;
     }
@@ -502,7 +517,7 @@ export async function renderPasIntoPdf(
         larguraMm,
         alturaMm
       );
-      carimbarNumero(numero, A4_LARGURA_MM, A4_ALTURA_MM);
+      carimbarNumeroFolha(numero, A4_LARGURA_MM);
       continue;
     }
 
