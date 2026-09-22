@@ -110,6 +110,15 @@
         { "fieldPath": "responsavelAtualUid", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "pas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "municipioId", "order": "ASCENDING" },
+        { "fieldPath": "compartilhadoCom", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -14,8 +14,6 @@ import {
   orderBy,
   query,
   where,
-  or,
-  and,
 } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
@@ -59,31 +57,44 @@ export function usePas(options?: { municipioIdOverride?: string }) {
 
     const mid = profile.role === 'root' ? normalizeId(options!.municipioIdOverride!) : normalizeId(profile.municipioId);
     const isGestor = profile.role === 'admin' || profile.role === 'root';
-    // Fiscal comum vê os próprios processos E os que foram encaminhados pra
-    // ele explicitamente (ver PasEncaminharDialog) — sem o "or", um processo
-    // encaminhado por um gestor pra um fiscal que não é o autuante original
-    // nunca apareceria na lista dele.
-    const q = isGestor
-      ? query(collection(db, 'pas'), where('municipioId', '==', mid), orderBy('createdAt', 'desc'))
-      : query(
-          collection(db, 'pas'),
-          and(
-            where('municipioId', '==', mid),
-            or(where('createdBy', '==', user.uid), where('responsavelAtualUid', '==', user.uid))
-          ),
-          orderBy('createdAt', 'desc')
-        );
+    // Fiscal comum vê os próprios processos, os que foram encaminhados pra
+    // ele explicitamente (ver PasEncaminharDialog) E os que um colega
+    // compartilhou (ver compartilhadoCom em lib/types.ts). Sem essa terceira
+    // consulta, a regra do Firestore já deixava um fiscal comum LER um PAS
+    // compartilhado (compartilhadoComigo() em firestore.rules), mas esta
+    // lista nunca ia buscá-lo — o processo nunca aparecia nem na lista, nem
+    // abrindo o link direto (a tela de detalhe também depende deste mesmo
+    // `processos` pra achar o PAS pelo id). Firestore não tem OR entre
+    // campos diferentes (createdBy/responsavelAtualUid/compartilhadoCom),
+    // por isso são consultas separadas, unidas aqui no cliente — mesmo
+    // raciocínio de use-intimacoes.ts/use-inspecoes.ts.
+    const base = [collection(db, 'pas'), where('municipioId', '==', mid)] as const;
+    const consultas = isGestor
+      ? [query(base[0], base[1], orderBy('createdAt', 'desc'))]
+      : [
+          query(base[0], base[1], where('createdBy', '==', user.uid), orderBy('createdAt', 'desc')),
+          query(base[0], base[1], where('responsavelAtualUid', '==', user.uid), orderBy('createdAt', 'desc')),
+          query(base[0], base[1], where('compartilhadoCom', 'array-contains', user.uid), orderBy('createdAt', 'desc')),
+        ];
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const items = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as Pas);
+    const porConsulta: Pas[][] = consultas.map(() => []);
+    const publicar = () => {
+      const porId = new Map<string, Pas>();
+      porConsulta.flat().forEach((item) => porId.set(String(item.id), item));
+      const items = Array.from(porId.values()).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
       setProcessos(items);
       try { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items)); } catch (e) { /* cota do localStorage */ }
       setLoading(false);
+    };
+
+    const unsubscribes = consultas.map((q, indice) => onSnapshot(q, (snapshot) => {
+      porConsulta[indice] = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as Pas);
+      publicar();
     }, (err) => {
       console.error('Falha ao sincronizar processos (PAS) com o Firestore:', err);
       setLoading(false);
-    });
-    return () => unsubscribe();
+    }));
+    return () => unsubscribes.forEach((u) => u());
   }, [user, profile, configError, options?.municipioIdOverride]);
 
   /** Cria o PAS já na fase de instauração — a peça de despacho inicial é
