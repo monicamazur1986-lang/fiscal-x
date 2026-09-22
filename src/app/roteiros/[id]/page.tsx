@@ -2223,10 +2223,13 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   const [mostrarEmail, setMostrarEmail] = useState(false)
 
   const [currentInspecaoId, setCurrentInspecaoId] = useState<string | null>(null);
-  // Compartilhar edição — mesmo mecanismo da autuação (CompartilharEdicaoDialog):
-  // só faz sentido depois do primeiro save (currentInspecaoId), já que é o
-  // documento salvo que passa a ter compartilhadoCom.
+  // Compartilhar edição — mesmo mecanismo da autuação (CompartilharEdicaoDialog).
+  // Um rascunho que nunca foi salvo não tem id nenhum pra marcar o acesso do
+  // colega — abrirCompartilharRoteiro (abaixo, perto de handleSaveDraft) salva
+  // primeiro nesse caso, em vez de escondendo o botão até o fiscal salvar
+  // sozinho (mesmo raciocínio de abrirCompartilhar em intimacao-form.tsx).
   const [compartilharAberto, setCompartilharAberto] = useState(false);
+  const [isAbrindoCompartilhar, setIsAbrindoCompartilhar] = useState(false);
   const inspecaoAtual = useMemo(
     () => inspecoes.find(i => i.id === currentInspecaoId),
     [inspecoes, currentInspecaoId]
@@ -2391,7 +2394,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // heartbeat abaixo (que só recria o intervalo quando answers/idData mudam)
   // podia acabar chamando uma versão antiga da função, salvando uma cópia
   // desatualizada caso só uma foto/observação tivesse mudado nesse meio-tempo.
-  const handleSaveDraftRef = useRef<(showToast?: boolean) => Promise<void>>();
+  const handleSaveDraftRef = useRef<(showToast?: boolean) => Promise<string | undefined>>();
 
   // Menu retrátil por categoria (seção do roteiro) — a inspeção em campo
   // raramente segue a ordem do formulário, então deixar tudo sempre
@@ -2866,12 +2869,32 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         if (res?.synced) toast({ title: "Sincronizado" });
         else toast({ variant: "destructive", title: "Salvo só neste aparelho", description: "Sem conexão com a nuvem — não abra esta vistoria em outro dispositivo até sincronizar." });
       }
+      // Devolve o id gravado — abrirCompartilharRoteiro precisa dele na hora,
+      // sem esperar o próximo render (currentInspecaoId só atualiza depois).
+      return res?.id || currentInspecaoId || undefined;
     } catch (e) {
       if (showToast) toast({ variant: "destructive", title: "Erro na Nuvem" });
+      return undefined;
     } finally {
       setIsSavingDraft(false);
     }
   }, [profile, idData, answers, observations, itemPhotos, id, saveInspecao, currentInspecaoId, toast, introducaoHtml, conclusaoHtml, foundCnaes, router]);
+
+  // Compartilhar exige um documento gravado — é o id que vai no
+  // compartilhadoCom do colega. Num rascunho que nunca foi salvo, salva
+  // primeiro em vez de deixar o fiscal sem nenhum jeito de compartilhar
+  // (mesmo raciocínio de abrirCompartilhar em intimacao-form.tsx).
+  const abrirCompartilharRoteiro = async () => {
+    if (currentInspecaoId) { setCompartilharAberto(true); return; }
+    setIsAbrindoCompartilhar(true);
+    try {
+      const id = await handleSaveDraft(false);
+      if (id) setCompartilharAberto(true);
+      else toast({ variant: "destructive", title: "Não foi possível salvar antes de compartilhar" });
+    } finally {
+      setIsAbrindoCompartilhar(false);
+    }
+  };
 
   const [isPolishingBatch, setIsPolishingBatch] = useState(false)
   // Guarda uma "foto" das observações no momento da última revisão por IA —
@@ -3682,22 +3705,25 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             <p className="text-[11px] text-[#A39D8C] font-black uppercase tracking-[0.2em] mt-1">{checklist.subtitulo}</p>
           </div>
         </div>
-        {/* Indicador de salvamento e, quando já existe um save (currentInspecaoId),
-            compartilhar a edição com um colega — mesmo mecanismo da autuação:
-            o histórico ("Minhas inspeções deste roteiro") saiu daqui: repetia
-            a tela Roteiros › Inspeções em Andamento, e a exclusão desceu pra
-            barra fixa, junto das outras duas ações. */}
+        {/* Indicador de salvamento e compartilhar a edição com um colega —
+            mesmo mecanismo da autuação. Sempre visível, mesmo sem save
+            ainda: abrirCompartilharRoteiro salva primeiro se precisar, em
+            vez de escondido até o fiscal salvar sozinho (rascunho sem
+            nenhuma resposta ainda não tem o que compartilhar, mas isso o
+            próprio salvamento resolve). O histórico ("Minhas inspeções
+            deste roteiro") saiu daqui: repetia a tela Roteiros › Inspeções
+            em Andamento, e a exclusão desceu pra barra fixa, junto das
+            outras duas ações. */}
         <div className="flex items-center gap-2 sm:gap-3">
-            {currentInspecaoId && (
-              <button
-                type="button"
-                onClick={() => setCompartilharAberto(true)}
-                className="flex items-center gap-1.5 text-xs font-medium text-[#6B6659] hover:text-[#0E4A44] transition-colors border border-[#E4DFD1] rounded-full px-3 py-1.5"
-              >
-                <Users className="h-3.5 w-3.5" />
-                {inspecaoAtual?.compartilhadoComNomes?.length ? `Compartilhado (${inspecaoAtual.compartilhadoComNomes.length})` : 'Compartilhar'}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={abrirCompartilharRoteiro}
+              disabled={isAbrindoCompartilhar}
+              className="flex items-center gap-1.5 text-xs font-medium text-[#6B6659] hover:text-[#0E4A44] transition-colors border border-[#E4DFD1] rounded-full px-3 py-1.5 disabled:opacity-50"
+            >
+              {isAbrindoCompartilhar ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Users className="h-3.5 w-3.5" />}
+              {inspecaoAtual?.compartilhadoComNomes?.length ? `Compartilhado (${inspecaoAtual.compartilhadoComNomes.length})` : 'Compartilhar'}
+            </button>
             {lastAutoSave && (
               <div className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-full border",
