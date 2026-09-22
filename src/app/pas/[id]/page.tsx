@@ -2351,6 +2351,14 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
               ...(peca.anexosAdicionais || []),
             ];
             const anunciaPaginas = peca.tipo === 'termo_juntada' || !!peca.anexosAdicionais?.length;
+            // Documento de origem não tem "capa própria": nenhum título,
+            // texto ou assinatura antes dele — só o documento original (o
+            // anexo) mesmo, começando direto na folha seguinte à capa do
+            // processo. Um <div data-pdf-doc> sem filhos gera zero folhas de
+            // texto (ver renderPasIntoPdf) e deixa só as páginas do anexo.
+            if (peca.tipo === 'documento_origem') {
+              return <div key={peca.id} data-pdf-doc data-pdf-anexos={anexos.length > 0 ? JSON.stringify(anexos) : undefined} />;
+            }
             return (
             <div
               key={peca.id}
