@@ -59,6 +59,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useAuth } from "@/hooks/use-auth"
 import { useInspecoes } from "@/hooks/use-inspecoes"
+import { CompartilharEdicaoDialog } from "@/components/compartilhar-edicao-dialog"
 import { GerarIntimacaoDialog } from "@/components/roteiros/gerar-intimacao-dialog"
 import { darkenHex } from "@/lib/dashboard-menu-items"
 import { useMunicipiosAtivos } from "@/hooks/use-municipios-ativos"
@@ -2159,7 +2160,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
       : profile?.municipioId,
   })
   const router = useRouter()
-  const { saveInspecao, deleteInspecao, inspecoes, loading: loadingInspecoes } = useInspecoes()
+  const { saveInspecao, deleteInspecao, inspecoes, compartilharInspecao, loading: loadingInspecoes } = useInspecoes()
   const reportRef = useRef<HTMLDivElement>(null)
   // Encolhe só a APARÊNCIA da folha A4 pra caber na tela do celular — nunca a
   // largura real (offsetWidth), que é a base de todo o cálculo de paginação
@@ -2222,6 +2223,14 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   const [mostrarEmail, setMostrarEmail] = useState(false)
 
   const [currentInspecaoId, setCurrentInspecaoId] = useState<string | null>(null);
+  // Compartilhar edição — mesmo mecanismo da autuação (CompartilharEdicaoDialog):
+  // só faz sentido depois do primeiro save (currentInspecaoId), já que é o
+  // documento salvo que passa a ter compartilhadoCom.
+  const [compartilharAberto, setCompartilharAberto] = useState(false);
+  const inspecaoAtual = useMemo(
+    () => inspecoes.find(i => i.id === currentInspecaoId),
+    [inspecoes, currentInspecaoId]
+  );
   // Status da inspeção carregada — null enquanto é uma inspeção nova/em
   // branco, ainda sem nenhum save. Controla, na visualização do relatório, se
   // mostra "Finalizar e Exportar" (rascunho) ou só "Exportar" (já concluída,
@@ -3673,10 +3682,22 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             <p className="text-[11px] text-[#A39D8C] font-black uppercase tracking-[0.2em] mt-1">{checklist.subtitulo}</p>
           </div>
         </div>
-        {/* Só o indicador de salvamento. O histórico ("Minhas inspeções deste
-            roteiro") saiu: repetia a tela Roteiros › Inspeções em Andamento, e
-            a exclusão desceu pra barra fixa, junto das outras duas ações. */}
+        {/* Indicador de salvamento e, quando já existe um save (currentInspecaoId),
+            compartilhar a edição com um colega — mesmo mecanismo da autuação:
+            o histórico ("Minhas inspeções deste roteiro") saiu daqui: repetia
+            a tela Roteiros › Inspeções em Andamento, e a exclusão desceu pra
+            barra fixa, junto das outras duas ações. */}
         <div className="flex items-center gap-2 sm:gap-3">
+            {currentInspecaoId && (
+              <button
+                type="button"
+                onClick={() => setCompartilharAberto(true)}
+                className="flex items-center gap-1.5 text-xs font-medium text-[#6B6659] hover:text-[#0E4A44] transition-colors border border-[#E4DFD1] rounded-full px-3 py-1.5"
+              >
+                <Users className="h-3.5 w-3.5" />
+                {inspecaoAtual?.compartilhadoComNomes?.length ? `Compartilhado (${inspecaoAtual.compartilhadoComNomes.length})` : 'Compartilhar'}
+              </button>
+            )}
             {lastAutoSave && (
               <div className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-full border",
@@ -4796,6 +4817,23 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <CompartilharEdicaoDialog
+        open={compartilharAberto}
+        onOpenChange={setCompartilharAberto}
+        compartilhadoCom={inspecaoAtual?.compartilhadoComNomes || []}
+        onConfirmar={async (colegas) => {
+          if (!currentInspecaoId) return;
+          const { synced } = await compartilharInspecao(currentInspecaoId, colegas);
+          toast(
+            !synced
+              ? { title: "Compartilhamento salvo localmente", description: "Vai valer pra quem foi marcado assim que a conexão voltar." }
+              : colegas.length === 0
+              ? { title: "Compartilhamento removido" }
+              : { title: "Vistoria compartilhada" }
+          );
+        }}
+      />
     </div>
   )
 }

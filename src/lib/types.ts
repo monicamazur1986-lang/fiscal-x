@@ -122,6 +122,13 @@ export type Inspecao = {
   /** Mesma lógica de lixeira de Intimações/Docfacil: mover pra lixeira só marca `deleted`, sem apagar de verdade. */
   deleted?: boolean;
   deletedAt?: string;
+  /** Colegas com quem o roteiro/relatório em andamento foi compartilhado
+   * (ver CompartilharEdicaoDialog, mesmo mecanismo de Intimações) — cada um
+   * passa a ver, editar e assinar junto, não só o fiscalId original.
+   * Preenchimento e assinatura mútua: os dois vistoriaram juntos, ou um
+   * começa em campo e o outro termina no escritório. */
+  compartilhadoCom?: string[];
+  compartilhadoComNomes?: { uid: string; nome: string }[];
   checklistData?: {
     /** SIM/NÃO/ND nos roteiros comuns; '0'..'5' nos roteiros ROI da ANVISA, que são avaliados por nota (ver src/lib/roteiro-roi-radiologia.ts). */
     answers: Record<string, 'SIM' | 'NAO' | 'ND' | '0' | '1' | '2' | '3' | '4' | '5'>;

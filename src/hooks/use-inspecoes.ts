@@ -14,7 +14,9 @@ import {
   orderBy,
   Timestamp,
   query,
-  where
+  where,
+  type Query,
+  type DocumentData,
 } from 'firebase/firestore';
 import { useAuth } from './use-auth';
 import { normalizeId } from '@/lib/utils';
@@ -243,42 +245,50 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
       // fiscal ou o gestor também tem inspeção salva. O onSnapshot abaixo
       // engolia esse erro sem avisar — por fora, parecia que os dados
       // "sumiam", quando na verdade nunca chegavam a sincronizar de volta.
+      //
+      // Gestor/root já vê o município inteiro numa consulta só. O fiscal
+      // comum precisa de DUAS — o que é dele e o que um colega compartilhou
+      // com ele (ver CompartilharEdicaoDialog) — unidas aqui no cliente,
+      // mesmo raciocínio de use-intimacoes.ts (Firestore não tem OR entre
+      // campos diferentes).
       const isGestor = profile.role === 'admin' || profile.role === 'root';
-      const q = isGestor
-        ? query(
-            collection(db, "inspecoes"),
-            where("municipioId", "==", mid),
-            orderBy("data", "asc")
-          )
-        : query(
-            collection(db, "inspecoes"),
-            where("municipioId", "==", mid),
-            where("fiscalId", "==", user.uid),
-            orderBy("data", "asc")
-          );
+      const base = [collection(db, "inspecoes"), where("municipioId", "==", mid)] as const;
+      const consultas: { essencial: boolean; q: Query<DocumentData> }[] = isGestor
+        ? [{ essencial: true, q: query(base[0], base[1], orderBy("data", "asc")) }]
+        : [
+            { essencial: true, q: query(base[0], base[1], where("fiscalId", "==", user.uid), orderBy("data", "asc")) },
+            { essencial: false, q: query(base[0], base[1], where("compartilhadoCom", "array-contains", user.uid), orderBy("data", "asc")) },
+          ];
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const items = snapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            ...data,
-            id: doc.id,
-            data: tsOrCorruptedToDate(data.data),
-            // updatedAt é gravado como Timestamp do Firestore (ver saveInspecao
-            // abaixo), mas o tipo Inspecao.updatedAt é string (ISO) — sem essa
-            // conversão, ficava um Timestamp cru no objeto, e qualquer
-            // `new Date(insp.updatedAt)` (ex.: no diálogo "Minhas Inspeções")
-            // virava Invalid Date, derrubando o app com "RangeError: Invalid
-            // time value" assim que a lista tinha pelo menos um item — por
-            // isso nunca acontecia pro root (ele nunca chega a carregar
-            // inspeções reais nesta tela sem escolher um município antes).
-            // tsOrCorruptedToIso/Date também cobre documentos já gravados com
-            // o bug antigo da fila de reenvio (Timestamp virando objeto cru
-            // {seconds, nanoseconds} no localStorage) — sem isso, um
-            // documento antigo corrompido travava a tela pra sempre.
-            updatedAt: tsOrCorruptedToIso(data.updatedAt),
-          } as Inspecao;
-        });
+      const mapearDoc = (docSnap: any): Inspecao => {
+        const data = docSnap.data();
+        return {
+          ...data,
+          id: docSnap.id,
+          data: tsOrCorruptedToDate(data.data),
+          // updatedAt é gravado como Timestamp do Firestore (ver saveInspecao
+          // abaixo), mas o tipo Inspecao.updatedAt é string (ISO) — sem essa
+          // conversão, ficava um Timestamp cru no objeto, e qualquer
+          // `new Date(insp.updatedAt)` (ex.: no diálogo "Minhas Inspeções")
+          // virava Invalid Date, derrubando o app com "RangeError: Invalid
+          // time value" assim que a lista tinha pelo menos um item — por
+          // isso nunca acontecia pro root (ele nunca chega a carregar
+          // inspeções reais nesta tela sem escolher um município antes).
+          // tsOrCorruptedToIso/Date também cobre documentos já gravados com
+          // o bug antigo da fila de reenvio (Timestamp virando objeto cru
+          // {seconds, nanoseconds} no localStorage) — sem isso, um
+          // documento antigo corrompido travava a tela pra sempre.
+          updatedAt: tsOrCorruptedToIso(data.updatedAt),
+        } as Inspecao;
+      };
+
+      // Cada listener guarda o próprio resultado; a lista publicada é a
+      // união dos dois — sem isso, o segundo snapshot apagaria o primeiro.
+      const porConsulta: Inspecao[][] = consultas.map(() => []);
+      const publicar = () => {
+        const porId = new Map<string, Inspecao>();
+        porConsulta.flat().forEach((item) => porId.set(String(item.id), item));
+        const items = Array.from(porId.values());
 
         // Itens que ainda não confirmaram gravação na nuvem não aparecem no
         // snapshot do servidor — reaplica eles por cima pra não sumirem da
@@ -300,20 +310,40 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
                     updatedAt: tsOrCorruptedToIso(raw.updatedAt),
                   } as Inspecao;
                 }),
-            ];
+            ].sort((a, b) => a.data.getTime() - b.data.getTime());
 
         salvarCacheColecao(LOCAL_STORAGE_KEY, merged, 'ultimos');
         setInspecoes(merged);
         setLoading(false);
-      }, (err) => {
-        // Antes esse erro era engolido em silêncio — foi assim que o bug do
-        // índice/query faltando (ver comentário acima) passou despercebido:
-        // a tela seguia mostrando só o cache local, sem nenhum aviso de que
-        // a sincronização com o servidor tinha parado.
-        console.error("Falha ao sincronizar inspeções com o Firestore:", err);
-        setLoading(false)
+      };
+
+      const unsubscribes: (() => void)[] = [];
+      consultas.forEach(({ essencial, q }, indice) => {
+        unsubscribes[indice] = onSnapshot(q, (snapshot) => {
+          porConsulta[indice] = snapshot.docs.map(mapearDoc);
+          publicar();
+        }, (err) => {
+          if (!essencial) {
+            // Regras/índice ainda não publicados (firebase deploy --only
+            // firestore:rules,firestore:indexes). O fiscal continua vendo
+            // normalmente as próprias inspeções; só as compartilhadas por
+            // um colega é que não aparecem. Cancela o listener pro erro não
+            // se repetir a cada tentativa de reconexão.
+            console.warn('Roteiros/relatórios compartilhados indisponíveis (' + (err?.code || 'erro') + ').');
+            porConsulta[indice] = [];
+            unsubscribes[indice]?.();
+            publicar();
+            return;
+          }
+          // Antes esse erro era engolido em silêncio — foi assim que o bug
+          // do índice/query faltando (ver comentário acima) passou
+          // despercebido: a tela seguia mostrando só o cache local, sem
+          // nenhum aviso de que a sincronização com o servidor tinha parado.
+          console.error("Falha ao sincronizar inspeções com o Firestore:", err);
+          setLoading(false);
+        });
       });
-      return () => unsubscribe();
+      return () => unsubscribes.forEach((u) => u());
     } else {
       setLoading(false);
     }
@@ -553,6 +583,35 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
     }
   }, [db, configError]);
 
+  /**
+   * COMPARTILHAR A EDIÇÃO DE UM ROTEIRO/RELATÓRIO EM ANDAMENTO.
+   *
+   * Mesmo mecanismo de compartilharIntimacao (use-intimacoes.ts) — quem for
+   * marcado passa a ver esta inspeção na lista dele e pode editar e assinar
+   * junto, não só o fiscalId original. Os nomes viajam com os uids pra tela
+   * mostrar "compartilhado com Fulano" sem consultar `users` de novo,
+   * inclusive offline.
+   */
+  const compartilharInspecao = useCallback(async (
+    id: string,
+    colegas: { uid: string; nome: string }[],
+  ) => {
+    const stringId = String(id);
+    const uids = colegas.map(c => c.uid);
+
+    setInspecoes(prev => {
+      const updated = prev.map(i => String(i.id) === stringId ? { ...i, compartilhadoCom: uids, compartilhadoComNomes: colegas } : i);
+      salvarCacheColecao(LOCAL_STORAGE_KEY, updated, 'ultimos');
+      return updated;
+    });
+
+    if (!db || configError) return { synced: false };
+    const r = await attemptFirestoreWrite(
+      setDoc(doc(db, "inspecoes", stringId), { compartilhadoCom: uids, compartilhadoComNomes: colegas }, { merge: true })
+    );
+    return { synced: r.synced };
+  }, [db, configError]);
+
   return {
     inspecoes,
     saveInspecao,
@@ -561,6 +620,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
     bulkDelete,
     permanentDelete,
     toggleFavorito,
+    compartilharInspecao,
     loading,
     isOnline,
     needsMunicipioSelection,

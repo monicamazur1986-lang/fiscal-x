@@ -165,6 +165,16 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const pas = useMemo(() => processos.find(p => p.id === id), [processos, id]);
   const isGestor = profile?.role === 'admin' || profile?.role === 'root';
   const isAutuante = pas?.autuanteUid === profile?.uid;
+  // Colega com quem o PAS foi compartilhado (ver compartilharComAutoridades
+  // em use-intimacoes.ts, e handleCriarPas em pas/page.tsx, que copia
+  // compartilhadoCom do Auto de Infração pro PAS que nasce dele) — antes só
+  // dava LEITURA, igual num acervo qualquer; ele via o processo mas nenhum
+  // botão de ação aparecia, porque essas checagens não incluíam
+  // compartilhadoCom. Autuações (intimações) já tratam o colega
+  // compartilhado como o próprio autor pode editar/assinar; o PAS passa a
+  // seguir a mesma regra.
+  const souCompartilhado = !!profile?.uid && !!pas?.compartilhadoCom?.includes(profile.uid);
+  const podeAgirNoPas = isGestor || isAutuante || pas?.responsavelAtualUid === profile?.uid || souCompartilhado;
 
   // A TRILHA ATÉ A VISTORIA
   //
@@ -685,14 +695,14 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   // do autuante — inconsistente deixar essa pessoa emitir despacho e
   // registrar defesa, mas não conseguir corrigir uma peça lavrada errada
   // nem usar "Voltar etapa" (ver podeEncaminhar, mesmo raciocínio).
-  const podeExcluirPeca = isGestor || isAutuante || pas?.responsavelAtualUid === profile?.uid;
+  const podeExcluirPeca = podeAgirNoPas;
   // "Fazer o colega assumir o PAS no meu lugar" é isso: encaminhar já não é
   // trava de permissão nenhuma (ver PasEncaminharDialog — a regra do
   // Firestore já aceita responsavelAtualUid pra agir), só faltava o próprio
   // autuante (não só o gestor) conseguir chamar a caixa. Quem já está com a
   // "vez" (encaminhado antes) também pode passar adiante — permite uma
   // cadeia de encaminhamentos, não só um handoff único do dono.
-  const podeEncaminhar = isGestor || isAutuante || pas?.responsavelAtualUid === profile?.uid;
+  const podeEncaminhar = podeAgirNoPas;
 
   const handleExcluirPeca = async () => {
     if (!pecaParaExcluir || !pas) return;
@@ -1528,7 +1538,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             // ato formal da Instauração, não algo automático — a autoridade
             // confirma o que está entrando nos autos antes de seguir. Só
             // depois disso "Iniciar Instrução" libera (ver temDocumentoOrigem).
-            (isAutuante || pas.responsavelAtualUid === profile?.uid) ? (
+            podeAgirNoPas ? (
               <div className="space-y-5">
                 <div className={cn("flex items-start gap-3 pb-4", !temDocumentoOrigem && "border-b border-[#F1EEE4]")}>
                   <span className={cn("h-6 w-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-black mt-0.5", temDocumentoOrigem ? "bg-[#E3F1EA] text-[#1F7A5C]" : "bg-[#F5F2EA] text-[#A39D8C]")}>
