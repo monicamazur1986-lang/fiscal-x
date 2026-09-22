@@ -144,6 +144,22 @@ async function prepararImagens(folha: HTMLElement): Promise<void> {
             // necessário e só atrapalharia a releitura do cache.
             img.setAttribute('src', alvo);
             img.removeAttribute('crossorigin');
+            // Mesmo bug do brasão em generate-intimacao-pdf.tsx: o
+            // html2canvas não recalcula `object-fit: contain` na captura, e
+            // uma assinatura manuscrita (traços altos/baixos, fora do
+            // "quadrado" do object-fit) saía cortada. Aqui a imagem já
+            // carregada (`teste`) dá o tamanho natural de verdade — fixa
+            // largura/altura em pixel (não depende de object-fit nenhum na
+            // hora do html2canvas desenhar).
+            if (img.hasAttribute('data-assinatura') && teste.naturalWidth && teste.naturalHeight) {
+              const alturaMaxPx = 64; // h-16
+              const altura = Math.min(alturaMaxPx, teste.naturalHeight);
+              const largura = (teste.naturalWidth / teste.naturalHeight) * altura;
+              img.style.height = `${altura}px`;
+              img.style.width = `${largura}px`;
+              img.style.maxWidth = 'none';
+              img.style.objectFit = 'fill';
+            }
             resolve();
           };
           teste.onerror = () => {

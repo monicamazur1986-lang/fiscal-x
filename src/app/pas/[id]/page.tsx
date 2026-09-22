@@ -2392,7 +2392,13 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
               <div data-pdf-block className="mt-10 mb-6 text-center space-y-7" style={{ fontFamily: "'Times New Roman', Times, serif" }}>
                 <p className="text-[10pt]">{nomeMunicipioExibicao.toUpperCase()}, {format(new Date(peca.criadoEm), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}.</p>
                 {peca.assinaturaUrl && (
-                  <img src={peca.assinaturaUrl} alt="Assinatura" className="h-16 mx-auto object-contain" />
+                  // data-assinatura: o html2canvas não recalcula object-fit
+                  // corretamente na captura (mesmo bug já contornado pro
+                  // brasão em generate-intimacao-pdf.tsx) — sem isso, os
+                  // traços mais altos/baixos da assinatura manuscrita saíam
+                  // cortados no PDF. renderPasIntoPdf mede a imagem e fixa
+                  // largura/altura em pixel antes de capturar.
+                  <img data-assinatura src={peca.assinaturaUrl} alt="Assinatura" className="h-16 mx-auto object-contain" />
                 )}
                 <div className="pt-1 mx-auto w-full max-w-[280px] border-t border-black">
                   <p className="font-bold uppercase text-[10pt] mt-1">{peca.criadoPorNome}</p>
