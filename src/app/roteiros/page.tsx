@@ -1,10 +1,11 @@
 "use client"
 
 import { useMemo } from "react"
-import { ClipboardList, FolderClock, FolderCheck } from "lucide-react"
+import { ClipboardList, FolderClock, FolderCheck, Users } from "lucide-react"
 
 import { MenuHub, type CartaoHub } from "@/components/menu-hub"
 import { useInspecoes } from "@/hooks/use-inspecoes"
+import { useAuth } from "@/hooks/use-auth"
 
 /**
  * Tela-menu do módulo Roteiros. Antes, entrar em "Roteiros" jogava a pessoa
@@ -15,14 +16,19 @@ import { useInspecoes } from "@/hooks/use-inspecoes"
  */
 export default function RoteirosHubPage() {
   const { inspecoes } = useInspecoes();
+  const { profile } = useAuth();
 
   const contagens = useMemo(() => {
     const vivas = inspecoes.filter((i) => !i.deleted);
+    const meuUid = profile?.uid;
     return {
       emAndamento: vivas.filter((i) => i.status === 'rascunho').length,
       relatorios: vivas.filter((i) => i.status === 'concluido').length,
+      // Vindas de colega: recorte por origem, então cruzam os outros dois
+      // (uma compartilhada em rascunho conta aqui e em "Em Andamento").
+      compartilhados: meuUid ? vivas.filter((i) => (i.compartilhadoCom || []).includes(meuUid)).length : 0,
     };
-  }, [inspecoes]);
+  }, [inspecoes, profile?.uid]);
 
   const cartoes: CartaoHub[] = [
     {
@@ -48,6 +54,14 @@ export default function RoteirosHubPage() {
       icon: FolderCheck,
       color: "#6B4C80",
       contagem: contagens.relatorios,
+    },
+    {
+      href: "/roteiros/compartilhados",
+      label: "Compartilhados Comigo",
+      descricao: "Roteiros e relatórios que um colega dividiu com você para editar junto.",
+      icon: Users,
+      color: "#7A4F9C",
+      contagem: contagens.compartilhados,
     },
   ];
 

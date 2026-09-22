@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Suspense } from "react"
-import { Plus, Loader2, ChevronRight, Building2, Archive, Folder, FolderPlus } from "lucide-react"
+import { Plus, Loader2, ChevronRight, Building2, Archive, Folder, FolderPlus, Users } from "lucide-react"
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
@@ -56,9 +56,19 @@ function PasPageInner() {
 
   const processosFiltrados = useMemo(() => {
     if (filtro === 'arquivados') return processos.filter((p) => p.arquivado);
+    if (filtro === 'compartilhados') return processos.filter((p) => !p.arquivado && p.compartilhadoCom?.includes(profile?.uid || ''));
     if (filtro === 'todos') return processos.filter((p) => !p.arquivado);
     return processos.filter((p) => !p.arquivado && p.folderId === filtro);
-  }, [processos, filtro]);
+  }, [processos, filtro, profile?.uid]);
+
+  // Quantos processos foram compartilhados com você (por uma colega que
+  // marcou você em CompartilharEdicaoDialog do AI de origem) — só pra saber
+  // se vale mostrar o filtro; sem nenhum, não faz sentido ocupar espaço na
+  // faixa com um botão que nunca teria o que exibir.
+  const totalCompartilhados = useMemo(
+    () => processos.filter((p) => !p.arquivado && p.compartilhadoCom?.includes(profile?.uid || '')).length,
+    [processos, profile?.uid]
+  );
 
   // A lista era cronológica e plana: num município com trinta processos
   // abertos, descobrir de qual cuidar exigia abrir um por um. O que decide a
@@ -288,6 +298,11 @@ function PasPageInner() {
                   <Folder className="h-3.5 w-3.5" /> {f.name}
                 </FiltroPastaPas>
               ))}
+              {totalCompartilhados > 0 && (
+                <FiltroPastaPas ativa={filtro === 'compartilhados'} onClick={() => setFiltro('compartilhados')}>
+                  <Users className="h-3.5 w-3.5" /> Compartilhados comigo <span className="tabular-nums opacity-60">{totalCompartilhados}</span>
+                </FiltroPastaPas>
+              )}
               <FiltroPastaPas ativa={filtro === 'arquivados'} tom="arquivados" onClick={() => setFiltro('arquivados')}>
                 <Archive className="h-3.5 w-3.5" /> Arquivados <span className="tabular-nums opacity-60">{processos.filter((p) => p.arquivado).length}</span>
               </FiltroPastaPas>

@@ -215,8 +215,15 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
   // Vistorias no recorte pedido: 'concluido' são os relatórios prontos,
   // 'rascunho' são as inspeções que o fiscal deixou pela metade.
   const relatorios = useMemo(
-    () => (escopo === 'relatorios' ? inspecoes.filter(i => i.status === situacao) : []),
-    [inspecoes, escopo, situacao]
+    () => {
+      if (escopo !== 'relatorios') return [];
+      if (situacao === 'compartilhadas') {
+        const meuUid = profile?.uid;
+        return meuUid ? inspecoes.filter(i => (i.compartilhadoCom || []).includes(meuUid)) : [];
+      }
+      return inspecoes.filter(i => i.status === situacao);
+    },
+    [inspecoes, escopo, situacao, profile?.uid]
   );
   const autuacoes = useMemo(
     () => {
@@ -918,7 +925,11 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                 const isRelatorio = item.kind === 'relatorio';
                 const intimacao = item.intimacao;
                 const deadline = intimacao ? calculateDeadline(intimacao) : null;
-                const isFinal = isRelatorio ? situacao === 'concluido' : intimacao?.status === 'finalizado';
+                // Checa o status de cada item, não a situação do filtro — em
+                // "Compartilhadas comigo" os itens não são todos do mesmo
+                // status (mistura rascunho e concluído), diferente dos
+                // demais filtros, onde a lista inteira já é homogênea.
+                const isFinal = isRelatorio ? item.inspecao?.status === 'concluido' : intimacao?.status === 'finalizado';
 
                 return (
                   <div
@@ -966,7 +977,7 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                                     onde convivem documentos de estados diferentes. */}
                                 {activeFolderId === 'trash' && (
                                   <Badge variant="outline" className={cn("text-[10px] font-medium h-4 px-1.5 border-none", isFinal ? "bg-[#E3F1EA] text-[#1F7A5C]" : "bg-amber-50 text-amber-700")}>
-                                      {isRelatorio ? (situacao === 'rascunho' ? 'Em andamento' : 'Relatório') : (isFinal ? 'Final' : 'Rascunho')}
+                                      {isRelatorio ? (isFinal ? 'Relatório' : 'Em andamento') : (isFinal ? 'Final' : 'Rascunho')}
                                   </Badge>
                                 )}
                                 {/* Nas listas gerais as compartilhadas aparecem
