@@ -381,6 +381,12 @@ export type Pas = {
    * tem numeração própria separada da autuação que o originou. */
   numeroProcesso: string;
   autoInfracaoId: string;
+  /** Autuação (Intimacao) real do Termo de Imposição de Penalidade, gerada
+   * em Autuações (mesmo mecanismo do "Gerar Termo de Intimação" do
+   * roteiro) — ver handleEncaminharTip em pas/[id]/page.tsx. Fica pendente
+   * de assinatura até handleAnexarTip trazer o PDF dela pros autos como a
+   * peça 'termo_imposicao_penalidade'. */
+  tipAutuacaoId?: string;
   /** Quem estava na inspeção já acompanha o PAS, sem precisar de
    * encaminhamento manual — copiado do compartilhadoCom do próprio Auto de
    * Infração no instante em que o PAS é aberto (ver compartilharComAutoridades

@@ -53,6 +53,18 @@ export interface PasPecaRevisao {
    * não resolveria o problema de perder o que foi digitado.
    */
   chaveRascunho?: string;
+  /**
+   * true quando esta revisão é do modo "já pronto (anexar PDF)" do
+   * Relatório/Julgamento (modoRelatorio/modoJulgamento === 'anexo') — o
+   * texto na folha é só uma legenda fixa de juntada, o documento de
+   * verdade é o arquivo. Sem isto, o botão de anexar ficava escondido no
+   * fim do painel, depois da assinatura, do mesmo jeito pra toda revisão —
+   * ninguém reparava que ali era o lugar de anexar o PDF do julgamento/
+   * relatório já pronto. Com isto: o anexo vira o primeiro campo do
+   * painel, com destaque, texto específico, e passa a ser exigido pra
+   * confirmar (não basta assinar a legenda sem anexar nada — ver
+   * podeConfirmar). */
+  modoAnexo?: boolean;
   /** Grava o texto atual como rascunho (sem assinatura, sem gerar peça de
    * verdade) — quem chama decide onde guardar (ver salvarRascunhoPeca em
    * pas/[id]/page.tsx). Ausente junto com chaveRascunho quando esta revisão
@@ -124,7 +136,12 @@ export function PasPecaReviewDialog({
 
   if (!revisao) return null;
 
-  const podeConfirmar = !!assinaturaUrl || assinadoForaDoSistema || !!anexoExternoFile;
+  // Modo anexo: a legenda da folha não é o documento, o arquivo é — assinar
+  // só a legenda sem anexar nada gravaria uma peça de julgamento/relatório
+  // sem conteúdo real nenhum. Por isso aqui as duas coisas são exigidas.
+  const podeConfirmar = revisao.modoAnexo
+    ? !!anexoExternoFile && (!!assinaturaUrl || assinadoForaDoSistema)
+    : !!assinaturaUrl || assinadoForaDoSistema || !!anexoExternoFile;
   // Meio-dia local (não meia-noite UTC) — "2026-08-10" interpretado como UTC
   // vira 09/08 à noite no horário do Brasil, o que dataria a peça um dia
   // antes do escolhido (mesmo cuidado já usado em defesaData, pas/[id]/page.tsx).
@@ -158,7 +175,9 @@ export function PasPecaReviewDialog({
         <DialogHeader>
           <DialogTitle className="font-serif">{revisao.titulo}</DialogTitle>
           <DialogDescription>
-            Revise e ajuste o texto se precisar. Depois, assine na tela, marque que vai assinar no papel, ou anexe o documento já pronto — sem uma dessas três coisas, a peça não é gravada.
+            {revisao.modoAnexo
+              ? 'Anexe o documento pronto e assine (na tela ou no papel) — sem os dois, a peça não é gravada.'
+              : 'Revise e ajuste o texto se precisar. Depois, assine na tela, marque que vai assinar no papel, ou anexe o documento já pronto — sem uma dessas três coisas, a peça não é gravada.'}
             {podeSalvarRascunho && ' Falta algo pra concluir agora? "Salvar rascunho" guarda o texto sem assinar, pra continuar depois.'}
           </DialogDescription>
         </DialogHeader>
@@ -215,6 +234,31 @@ export function PasPecaReviewDialog({
         </div>
 
         <div className="space-y-2.5 py-2 border-t border-[#E4DFD1]">
+          {/* Modo "já pronto (anexar PDF)": o campo de anexo é a AÇÃO
+              principal desta revisão, não um fallback discreto no fim do
+              painel — sem isto, ficava depois da assinatura, igual pra toda
+              revisão, e ninguém reparava que era ali que se anexava o
+              julgamento/relatório pronto (ver podeConfirmar acima). */}
+          {revisao.modoAnexo && (
+            <div className="rounded-lg border-2 border-[#0E4A44]/30 bg-[#0E4A44]/5 p-3 space-y-2">
+              <p className="text-xs font-bold text-[#0E4A44]">Anexe aqui o documento pronto</p>
+              <p className="text-[11px] text-[#3E5B57]">
+                O texto na folha acima é só a legenda de juntada — o {revisao.titulo.toLowerCase()} em si é o arquivo que você anexa abaixo.
+              </p>
+              <input ref={anexoExternoRef} type="file" className="hidden" onChange={(e) => setAnexoExternoFile(e.target.files?.[0] || undefined)} />
+              {anexoExternoFile ? (
+                <span className="inline-flex items-center gap-2 bg-white border border-[#0E4A44]/30 rounded px-2 py-1.5 text-xs text-[#0E4A44]">
+                  <Paperclip className="h-3.5 w-3.5" /> {anexoExternoFile.name}
+                  <button type="button" onClick={() => setAnexoExternoFile(undefined)}><X className="h-3 w-3 text-[#A39D8C] hover:text-rose-500" /></button>
+                </span>
+              ) : (
+                <Button type="button" onClick={() => anexoExternoRef.current?.click()} className="h-9 rounded-md text-xs gap-1.5 bg-[#0E4A44] hover:bg-[#0B3A35]">
+                  <Paperclip className="h-3.5 w-3.5" /> Escolher arquivo
+                </Button>
+              )}
+            </div>
+          )}
+
           {/* Pré-preenchida com hoje, mas editável — sem isso, montar o
               processo com atraso (comum na prática) fazia toda peça sair
               datada do dia em que alguém finalmente sentou pra digitar os
@@ -260,20 +304,22 @@ export function PasPecaReviewDialog({
             Já foi (ou vai ser) assinado no papel, fora do sistema — não travar aqui esperando assinatura digital.
           </label>
 
-          <div className="pt-2 border-t border-[#F1EEE4]">
-            <p className="text-[11px] text-[#8A8474] mb-1.5">Ou, se essa etapa já foi feita fora do sistema (documento pronto, escaneado):</p>
-            <input ref={anexoExternoRef} type="file" className="hidden" onChange={(e) => setAnexoExternoFile(e.target.files?.[0] || undefined)} />
-            {anexoExternoFile ? (
-              <span className="inline-flex items-center gap-2 bg-[#F5F2EA] rounded px-2 py-1.5 text-xs text-[#6B6659]">
-                <Paperclip className="h-3.5 w-3.5" /> {anexoExternoFile.name}
-                <button type="button" onClick={() => setAnexoExternoFile(undefined)}><X className="h-3 w-3 text-[#A39D8C] hover:text-rose-500" /></button>
-              </span>
-            ) : (
-              <Button type="button" variant="outline" size="sm" onClick={() => anexoExternoRef.current?.click()} className="h-8 rounded-md text-xs gap-1.5">
-                <Paperclip className="h-3.5 w-3.5" /> Anexar documento pronto
-              </Button>
-            )}
-          </div>
+          {!revisao.modoAnexo && (
+            <div className="pt-2 border-t border-[#F1EEE4]">
+              <p className="text-[11px] text-[#8A8474] mb-1.5">Ou, se essa etapa já foi feita fora do sistema (documento pronto, escaneado):</p>
+              <input ref={anexoExternoRef} type="file" className="hidden" onChange={(e) => setAnexoExternoFile(e.target.files?.[0] || undefined)} />
+              {anexoExternoFile ? (
+                <span className="inline-flex items-center gap-2 bg-[#F5F2EA] rounded px-2 py-1.5 text-xs text-[#6B6659]">
+                  <Paperclip className="h-3.5 w-3.5" /> {anexoExternoFile.name}
+                  <button type="button" onClick={() => setAnexoExternoFile(undefined)}><X className="h-3 w-3 text-[#A39D8C] hover:text-rose-500" /></button>
+                </span>
+              ) : (
+                <Button type="button" variant="outline" size="sm" onClick={() => anexoExternoRef.current?.click()} className="h-8 rounded-md text-xs gap-1.5">
+                  <Paperclip className="h-3.5 w-3.5" /> Anexar documento pronto
+                </Button>
+              )}
+            </div>
+          )}
         </div>
 
         <DialogFooter className="flex-wrap gap-2 sm:justify-between">

@@ -233,6 +233,9 @@ export function usePasPecas(pasId: string | null) {
     tipo: PasPecaTipo; titulo: string; conteudoHtml: string; anexoUrl?: string; assinaturaUrl?: string;
     assinadoForaDoSistema?: boolean; refPecaId?: string; refPecaNumero?: number;
     anexosAdicionais?: { url: string; nome: string }[];
+    /** Liga a peça à autuação (Intimacao) real que a originou — ex.: o TIP
+     *  gerado como autuação própria (ver handleEncaminharTip em pas/[id]). */
+    origemIntimacaoId?: string;
     /** Data do ato (ISO) escolhida na revisão da peça (ver PasPecaReviewDialog)
      * — sem isso, um processo montado com atraso saía com toda peça datada do
      * dia em que alguém sentou pra digitar os autos, em vez do dia real de
@@ -270,6 +273,7 @@ export function usePasPecas(pasId: string | null) {
         ...(item.assinadoForaDoSistema ? { assinadoForaDoSistema: true } : {}),
         ...(item.refPecaId ? { refPecaId: item.refPecaId } : {}),
         ...(item.refPecaNumero !== undefined ? { refPecaNumero: item.refPecaNumero } : {}),
+        ...(item.origemIntimacaoId ? { origemIntimacaoId: item.origemIntimacaoId } : {}),
         criadoPorUid: profile.uid,
         criadoPorNome: profile.displayName || 'Fiscal',
         criadoEm: item.criadoEm || new Date().toISOString(),

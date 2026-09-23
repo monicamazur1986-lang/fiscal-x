@@ -7,7 +7,7 @@ import { ptBR } from "date-fns/locale"
 import {
   Loader2, Timer, FileStack, Send, Paperclip, CheckCircle2,
   AlertTriangle, ChevronDown, Download, X, FileDown, Landmark, Pencil, Trash2,
-  Sparkles, MoreHorizontal, Eye, Undo2, Save,
+  Sparkles, MoreHorizontal, Eye, Undo2, Save, ExternalLink,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
@@ -37,6 +37,7 @@ import { useAppConfig } from "@/hooks/use-app-config"
 import { useToast } from "@/hooks/use-toast"
 import { addPrazo, calculateDeadline } from "@/lib/prazo"
 import { baseLegalDoMunicipio } from "@/lib/base-legal-municipal"
+import { prazoTextoDoTipo } from "@/lib/schema"
 import { criarLembretePrazo, cancelarLembretePrazo } from "@/lib/prazo-lembrete"
 import { storage } from "@/lib/firebase"
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage"
@@ -55,7 +56,6 @@ import {
   textoDespachoEncerramentoInstrucao,
   textoAdmissibilidadeJulgamento,
   textoDespachoEncaminhamentoTip,
-  textoTermoImposicaoPenalidade,
   textoTermoRetificacao,
   PAS_PECA_TITULOS,
   PAS_FASE_LABEL,
@@ -134,8 +134,16 @@ function sugerirNomeDocumento(nomeArquivo: string): string {
  * documento anexado em si, não a legenda com timbre/assinatura do PAS por
  * cima dele. NÃO vale para um Termo de Juntada de verdade (tipo
  * 'termo_juntada'): ali o texto é o próprio ato assinado que precede um
- * documento SEPARADO, então importa de verdade. */
-function ehPecaSoLegendaDeAnexo(peca: { tipo: PasPecaTipo; titulo: string }): boolean {
+ * documento SEPARADO, então importa de verdade.
+ *
+ * Também vale para o TIP gerado como autuação de verdade (handleAnexarTip):
+ * o texto/assinatura já são os da autuação lavrada em Autuações, e o que
+ * entra nos autos do PAS é o PDF dela — sem isso, o PAS empilharia uma
+ * capa vazia do sistema por cima do documento real. Um TIP antigo (peças
+ * criadas antes deste mecanismo, texto redigido direto na peça) não tem
+ * anexoUrl e continua exibido como texto normal. */
+function ehPecaSoLegendaDeAnexo(peca: { tipo: PasPecaTipo; titulo: string; anexoUrl?: string }): boolean {
+  if (peca.tipo === 'termo_imposicao_penalidade' && !!peca.anexoUrl) return true;
   return peca.tipo !== 'termo_juntada' && peca.titulo.startsWith(`${PAS_PECA_TITULOS.termo_juntada} — `);
 }
 
@@ -163,6 +171,18 @@ async function uploadArquivoPas(pas: { id: string; municipioId: string }, file: 
   }
 }
 
+/** PDF já gerado a partir de uma autuação de verdade (ex.: o TIP lavrado em
+ * Autuações, ver handleAnexarTip) — mesmo caminho de uploadArquivoPas, mas a
+ * partir de um Blob já pronto, sem passar pela compressão de imagem (que só
+ * se aplica a foto). */
+async function uploadPdfBlobPas(pas: { id: string; municipioId: string }, nomeArquivo: string, blob: Blob): Promise<string> {
+  if (!storage) throw new Error('Storage indisponível.');
+  const path = `pas/${pas.municipioId}/${pas.id}/${nomeArquivo}`;
+  const ref = storageRef(storage, path);
+  await uploadBytes(ref, blob);
+  return await getDownloadURL(ref);
+}
+
 export default function PasDetalhePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -171,7 +191,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const { processos, loading: loadingPas, atualizarPas, excluirPas, anexarDocumentosOrigemAoPas } = usePas();
   const { pecas, loading: loadingPecas, adicionarPeca, adicionarPecas, excluirPeca, corrigirTextoNasPecas } = usePasPecas(id);
   const { inspecoes, saveInspecao, deleteInspecao } = useInspecoes();
-  const { intimacoes, updateIntimacaoMeta } = useIntimacoes();
+  const { intimacoes, updateIntimacaoMeta, saveIntimacao, generateNewNumeroProcesso } = useIntimacoes();
   const { config } = useAppConfig({ municipioIdOverride: profile?.municipioId });
 
   const pas = useMemo(() => processos.find(p => p.id === id), [processos, id]);
@@ -197,6 +217,13 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const autoInfracao = useMemo(
     () => intimacoes.find(i => String(i.id) === String(pas?.autoInfracaoId)),
     [intimacoes, pas?.autoInfracaoId]
+  );
+  // O TIP, quando já gerado como autuação de verdade em Autuações (ver
+  // handleEncaminharTip), mas ainda não assinado/anexado aos autos (ver
+  // handleAnexarTip) — pas.tipAutuacaoId aponta pra ele enquanto isso.
+  const tipAutuacao = useMemo(
+    () => intimacoes.find(i => String(i.id) === String(pas?.tipAutuacaoId)),
+    [intimacoes, pas?.tipAutuacaoId]
   );
   // Objeto cru (Intimacao) do termo vinculado — usado pra gerar o PDF real
   // dele (ver handleAnexarDocumentosOrigem). `termoVinculado` abaixo é só a
@@ -636,6 +663,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const [modoJulgamento, setModoJulgamento] = useState<'sistema' | 'anexo'>('sistema');
   const [isEmitindoJulgamento, setIsEmitindoJulgamento] = useState(false);
   const [isEncaminhandoTip, setIsEncaminhandoTip] = useState(false);
+  const [isAnexandoTip, setIsAnexandoTip] = useState(false);
   const [isArquivando, setIsArquivando] = useState(false);
   const [isVoltandoEtapa, setIsVoltandoEtapa] = useState(false);
 
@@ -949,6 +977,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
     setRevisao({
       titulo: tituloPeca,
       conteudoInicial: modoJulgamento === 'anexo' ? julgamentoHtml : (pas.rascunhosPecas?.[chaveRascunho]?.conteudoHtml || julgamentoHtml),
+      modoAnexo: modoJulgamento === 'anexo',
       // Rascunho só faz sentido no modo "sistema" — no modo "anexo" o
       // documento já está pronto, não há redação em andamento pra guardar.
       ...(modoJulgamento === 'sistema' ? { chaveRascunho, onSalvarRascunho: salvarRascunhoPeca } : {}),
@@ -993,35 +1022,49 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       onConfirmar: async (conteudoFinal, { assinaturaUrl, assinadoForaDoSistema, anexoExternoFile, dataAto }) => {
         setIsEncaminhandoTip(true);
         try {
-          // O prazo recursal conta a partir da CIÊNCIA da decisão — a data do
-          // ato escolhida na revisão (não "hoje"), pra o TIP não sair com um
-          // prazo calculado do dia em que alguém sentou pra digitar os autos
-          // quando o processo é montado com atraso. Por isso o cálculo (e o
-          // texto do TIP, que o cita) só acontece aqui, depois de a data ser
-          // escolhida — nunca antes de abrir a revisão.
-          const baseLegal = baseLegalDoMunicipio(profile?.municipioId);
-          const dataDoAto = new Date(dataAto);
-          const prazoRecursal = addPrazo(dataDoAto, baseLegal.recurso.dias, baseLegal.contagemPrazo);
-          const prazoRecursalFormatada = format(prazoRecursal, "dd/MM/yyyy");
-          const prazoRecursalMultaData = baseLegal.recurso.diasMulta
-            ? format(addPrazo(dataDoAto, baseLegal.recurso.diasMulta, baseLegal.contagemPrazo), "dd/MM/yyyy")
-            : undefined;
           const anexoUrl = await uploadAnexoExterno(pas, anexoExternoFile);
           await adicionarPecas([
             { tipo: 'despacho_encaminhamento_tip', titulo: PAS_PECA_TITULOS.despacho_encaminhamento_tip, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto },
-            { tipo: 'termo_imposicao_penalidade', titulo: PAS_PECA_TITULOS.termo_imposicao_penalidade, conteudoHtml: textoTermoImposicaoPenalidade({ numeroAI: pas.numeroProcesso, prazoRecursalData: prazoRecursalFormatada, prazoRecursalMultaData, municipioId: profile?.municipioId }), criadoEm: dataAto },
           ]);
-          const lembreteId = await criarLembretePrazo(saveInspecao, {
-            titulo: `Prazo recursal (PAS) vence em breve — ${pas.estabelecimento.fantasia}`,
-            prazoISO: prazoRecursal.toISOString(),
-            fiscalId: pas.autuanteUid,
-            fiscalNome: pas.autuanteNome,
-            municipioId: profile!.municipioId,
-            origemHref: `/pas/${pas.id}`,
-          });
-          await atualizarPas(pas.id, { fase: 'recursal', agendaLembreteId: lembreteId });
+          // O TIP passa a nascer como AUTUAÇÃO DE VERDADE em Autuações — mesmo
+          // mecanismo do "Gerar Termo de Intimação" do roteiro (ver
+          // GerarIntimacaoDialog) — e não mais como texto redigido direto
+          // aqui. Fica RASCUNHO até o fiscal completar/assinar em Autuações;
+          // handleAnexarTip traz o PDF dela pros autos quando estiver pronta.
+          // Prazo/data de ciência ficam de fora daqui de propósito: só se
+          // sabe a data real de ciência quando o TIP for de fato entregue,
+          // lá em Autuações — não no instante deste despacho interno.
+          const numeroProcesso = await generateNewNumeroProcesso();
+          const resultado = await saveIntimacao({
+            numeroProcesso,
+            tipoTermo: 'TERMO DE IMPOSIÇÃO DE PENALIDADE',
+            status: 'rascunho',
+            autor: pas.estabelecimento.fantasia,
+            reu: autoInfracao?.reu || '',
+            reuCargo: autoInfracao?.reuCargo || '',
+            responsavelLegalIdentidade: autoInfracao?.responsavelLegalIdentidade || '',
+            cnpj: pas.estabelecimento.cnpj || autoInfracao?.cnpj || '',
+            endereco: pas.estabelecimento.endereco || autoInfracao?.endereco || '',
+            bairro: autoInfracao?.bairro || '',
+            telefone: autoInfracao?.telefone || '',
+            cnae: autoInfracao?.cnae || '',
+            prazo: prazoTextoDoTipo('TERMO DE IMPOSIÇÃO DE PENALIDADE', config.autuacaoTextos, profile?.municipioId),
+            teor: `Em decorrência do julgamento em 1ª instância proferido no Processo Administrativo Sanitário nº <strong>${pas.numeroProcesso}</strong> (Auto de Infração nº <strong>${autoInfracao?.numeroProcesso || pas.numeroProcesso}</strong>), fica imposta ao autuado a seguinte penalidade:<br><br><mark>[DESCREVER A PENALIDADE APLICADA, COM O RESPECTIVO VALOR/PRAZO SE FOR O CASO]</mark>`,
+            dataIntimacao: new Date(dataAto),
+            // Mesmo campo que Termo de Interdição/Apreensão usam pra se ligar
+            // ao Auto de Infração lavrado junto (ver AutuacaoTextos e
+            // documentoOrigemId em schema.ts) — o TIP é, do mesmo jeito, um
+            // documento amarrado ao AI que o originou.
+            autoInfracaoVinculadaId: pas.autoInfracaoId,
+          } as any);
+          const tipId = String(resultado?.id ?? '');
+          // pasId não é campo do schema da autuação (some em silêncio se
+          // for junto no saveIntimacao acima, mesmo problema que o
+          // inspecaoId já teve) — updateIntimacaoMeta grava por fora dele.
+          if (tipId) await updateIntimacaoMeta(tipId, { pasId: pas.id });
+          await atualizarPas(pas.id, { tipAutuacaoId: tipId });
           await limparRascunhoPeca(chaveRascunho);
-          toast({ title: "TIP emitido — prazo recursal em andamento" });
+          toast({ title: `TIP nº ${numeroProcesso} criado em Autuações — abra para completar e assinar` });
           await limparEncaminhamento();
           setRevisao(null);
         } catch (e) {
@@ -1032,6 +1075,52 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         }
       },
     });
+  };
+
+  // Depois do TIP assinado/finalizado em Autuações (tipAutuacao), traz o PDF
+  // real dele pros autos do PAS — mesmos moldes do Auto de Infração e do
+  // termo vinculado em handleAnexarDocumentosOrigem: o documento que entra
+  // nos autos é o PDF da autuação de verdade, não um texto redigido aqui. A
+  // prescrição do prazo recursal só é calculada aqui, a partir da ciência
+  // real do TIP (dataRecebimento, quando preenchida; senão dataIntimacao) —
+  // nunca da data do despacho interno que encaminhou pra TIP.
+  const handleAnexarTip = async () => {
+    if (!pas || !tipAutuacao) return;
+    setIsAnexandoTip(true);
+    try {
+      const blob = await gerarPdfBlobDeIntimacao(tipAutuacao, config);
+      const anexoUrl = await uploadPdfBlobPas(pas, `tip_${tipAutuacao.id}.pdf`, blob);
+
+      const baseLegal = baseLegalDoMunicipio(profile?.municipioId);
+      const dataCiencia = tipAutuacao.dataRecebimento
+        ? new Date(tipAutuacao.dataRecebimento)
+        : new Date(tipAutuacao.dataIntimacao);
+      const prazoRecursal = addPrazo(dataCiencia, baseLegal.recurso.dias, baseLegal.contagemPrazo);
+
+      await adicionarPecas([{
+        tipo: 'termo_imposicao_penalidade',
+        titulo: `${PAS_PECA_TITULOS.termo_imposicao_penalidade} nº ${tipAutuacao.numeroProcesso}`,
+        conteudoHtml: '',
+        anexoUrl,
+        origemIntimacaoId: tipAutuacao.id,
+        assinadoForaDoSistema: true,
+      }]);
+      const lembreteId = await criarLembretePrazo(saveInspecao, {
+        titulo: `Prazo recursal (PAS) vence em breve — ${pas.estabelecimento.fantasia}`,
+        prazoISO: prazoRecursal.toISOString(),
+        fiscalId: pas.autuanteUid,
+        fiscalNome: pas.autuanteNome,
+        municipioId: profile!.municipioId,
+        origemHref: `/pas/${pas.id}`,
+      });
+      await atualizarPas(pas.id, { fase: 'recursal', agendaLembreteId: lembreteId });
+      toast({ title: "TIP anexado aos autos — prazo recursal em andamento" });
+    } catch (e) {
+      console.error('Erro ao anexar o TIP aos autos do PAS:', e);
+      toast({ variant: "destructive", title: "Erro ao anexar o TIP", description: descreverErro(e) });
+    } finally {
+      setIsAnexandoTip(false);
+    }
   };
 
   const handleArquivarProcesso = async () => {
@@ -1222,6 +1311,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       setRevisao({
         titulo: tituloPeca,
         conteudoInicial: relatorioHtml,
+        modoAnexo: modoRelatorio === 'anexo',
         // Rascunho só faz sentido no modo "sistema" — no modo "anexo" não
         // há redação em andamento pra guardar, o documento já está pronto.
         ...(modoRelatorio === 'sistema' ? { chaveRascunho, onSalvarRascunho: salvarRascunhoPeca } : {}),
@@ -1688,7 +1778,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
 
                       {modoRelatorio === 'anexo' ? (
                         <p className="text-xs text-[#6B6659] bg-[#F5F2EA] rounded-md px-3 py-2.5">
-                          O relatório pronto é anexado na tela seguinte, junto com a assinatura — não precisa escrever nada aqui.
+                          Nada pra escrever aqui. Clique no botão abaixo — o campo pra escolher o arquivo do relatório pronto abre na tela seguinte, junto com a assinatura.
                         </p>
                       ) : (
                         <>
@@ -1794,7 +1884,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                       </div>
                       <div className="flex items-center gap-2">
                         <Button onClick={handleSalvarRelatorio} disabled={isSalvandoRelatorio || isSalvandoRascunhoRelatorio} className="bg-[#0E4A44] hover:bg-[#0B3A35]">
-                          {isSalvandoRelatorio ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} {modoRelatorio === 'anexo' ? 'Continuar para assinatura' : 'Salvar Relatório'}
+                          {isSalvandoRelatorio ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} {modoRelatorio === 'anexo' ? 'Continuar para anexar o PDF' : 'Salvar Relatório'}
                         </Button>
                         {/* Só no modo "sistema" — no modo "anexo" não há
                             redação em andamento pra guardar. Falta algo pra
@@ -1906,7 +1996,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
 
                   {modoJulgamento === 'anexo' ? (
                     <p className="text-xs text-[#6B6659] bg-[#F5F2EA] rounded-md px-3 py-2.5">
-                      O julgamento pronto é anexado na tela seguinte, junto com a assinatura — não precisa escrever nada aqui.
+                      Nada pra escrever aqui. Clique no botão abaixo — o campo pra escolher o arquivo do julgamento pronto abre na tela seguinte, junto com a assinatura.
                     </p>
                   ) : (
                     <>
@@ -1939,7 +2029,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                     </>
                   )}
                   <Button onClick={handleEmitirJulgamento} disabled={!podeEmitirJulgamento || isEmitindoJulgamento} className="bg-[#0E4A44] hover:bg-[#0B3A35]">
-                    {isEmitindoJulgamento ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} {modoJulgamento === 'anexo' ? 'Continuar para assinatura' : 'Emitir Julgamento'}
+                    {isEmitindoJulgamento ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} {modoJulgamento === 'anexo' ? 'Continuar para anexar o PDF' : 'Emitir Julgamento'}
                   </Button>
                 </div>
               )}
@@ -1959,7 +2049,24 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                 <PasDica chave="tip" municipioId={profile?.municipioId} />
               </div>
               {!temTip && (
-                temJulgamento && isGestor ? (
+                tipAutuacao ? (
+                  isGestor && (
+                    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 space-y-2">
+                      <p className="text-xs text-amber-900">
+                        TIP nº {tipAutuacao.numeroProcesso} criado em Autuações, ainda pendente de assinatura.
+                        Complete e assine lá, depois volte aqui pra anexar aos autos.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" onClick={() => router.push(`/intimacoes/${tipAutuacao.id}`)} className="rounded-md gap-1.5 border-amber-300 bg-white text-amber-900 hover:bg-amber-100">
+                          <ExternalLink className="h-3.5 w-3.5" /> Abrir para assinar
+                        </Button>
+                        <Button size="sm" onClick={handleAnexarTip} disabled={isAnexandoTip} className="rounded-md gap-1.5 bg-[#0E4A44] hover:bg-[#0B3A35]">
+                          {isAnexandoTip ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />} Anexar aos autos
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                ) : temJulgamento && isGestor ? (
                   <Button onClick={handleEncaminharTip} disabled={isEncaminhandoTip} className="mt-2 bg-[#0E4A44] hover:bg-[#0B3A35]">
                     {isEncaminhandoTip ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />} Encaminhar TIP
                   </Button>

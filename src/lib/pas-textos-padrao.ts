@@ -149,23 +149,6 @@ export function textoDespachoEncaminhamentoTip(params?: { destinatario?: Destina
   return `${blocoDestinatario(params?.destinatario)}Proferido o julgamento em 1ª instância do presente Processo Administrativo Sanitário, determino a lavratura do Termo de Imposição de Penalidade, dando-se ciência ao autuado da decisão proferida e do prazo para interposição de recurso.<br><br>Atenciosamente,`;
 }
 
-/** TIP — instrumento que dá ciência ao autuado da decisão e abre o prazo
- * recursal, que não é o mesmo da defesa inicial. No rito estadual são 10 dias
- * úteis (art. 73 da Lei 13.331/2001); em Prudentópolis são 10 dias para multa
- * e 15 nos demais casos (art. 30, VI, da Lei 2.276/2017) — por isso o prazo
- * sai da base legal do município e não de um número fixo. */
-export function textoTermoImposicaoPenalidade(params: { numeroAI: string; prazoRecursalData: string; prazoRecursalMultaData?: string } & ComMunicipio): string {
-  const base = baseLegalDoMunicipio(params.municipioId);
-  const prazoRecursal = base.recurso.diasMulta
-    ? `<strong>${porExtensoComUnidade(base.recurso.diasMulta, base.contagemPrazo)}</strong> na hipótese específica de aplicação de pena de multa, ou de <strong>${porExtensoComUnidade(base.recurso.dias, base.contagemPrazo)}</strong> nos demais casos`
-    : `<strong>${porExtensoComUnidade(base.recurso.dias, base.contagemPrazo)}</strong>`;
-  return `Fica o autuado, em razão do Auto de Infração nº <strong>${params.numeroAI}</strong>, cientificado da decisão proferida em julgamento de 1ª instância no presente Processo Administrativo Sanitário e da sanção nela imposta.<br><br>` +
-    `Fica ainda cientificado de que poderá interpor recurso administrativo à autoridade imediatamente superior àquela que proferiu a decisão, no prazo de ${prazoRecursal}, contados desta ciência, nos termos do ${base.recurso.citacao}.<br><br>` +
-    (base.recurso.diasMulta && params.prazoRecursalMultaData
-      ? `Prazo recursal: até <strong>${params.prazoRecursalMultaData}</strong> em caso de multa; até <strong>${params.prazoRecursalData}</strong> nos demais casos.`
-      : `Prazo recursal: até <strong>${params.prazoRecursalData}</strong>.`);
-}
-
 /** Só a frase de abertura — o corpo copia o texto da peça original (ver
  * handleRetificarPeca em pas/[id]/page.tsx), editado no que precisar ser
  * corrigido. Nunca substitui nem apaga a peça original (Título III, Cap.2,
