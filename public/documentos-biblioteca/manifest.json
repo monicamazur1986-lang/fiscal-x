@@ -1,5 +1,5 @@
 {
-  "version": "2.13.0",
+  "version": "2.14.0",
   "documents": [
     {
       "id": "codigo-sanitario-estadual-pr",
@@ -90,6 +90,16 @@
       "tema": "Normas Gerais e Institucionais",
       "descricao": "Norma complementar de exigências sanitárias aplicáveis a serviços e atividades sob vigilância sanitária, com foco em requisitos técnicos e de controle.",
       "keywords": "rdc 611, anvisa, requisitos tecnicos, vigilância sanitária, controle sanitário"
+    },
+    {
+      "id": "rdc-622-2022-controle-vetores-pragas",
+      "titulo": "RDC nº 622/2022 — Empresas de Controle de Vetores e Pragas Urbanas",
+      "path": "/documentos-biblioteca/RDC-622_2022.pdf",
+      "esfera": "federal",
+      "categoria": "RDC",
+      "tema": "Saneamento, Resíduos e Meio Ambiente",
+      "descricao": "Resolução da ANVISA que dispõe sobre os requisitos sanitários para o funcionamento de empresas especializadas na prestação de serviços de controle de vetores e pragas urbanas, incluindo requisitos técnicos, de infraestrutura e de responsabilidade técnica. Base do roteiro de inspeção de empresas dedetizadoras.",
+      "keywords": "rdc 622, anvisa, controle de pragas, vetores, dedetizadora, desinfestacao, pragas urbanas, saneante"
     },
     {
       "id": "portaria-344-1998",

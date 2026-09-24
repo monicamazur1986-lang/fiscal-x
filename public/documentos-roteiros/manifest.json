@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 5,
   "documents": [
     {
       "id": "guia-clinica-estetica",
@@ -94,11 +94,51 @@
     {
       "id": "roi-radiografia-medica",
       "titulo": "ROI — Radiografia Médica",
-      "path": "/documentos-roteiros/ROICQdeRadiologiaIntervencionista_V1.2_Abril_22.pdf",
+      "path": "/documentos-roteiros/ROTEIRO%20RADIOLOGIA%20MEDICA.pdf",
       "categoria": "Saúde",
       "esfera": "estadual",
       "descricao": "Roteiro objetivo de inspeção para radiografia médica.",
       "keywords": "radiografia médica ROI",
+      "linkOficial": ""
+    },
+    {
+      "id": "roi-odontologia",
+      "titulo": "ROI — Odontologia",
+      "path": "/documentos-roteiros/Roteiro%20Objetivo%20de%20Inspecao%20Odontologia%20Versao%201.2.pdf",
+      "categoria": "Saúde",
+      "esfera": "estadual",
+      "descricao": "Roteiro objetivo de inspeção da ANVISA para serviços de odontologia, baseado na RDC nº 1.002/2025.",
+      "keywords": "odontologia ROI RDC 1002/2025",
+      "linkOficial": ""
+    },
+    {
+      "id": "roteiro-dedetizadoras",
+      "titulo": "Roteiro de Inspeção de Dedetizadoras",
+      "path": "/documentos-roteiros/roteiro_inspecao_dedetizadoras_atualizado.pdf",
+      "categoria": "Saúde",
+      "esfera": "estadual",
+      "descricao": "Roteiro de inspeção sanitária para empresas especializadas em controle de vetores e pragas sinantrópicas (dedetizadoras), baseado na RDC Anvisa nº 622/2022.",
+      "keywords": "dedetizadora controle de pragas vetores RDC 622/2022",
+      "linkOficial": ""
+    },
+    {
+      "id": "roi-laboratorio",
+      "titulo": "ROI — Laboratório Clínico (Serviço EAC Tipo III)",
+      "path": "/documentos-roteiros/roi%20laboratorio.pdf",
+      "categoria": "Saúde",
+      "esfera": "estadual",
+      "descricao": "Roteiro objetivo de inspeção da ANVISA para serviços que executam exames de apoio ao diagnóstico (EAC) Tipo III — laboratório clínico —, baseado na RDC nº 786/2023.",
+      "keywords": "laboratorio clinico ROI EAC RDC 786/2023",
+      "linkOficial": ""
+    },
+    {
+      "id": "roteiro-unico-radiologia",
+      "titulo": "Roteiro Único de Inspeção — Radiologia Diagnóstica",
+      "path": "/documentos-roteiros/Roteiro_Unico_RDC611_Impressao.pdf",
+      "categoria": "Saúde",
+      "esfera": "federal",
+      "descricao": "Roteiro único que consolida radiografia convencional, mamografia, tomografia computadorizada e ressonância magnética num só instrumento, baseado na RDC Anvisa nº 611/2022 e nas Instruções Normativas nº 90 a 97/2021.",
+      "keywords": "radiologia RX mamografia tomografia ressonancia magnetica RDC 611/2022",
       "linkOficial": ""
     }
   ]

@@ -80,6 +80,8 @@ import { RichTextEditor } from "@/components/rich-text-editor"
 import { getDefaultIntroHtml, getDefaultConclusaoHtml, fillRoteiroTextoTokens, resolverIntroHtml, resolverConclusaoHtml } from "@/lib/roteiro-textos-padrao"
 import { sanitizeHtml } from "@/lib/sanitize-html"
 import { ROI_RADIOGRAFIA_MEDICA, NOTA_CONFORME, type RoiIndicador } from "@/lib/roteiro-roi-radiologia"
+import { ROI_ODONTOLOGIA } from "@/lib/roteiro-roi-odontologia"
+import { ROI_LABORATORIO } from "@/lib/roteiro-roi-laboratorio"
 import { useSearchParams } from "next/navigation"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup } from "@/components/ui/command"
@@ -1981,6 +1983,465 @@ const farmaciaResolucaoSesa5902014Checklist: ChecklistData = {
   ]
 }
 
+// Transcrito do "Roteiro de Inspeção Sanitária — Empresas especializadas em
+// controle de vetores e pragas sinantrópicas" (modelo técnico anexado pela
+// usuária, versão 1.0, baseado na RDC Anvisa nº 622/2022 e na Resolução SESA
+// nº 1.153/2024). O original responde com quatro opções (S/N/P-parcialmente/
+// N/A) e classifica cada item em quatro níveis (essencial/impeditivo,
+// obrigatório condicionado, operacional/documental, não aplicável) — o motor
+// de roteiros do sistema só tem três respostas (SIM/NÃO/ND) e três
+// criticidades (I/N/R), mesmo padrão de todos os outros roteiros. "Parcialmente
+// conforme" fica a critério do fiscal (SIM ou NÃO conforme o caso), e as
+// quatro criticidades da fonte foram remapeadas em I/N/R pelo mesmo critério
+// já usado nos demais roteiros (o que é condição de funcionamento/segurança
+// vira I; a maior parte, que é dever jurídico mas não impeditivo, vira N; o
+// que é boa prática sem exigência direta vira R).
+const dedetizadorasChecklist: ChecklistData = {
+  titulo: 'Roteiro de Inspeção de Empresas de Controle de Vetores e Pragas (Dedetizadoras)',
+  subtitulo: 'RDC Anvisa nº 622/2022 e Resolução SESA nº 1.153/2024',
+  categoria: 'SAÚDE',
+  lei: 'RDC Anvisa nº 622/2022',
+  especialidade: 'CONTROLE DE VETORES E PRAGAS (DEDETIZADORAS)',
+  secoes: [
+    {
+      id: 'ded-documentacao',
+      titulo: '2. DOCUMENTAÇÃO, LICENCIAMENTO E CADASTRO',
+      itens: [
+        { id: '2.1', crit: 'N', text: 'A empresa está regularmente constituída e o CNPJ corresponde à razão social e ao endereço fiscal apresentados. Base legal: RDC 622/2022, arts. 3º e 4º; SESA 1.153/2024, art. 3º.' },
+        { id: '2.2', crit: 'N', text: 'O CNAE 8122-2/00 – Imunização e controle de pragas urbanas ou outro CNAE compatível consta no cadastro, quando a atividade for efetivamente exercida. Base legal: SESA 1.034/2020; SESA 1.153/2024.' },
+        { id: '2.3', crit: 'N', text: 'Os CNAEs correspondem às atividades realmente executadas, aos produtos utilizados e à estrutura existente. Base legal: SESA 1.034/2020; legislação cadastral aplicável.' },
+        { id: '2.4', crit: 'I', text: 'A empresa possui Licença Sanitária vigente para a atividade. Base legal: RDC 622/2022, art. 4º; SESA 1.153/2024, art. 3º.' },
+        { id: '2.5', crit: 'I', text: 'A empresa possui licença ambiental ou documento equivalente vigente, emitido pelo órgão ambiental competente. Base legal: RDC 622/2022, arts. 3º e 4º; SESA 1.153/2024, art. 3º.' },
+        { id: '2.6', crit: 'N', text: 'As licenças e autorizações adicionais exigidas pelo município ou pelo órgão competente estão válidas. Base legal: SESA 1.153/2024, art. 3º.' },
+        { id: '2.7', crit: 'N', text: 'A Licença Sanitária está afixada em local visível ao público. Base legal: RDC 622/2022, art. 10; SESA 1.153/2024.' },
+        { id: '2.8', crit: 'N', text: 'A empresa comunica à Vigilância Sanitária alterações de responsável técnico, proprietário, controle societário, razão social, CNPJ, endereço, ramo de atividade ou instalações. Base legal: SESA 1.153/2024, art. 4º.' },
+        { id: '2.9', crit: 'R', text: 'A fachada ou identificação externa informa o nome fantasia, os serviços prestados e o número da Licença Sanitária, quando exigido. Base legal: RDC 622/2022, art. 11; SESA 1.153/2024.' },
+        { id: '2.10', crit: 'N', text: 'Quando a empresa presta serviço fora do município de origem, possui os documentos ou licenças exigidos pela autoridade local competente. Base legal: RDC 622/2022, art. 4º; SESA 1.153/2024, art. 1º, § 1º.' },
+      ]
+    },
+    {
+      id: 'ded-rt',
+      titulo: '3. RESPONSÁVEL TÉCNICO E ORGANIZAÇÃO PROFISSIONAL',
+      itens: [
+        { id: '3.1', crit: 'I', text: 'A empresa possui responsável técnico formalmente vinculado e habilitado para as atividades realizadas. Base legal: RDC 622/2022, art. 7º; SESA 1.153/2024, art. 7º.' },
+        { id: '3.2', crit: 'I', text: 'Há comprovação oficial da habilitação ou competência emitida pelo conselho ou órgão profissional competente. Base legal: RDC 622/2022, art. 7º, §1º; SESA 1.153/2024.' },
+        { id: '3.3', crit: 'N', text: 'A empresa possui registro no conselho profissional do responsável técnico, quando exigido pelo sistema profissional aplicável. Base legal: RDC 622/2022, art. 7º, §2º; SESA 1.153/2024.' },
+        { id: '3.4', crit: 'N', text: 'O ingresso, a baixa ou a substituição do responsável técnico foi comunicado à Vigilância Sanitária. Base legal: SESA 1.153/2024, art. 8º.' },
+        { id: '3.5', crit: 'N', text: 'O responsável técnico participa da elaboração, revisão e implementação dos POPs. Base legal: RDC 622/2022, art. 12; SESA 1.153/2024.' },
+        { id: '3.6', crit: 'I', text: 'O responsável técnico supervisiona a aquisição, o armazenamento, a diluição, a aplicação e a destinação dos produtos. Base legal: RDC 622/2022, art. 3º, X, e art. 7º; SESA 1.153/2024.' },
+        { id: '3.7', crit: 'I', text: 'Os aplicadores e demais trabalhadores receberam capacitação compatível com suas funções e com os produtos utilizados. Base legal: RDC 622/2022, art. 3º, X; SESA 1.153/2024, arts. 11 a 15.' },
+        { id: '3.8', crit: 'R', text: 'A empresa mantém registros de reclamações, ocorrências e providências adotadas. Base legal: SESA 1.153/2024, art. 57.' },
+      ]
+    },
+    {
+      id: 'ded-estrutura',
+      titulo: '4. PROJETO, ESTRUTURA FÍSICA E INSTALAÇÕES',
+      itens: [
+        { id: '4.1', crit: 'I', text: 'O estabelecimento possui PBA aprovado, quando exigido pelo enquadramento da atividade. Base legal: SESA 1.034/2020; SESA 1.891/2024.' },
+        { id: '4.2', crit: 'N', text: 'O PBA aprovado corresponde à atividade atual, ao layout, às áreas de manipulação, ao armazenamento e às reformas realizadas. Base legal: SESA 1.891/2024.' },
+        { id: '4.3', crit: 'N', text: 'O estabelecimento possui documentação de conclusão das obras conforme a norma vigente. Base legal: SESA 1.891/2024.' },
+        { id: '4.4', crit: 'I', text: 'As instalações operacionais são de uso exclusivo da empresa especializada. Base legal: RDC 622/2022, art. 8º; SESA 1.153/2024.' },
+        { id: '4.5', crit: 'I', text: 'O estabelecimento não está instalado em edificação de uso coletivo incompatível com a atividade. Base legal: RDC 622/2022, art. 8º; legislação municipal de uso do solo.' },
+        { id: '4.6', crit: 'N', text: 'Há ventilação e iluminação adequadas nas áreas de trabalho, armazenamento e manipulação. Base legal: RDC 622/2022, arts. 8º e 9º; SESA 1.153/2024.' },
+        { id: '4.7', crit: 'N', text: 'As paredes, pisos, tetos e bancadas são íntegros, lisos, laváveis e resistentes aos produtos utilizados. Base legal: SESA 1.153/2024.' },
+        { id: '4.8', crit: 'N', text: 'As áreas de circulação e os ambientes estão organizados, limpos e sem obstáculos. Base legal: SESA 1.153/2024.' },
+        { id: '4.9', crit: 'N', text: 'Existe área ou sala específica para manipulação, diluição ou fracionamento autorizado de produtos. Base legal: RDC 622/2022, art. 9º; SESA 1.153/2024.' },
+        { id: '4.10', crit: 'N', text: 'A área de manipulação possui identificação e sinalização de risco adequada. Base legal: RDC 622/2022, arts. 9º e 12; SESA 1.153/2024.' },
+        { id: '4.11', crit: 'N', text: 'Existe bancada impermeável, resistente e de fácil higienização para as atividades permitidas. Base legal: SESA 1.153/2024.' },
+        { id: '4.12', crit: 'N', text: 'Existe ponto de água e local adequado para lavagem de equipamentos e materiais. Base legal: SESA 1.153/2024.' },
+        { id: '4.13', crit: 'I', text: 'Há chuveiro, lava-olhos ou recursos de emergência compatíveis com os riscos da operação. Base legal: SESA 1.153/2024; normas de segurança aplicáveis.' },
+        { id: '4.14', crit: 'N', text: 'Há vestiário para aplicadores e manipuladores, com armários individuais ou identificação adequada. Base legal: RDC 622/2022, art. 9º; SESA 1.153/2024.' },
+        { id: '4.15', crit: 'N', text: 'A empresa possui local adequado para higienização e guarda dos uniformes e EPIs. Base legal: RDC 622/2022, art. 9º; SESA 1.153/2024.' },
+        { id: '4.16', crit: 'N', text: 'A lavagem é realizada internamente com procedimento e estrutura adequados ou há contrato com lavanderia industrial, quando necessário. Base legal: SESA 1.153/2024.' },
+        { id: '4.17', crit: 'R', text: 'Existe área exclusiva para produtos de limpeza e materiais de higienização. Base legal: SESA 1.153/2024.' },
+        { id: '4.18', crit: 'I', text: 'Existe depósito exclusivo para saneantes desinfestantes, com controle de acesso e sinalização de segurança. Base legal: RDC 622/2022, arts. 8º, 9º e 12; SESA 1.153/2024.' },
+        { id: '4.19', crit: 'N', text: 'O depósito possui organização por compatibilidade, ventilação, proteção contra umidade, ausência de ralos inadequados e condições de emergência. Base legal: RDC 622/2022; SESA 1.153/2024.' },
+        { id: '4.20', crit: 'I', text: 'Os produtos são armazenados separados de alimentos, medicamentos, objetos pessoais, roupas e materiais incompatíveis. Base legal: RDC 622/2022; SESA 1.153/2024.' },
+        { id: '4.21', crit: 'N', text: 'Há controle de validade e sistema de rotação de estoque, como PEPS/FEFO. Base legal: SESA 1.153/2024.' },
+      ]
+    },
+    {
+      id: 'ded-pops',
+      titulo: '5. PROCEDIMENTOS OPERACIONAIS PADRONIZADOS — POPs E REGISTROS',
+      itens: [
+        { id: '5.1', crit: 'I', text: 'Os POPs estão escritos, datados, aprovados pelo responsável técnico e disponíveis para consulta. Base legal: RDC 622/2022, art. 12; SESA 1.153/2024.' },
+        { id: '5.2', crit: 'N', text: 'Os POPs são revisados periodicamente ou sempre que houver alteração de produto, equipamento, processo ou legislação. Base legal: SESA 1.153/2024.' },
+        { id: '5.3', crit: 'N', text: 'Há POP para avaliação prévia do local. Base legal: SESA 1.153/2024, arts. 46 e 47.' },
+        { id: '5.4', crit: 'N', text: 'Há POP para elaboração da ordem de serviço e do comprovante de execução. Base legal: RDC 622/2022, art. 12; SESA 1.153/2024.' },
+        { id: '5.5', crit: 'N', text: 'Há POP para diluição, fracionamento ou outra manipulação autorizada. Base legal: RDC 622/2022, art. 12; SESA 1.153/2024.' },
+        { id: '5.6', crit: 'N', text: 'Há POP para aplicação, manutenção e higienização dos equipamentos. Base legal: RDC 622/2022, art. 12; SESA 1.153/2024.' },
+        { id: '5.7', crit: 'N', text: 'Há POP para armazenamento, transporte e controle de validade. Base legal: RDC 622/2022, arts. 9º, 12 e 13; SESA 1.153/2024.' },
+        { id: '5.8', crit: 'I', text: 'Há POP para acidentes, derramamentos, intoxicações, emergência, primeiros cuidados e comunicação ao CIATox, quando aplicável. Base legal: RDC 622/2022, art. 12; SESA 1.153/2024.' },
+        { id: '5.9', crit: 'N', text: 'Há POP para recolhimento, inutilização e destinação de embalagens e resíduos químicos. Base legal: RDC 622/2022, arts. 14 a 18; SESA 1.153/2024.' },
+        { id: '5.10', crit: 'N', text: 'Há POP para higiene pessoal, lavagem de mãos, troca e higienização de uniformes e EPIs. Base legal: SESA 1.153/2024.' },
+        { id: '5.11', crit: 'N', text: 'Os registros comprovam treinamento dos trabalhadores nos POPs. Base legal: RDC 622/2022, art. 3º, X; SESA 1.153/2024.' },
+        { id: '5.12', crit: 'R', text: 'Os POPs descrevem medidas educativas, preventivas e uso de barreiras físicas antes da aplicação química, quando aplicável. Base legal: SESA 1.153/2024, art. 5º.' },
+      ]
+    },
+    {
+      id: 'ded-produtos',
+      titulo: '6. PRODUTOS SANEANTES DESINFESTANTES',
+      itens: [
+        { id: '6.1', crit: 'I', text: 'São utilizados somente saneantes desinfestantes registrados ou regularizados na Anvisa, conforme a categoria do produto. Base legal: RDC 622/2022, art. 6º; RDC 682/2022.' },
+        { id: '6.2', crit: 'I', text: 'Os produtos de venda restrita são adquiridos e utilizados somente por empresa especializada autorizada. Base legal: RDC 622/2022, art. 6º; RDC 682/2022; SESA 103/2023, quando aplicável.' },
+        { id: '6.3', crit: 'N', text: 'As embalagens originais permanecem íntegras, fechadas, identificadas e com rótulo legível. Base legal: RDC 682/2022; SESA 1.153/2024.' },
+        { id: '6.4', crit: 'N', text: 'Os produtos diluídos ou fracionados estão identificados com nome, lote, concentração, data, validade e responsável técnico, quando exigido. Base legal: SESA 1.153/2024.' },
+        { id: '6.5', crit: 'N', text: 'A diluição segue o rótulo, a orientação do fabricante, a FDS e o POP. Base legal: RDC 622/2022, art. 12; RDC 682/2022; SESA 1.153/2024.' },
+        { id: '6.6', crit: 'N', text: 'A empresa possui FDS dos produtos utilizados e informações de primeiros cuidados e intoxicação para orientar o contratante. Base legal: SESA 1.153/2024, art. 55; ABNT NBR 14.725-2023, quando aplicável.' },
+        { id: '6.7', crit: 'N', text: 'Os rótulos contêm modo de uso, praga-alvo, precauções, advertências e tempo de reentrada, quando aplicável. Base legal: RDC 682/2022, arts. 47 a 51.' },
+        { id: '6.8', crit: 'I', text: 'Rodenticidas são utilizados conforme o rótulo e, quando exigido, em caixas porta-iscas adequadas. Base legal: RDC 682/2022; SESA 1.153/2024.' },
+        { id: '6.9', crit: 'I', text: 'Iscas e produtos não são confundidos com alimentos ou medicamentos. Base legal: RDC 682/2022; SESA 1.153/2024.' },
+        { id: '6.10', crit: 'I', text: 'São respeitadas as restrições de acesso de crianças, animais e pessoas não autorizadas. Base legal: RDC 682/2022; SESA 1.153/2024.' },
+        { id: '6.11', crit: 'N', text: 'A empresa mantém registro de lote, validade, aquisição, consumo e movimentação dos produtos utilizados. Base legal: SESA 1.153/2024.' },
+        { id: '6.12', crit: 'N', text: 'A empresa não vende, empresta ou cede produtos de venda restrita, salvo se também estiver regularmente licenciada para comércio e cumprir a Resolução SESA nº 103/2023. Base legal: SESA 103/2023; RDC 682/2022.' },
+      ]
+    },
+    {
+      id: 'ded-equipamentos-epi',
+      titulo: '7. EQUIPAMENTOS, EPIS E SAÚDE DO TRABALHADOR',
+      itens: [
+        { id: '7.1', crit: 'N', text: 'Os equipamentos de aplicação estão identificados, íntegros, limpos e em condições seguras de uso. Base legal: SESA 1.153/2024.' },
+        { id: '7.2', crit: 'N', text: 'Há registros de manutenção preventiva e corretiva dos equipamentos. Base legal: SESA 1.153/2024.' },
+        { id: '7.3', crit: 'I', text: 'Os EPIs são adequados ao produto e ao risco da atividade. Base legal: RDC 622/2022, art. 3º, IV; SESA 1.153/2024; normas de SST.' },
+        { id: '7.4', crit: 'N', text: 'Existem registros de entrega, validade, substituição e higienização dos EPIs. Base legal: SESA 1.153/2024; normas de SST.' },
+        { id: '7.5', crit: 'N', text: 'Há treinamento sobre colocação, retirada, uso, limpeza, guarda e descarte dos EPIs. Base legal: SESA 1.153/2024; normas de SST.' },
+        { id: '7.6', crit: 'N', text: 'Os uniformes e EPIs impregnados são separados das roupas pessoais e armazenados de forma segura. Base legal: SESA 1.153/2024.' },
+        { id: '7.7', crit: 'N', text: 'Existem PGR, PCMSO e demais documentos ocupacionais aplicáveis, sem prejuízo da competência dos órgãos trabalhistas. Base legal: SESA 1.153/2024; NR aplicáveis.' },
+        { id: '7.8', crit: 'N', text: 'Há procedimento para higiene pessoal após a aplicação e troca de vestimenta. Base legal: SESA 1.153/2024.' },
+        { id: '7.9', crit: 'I', text: 'É proibido fumar, comer ou beber durante a manipulação e aplicação dos produtos. Base legal: SESA 1.153/2024; POPs.' },
+        { id: '7.10', crit: 'N', text: 'Os aplicadores são orientados a não remover resíduos de produto com a pele e a realizar higienização adequada. Base legal: SESA 1.153/2024.' },
+      ]
+    },
+    {
+      id: 'ded-execucao-servico',
+      titulo: '8. AVALIAÇÃO PRÉVIA, EXECUÇÃO E COMPROVANTE DO SERVIÇO',
+      itens: [
+        { id: '8.1', crit: 'N', text: 'É realizada avaliação prévia do local antes da execução do serviço. Base legal: SESA 1.153/2024, arts. 46 e 47.' },
+        { id: '8.2', crit: 'N', text: 'A avaliação prévia identifica contratante, endereço, ramo de atividade, características do local e áreas vizinhas. Base legal: SESA 1.153/2024, art. 46.' },
+        { id: '8.3', crit: 'N', text: 'São registrados os indícios de infestação, vetores, pragas sinantrópicas, pontos de acesso e medidas preventivas recomendadas. Base legal: SESA 1.153/2024, art. 46.' },
+        { id: '8.4', crit: 'N', text: 'A avaliação prévia é assinada pelo responsável pela avaliação e pelo responsável técnico. Base legal: SESA 1.153/2024, art. 46.' },
+        { id: '8.5', crit: 'N', text: 'O contratante assina a avaliação prévia ou a ordem de serviço correspondente. Base legal: SESA 1.153/2024.' },
+        { id: '8.6', crit: 'N', text: 'O serviço é executado somente após avaliação prévia e emissão da ordem de serviço. Base legal: SESA 1.153/2024, arts. 46 e 47.' },
+        { id: '8.7', crit: 'N', text: 'A ordem de serviço descreve o serviço, o produto, a praga-alvo, o local, os riscos e as orientações ao contratante. Base legal: RDC 622/2022, art. 12; SESA 1.153/2024.' },
+        { id: '8.8', crit: 'I', text: 'A aplicação química ocorre somente quando as medidas preventivas e educativas não forem suficientes ou não forem eficazes. Base legal: SESA 1.153/2024, art. 5º.' },
+        { id: '8.9', crit: 'I', text: 'O controle químico é supervisionado ou orientado pelo responsável técnico. Base legal: SESA 1.153/2024.' },
+        { id: '8.10', crit: 'N', text: 'O comprovante de execução é fornecido ao contratante ao final do serviço. Base legal: SESA 1.153/2024, art. 54; RDC 622/2022.' },
+        { id: '8.11', crit: 'N', text: 'O comprovante de execução contém razão social, CNPJ, endereço, licenças, data, horário, produtos, grupo químico, registro na Anvisa, concentração e aplicadores. Base legal: SESA 1.153/2024, art. 54.' },
+        { id: '8.12', crit: 'N', text: 'O comprovante contém prazo de assistência técnica e orientação em caso de intoxicação, incluindo o CIATox, quando aplicável. Base legal: SESA 1.153/2024, art. 54.' },
+        { id: '8.13', crit: 'N', text: 'O comprovante é assinado pelo responsável técnico da empresa executora e pelo contratante. Base legal: SESA 1.153/2024.' },
+        { id: '8.14', crit: 'I', text: 'Após o serviço, são fornecidas orientações sobre reentrada, ventilação, limpeza e cuidados com pessoas, animais, alimentos e utensílios. Base legal: RDC 682/2022; SESA 1.153/2024.' },
+        { id: '8.15', crit: 'N', text: 'Em prédios de uso coletivo, são afixados avisos com data de aplicação, produto, grupo químico, telefone do CIATox e licenças, quando exigido. Base legal: RDC 622/2022, art. 20; SESA 1.153/2024.' },
+      ]
+    },
+    {
+      id: 'ded-residuos',
+      titulo: '9. RESÍDUOS, EMBALAGENS E ACIDENTES AMBIENTAIS',
+      itens: [
+        { id: '9.1', crit: 'N', text: 'As embalagens vazias retornam ao estabelecimento operacional após o uso. Base legal: RDC 622/2022, art. 14; SESA 1.153/2024.' },
+        { id: '9.2', crit: 'I', text: 'As embalagens são inutilizadas e devolvidas ao fornecedor, posto ou central de recebimento licenciada. Base legal: RDC 622/2022, arts. 15 a 17.' },
+        { id: '9.3', crit: 'N', text: 'A empresa mantém comprovantes de recebimento e destinação das embalagens. Base legal: RDC 622/2022, art. 16; SESA 1.153/2024.' },
+        { id: '9.4', crit: 'N', text: 'Produtos vencidos, resíduos de derramamento, uniformes e EPIs sem possibilidade de uso são classificados e destinados conforme a legislação aplicável. Base legal: SESA 1.153/2024; legislação ambiental aplicável.' },
+        { id: '9.5', crit: 'I', text: 'Existe kit ou material absorvente para contenção de derramamentos. Base legal: SESA 1.153/2024.' },
+        { id: '9.6', crit: 'N', text: 'Há procedimento para comunicação e atendimento de acidentes com produtos químicos. Base legal: RDC 622/2022, art. 12; SESA 1.153/2024.' },
+        { id: '9.7', crit: 'N', text: 'A tríplice lavagem é realizada somente quando prevista nas instruções do fabricante, no rótulo ou na legislação aplicável. Base legal: SESA 1.153/2024; legislação ambiental aplicável.' },
+        { id: '9.8', crit: 'N', text: 'Quando realizada, a água da lavagem é reaproveitada conforme permitido ou recebe destinação adequada. Base legal: SESA 1.153/2024; legislação ambiental aplicável.' },
+      ]
+    },
+    {
+      id: 'ded-transporte',
+      titulo: '10. TRANSPORTE E VEÍCULOS',
+      itens: [
+        { id: '10.1', crit: 'I', text: 'O veículo é exclusivo para os produtos, equipamentos e materiais da atividade de controle de pragas. Base legal: RDC 622/2022, art. 13; SESA 1.153/2024.' },
+        { id: '10.2', crit: 'I', text: 'O compartimento de carga é fechado e isolado dos ocupantes. Base legal: RDC 622/2022, art. 13; SESA 1.153/2024.' },
+        { id: '10.3', crit: 'N', text: 'O veículo não é coletivo e não transporta pessoas sem separação segura da carga. Base legal: RDC 622/2022, art. 13.' },
+        { id: '10.4', crit: 'N', text: 'O veículo está identificado com o nome da empresa e a sinalização de risco exigida. Base legal: SESA 1.153/2024.' },
+        { id: '10.5', crit: 'N', text: 'O veículo possui recipiente fechado, compatível e identificado para resíduos químicos. Base legal: SESA 1.153/2024.' },
+        { id: '10.6', crit: 'N', text: 'O veículo possui materiais de contenção e equipamentos para resposta a derramamentos. Base legal: RDC 622/2022, art. 13; SESA 1.153/2024.' },
+        { id: '10.7', crit: 'N', text: 'Produtos e equipamentos estão acondicionados de forma a evitar tombamento, vazamento, contato e acidentes. Base legal: RDC 622/2022, art. 13; SESA 1.153/2024.' },
+        { id: '10.8', crit: 'N', text: 'Há FDS e orientações de emergência disponíveis para os produtos transportados. Base legal: SESA 1.153/2024.' },
+        { id: '10.9', crit: 'N', text: 'O veículo é higienizado e passa por manutenção periódica registrada. Base legal: SESA 1.153/2024.' },
+      ]
+    },
+    {
+      id: 'ded-publicidade',
+      titulo: '11. PUBLICIDADE, COMÉRCIO E RASTREABILIDADE',
+      itens: [
+        { id: '11.1', crit: 'R', text: 'A publicidade informa razão social, endereço, telefone e número das licenças quando exigido. Base legal: SESA 1.153/2024, arts. 16 e 66.' },
+        { id: '11.2', crit: 'N', text: 'A publicidade não promete aprovação oficial, certificação pública, ausência de risco, ausência de toxicidade ou eficácia não comprovada. Base legal: SESA 1.153/2024, art. 67; RDC 682/2022.' },
+        { id: '11.3', crit: 'N', text: 'A empresa não utiliza expressões ou imagens que induzam o consumidor a erro sobre segurança, eficácia ou indicação do produto. Base legal: RDC 682/2022, arts. 47 a 51; SESA 1.153/2024.' },
+        { id: '11.4', crit: 'N', text: 'Quando a empresa realiza comércio de saneantes desinfestantes de uso profissional, existe licença e CNAE compatíveis com a atividade comercial. Base legal: SESA 103/2023.' },
+        { id: '11.5', crit: 'N', text: 'Quando há comércio, há registro de estoque, fornecedor, lote, validade, entrada, saída, perdas e destinatário. Base legal: SESA 103/2023.' },
+        { id: '11.6', crit: 'N', text: 'Quando há comércio, a venda de produtos de uso profissional ocorre somente para empresas especializadas autorizadas. Base legal: SESA 103/2023; RDC 682/2022.' },
+      ]
+    },
+  ]
+}
+
+// Transcrito do "Roteiro Único de Inspeção — RDC 611/2022 + INs 90-97/2021"
+// (planilha consolidada e conferida em 24/09/2026, anexada pela usuária),
+// que unifica num só roteiro Sim/Não/NA as abas antes separadas de estrutura
+// física, condutas, salas e equipamentos de radiografia convencional,
+// mamografia, tomografia computadorizada e ressonância magnética, mais os
+// itens de gestão/proteção radiológica direto da RDC 611/2022. Diferente dos
+// ROI da ANVISA (checklistDoRoi, nota 0-5), este roteiro já nasceu no mesmo
+// formato Sim/Não/NA do resto do sistema — não precisou de adaptação.
+//
+// A planilha original tinha itens de tomografia e ressonância magnética
+//arquivados nas abas erradas (RMN continha itens de TC da IN 93, e ETC
+// continha itens de ressonância da IN 97); a própria planilha já documenta
+// essa reclassificação (coluna "Nota de revisão"), e os itens abaixo já
+// seguem a classificação corrigida. A fonte não traz coluna de criticidade
+// (I/N/R) — a classificação abaixo é um julgamento próprio, mesmo critério
+// usado no roteiro de dedetizadoras: o que é condição de funcionamento ou
+// segurança direta do paciente/trabalhador vira I; a maior parte, dever
+// jurídico mas não impeditivo, vira N; o que é boa prática sem exigência
+// direta vira R.
+const roteiroUnicoRadiologiaChecklist: ChecklistData = {
+  titulo: 'Roteiro Único de Inspeção — Radiologia Diagnóstica',
+  subtitulo: 'RDC Anvisa nº 611/2022 e Instruções Normativas nº 90 a 97/2021',
+  categoria: 'SAÚDE',
+  lei: 'RDC Anvisa nº 611/2022',
+  especialidade: 'RADIOLOGIA DIAGNÓSTICA (RX, MAMOGRAFIA, TOMOGRAFIA E RESSONÂNCIA)',
+  secoes: [
+    {
+      id: 'ru-gestao',
+      titulo: '1. GESTÃO, DOCUMENTAÇÃO E ESTRUTURA',
+      itens: [
+        { id: 'RU-001', crit: 'N', text: 'O serviço mantém um exemplar da Resolução 611/2022 Anvisa. Base legal: RDC 611/2022.' },
+        { id: 'RU-002', crit: 'N', text: 'É assegurado que cada membro da equipe possa consultar a Resolução 611/2022 Anvisa. Base legal: RDC 611/2022.' },
+        { id: 'RU-003', crit: 'I', text: 'Existe um profissional legalmente habilitado, formalmente designado pelo Responsável Legal (RT). Base legal: RDC 611/2022.' },
+        { id: 'RU-004', crit: 'I', text: 'Existe um RT substituto legalmente habilitado, formalmente designado pelo Responsável Legal (RT). Base legal: RDC 611/2022.' },
+        { id: 'RU-005', crit: 'I', text: 'Os resultados do Levantamento Radiométrico estão satisfatórios e atualizados, em conformidade com os níveis de restrição de dose estabelecidos na Resolução 611/2022 Anvisa e sua respectiva IN. Base legal: RDC 611/2022.' },
+        { id: 'RU-006', crit: 'N', text: 'O serviço implementou o Programa da Garantia da Qualidade, que contempla, no mínimo, o gerenciamento das tecnologias, dos processos e dos riscos inerentes ao serviço de radiologia diagnóstica ou intervencionista, e o mesmo está atualizado. Base legal: RDC 611/2022.' },
+        { id: 'RU-007', crit: 'I', text: 'Possui Programa de Proteção Radiológica que contemple no mínimo medida de prevenção, de controle, de vigilância e monitoramento, para garantir a segurança e a qualidade dos procedimentos radiológicos. Base legal: RDC 611/2022.' },
+        { id: 'RU-008', crit: 'N', text: 'O serviço implementou o Programa de Educação Permanente para toda a equipe, em conformidade com o disposto na Resolução 611/2022 Anvisa. Base legal: RDC 611/2022.' },
+        { id: 'RU-009', crit: 'I', text: 'A licença de funcionamento/alvará sanitário atualizado está afixado em local visível ao público. Base legal: RDC 611/2022.' },
+        { id: 'RU-010', crit: 'I', text: 'Todas as pessoas que trabalham com radiação são monitoradas. Base legal: RDC 611/2022.' },
+        { id: 'RU-011', crit: 'N', text: 'Os dados de monitoração individual estão devidamente assentados. Base legal: RDC 611/2022.' },
+        { id: 'RU-012', crit: 'N', text: 'Os dados de monitoração individual são informados, e com ciência, ao pessoal monitorado. Base legal: RDC 611/2022.' },
+        { id: 'RU-013', crit: 'I', text: 'No caso de doses efetivas elevadas (100 mSv ao ano ou 20 mSv ao mês), os resultados/relatório das investigações estão assentados. Base legal: RDC 611/2022.' },
+        { id: 'RU-014', crit: 'N', text: 'O relatório de doses é arquivado e guardado por 30 anos após o término da ocupação, ou até atingir 75 anos de idade. Base legal: NR-32 (complementar).' },
+        { id: 'RU-015', crit: 'N', text: 'Existe uma cópia do projeto básico de arquitetura aprovado pela VISA disponível no serviço. Base legal: RDC 50/2002 e norma estadual indicada.' },
+        { id: 'RU-016', crit: 'N', text: 'A construção está de acordo com o projeto arquitetônico aprovado pela VISA. Base legal: RDC 50/2002 e norma estadual indicada.' },
+        { id: 'RU-017', crit: 'N', text: 'A circulação do público é restrita às áreas livres. Base legal: RDC 611/2022.' },
+      ]
+    },
+    {
+      id: 'ru-protocolos',
+      titulo: '2. PROTOCOLOS E CONDUTA',
+      itens: [
+        { id: 'RU-018', crit: 'I', text: 'O Responsável Técnico (ou seu substituto) permanece no serviço durante o período de atendimento, a fim de assegurar que os procedimentos radiológicos a que são submetidos os pacientes estão em conformidade com os princípios e requisitos de radioproteção. Base legal: RDC 611/2022.' },
+        { id: 'RU-019', crit: 'N', text: 'O dosímetro individual é utilizado apenas nessa instituição. Base legal: RDC 611/2022.' },
+        { id: 'RU-020', crit: 'N', text: 'Após a jornada de trabalho, os dosímetros são guardados em local seguro, isento de radiação, baixa umidade, temperatura amena, junto ao dosímetro padrão. Base legal: RDC 611/2022.' },
+        { id: 'RU-021', crit: 'N', text: 'No caso de indivíduos que trabalham em mais de um serviço, os titulares tomam as medidas necessárias para que a soma das exposições ocupacionais não ultrapassem os limites previstos no regulamento. Base legal: RDC 611/2022.' },
+        { id: 'RU-022', crit: 'N', text: 'Os procedimentos radiológicos realizados são assentados em livro próprio ou informatizado, com data da realização, identificação do paciente, indicação clínica do exame (motivo da solicitação) e a técnica utilizada. Base legal: RDC 611/2022.' },
+        { id: 'RU-023', crit: 'N', text: 'Existem registros atualizados de manutenção preventiva/corretiva periódica dos equipamentos de RX e processadoras. Base legal: RDC 611/2022.' },
+        { id: 'RU-024', crit: 'R', text: 'Estão afixadas na sala de espera orientações de proteção radiológica para pacientes e acompanhantes. Base legal: RDC 611/2022.' },
+        { id: 'RU-025', crit: 'I', text: 'Todos os profissionais ocupacionalmente expostos são maiores de 18 anos. Base legal: RDC 611/2022.' },
+      ]
+    },
+    {
+      id: 'ru-salas-rx',
+      titulo: '3. SALAS DE RADIOGRAFIA/FLUOROSCOPIA',
+      itens: [
+        { id: 'RU-026', crit: 'N', text: 'O layout da sala está de acordo com o projeto aprovado pela VISA. Base legal: RDC 50/2002 e norma estadual indicada.' },
+        { id: 'RU-027', crit: 'I', text: 'As dimensões da sala estão de acordo com a RDC nº 50 (distância de 1,50 m do ponto focal até qualquer parede ou barreira de proteção, observando-se o limite de deslocamento máximo do tubo). Base legal: RDC 50/2002 e norma estadual indicada.' },
+        { id: 'RU-028', crit: 'I', text: 'Existe apenas um equipamento de Raios X instalado na sala. Base legal: IN 90/2021.' },
+        { id: 'RU-029', crit: 'I', text: 'A sala de Raios X oferece segurança radiológica ao público e profissionais não ocupacionalmente expostos (verificar por meio do Laudo de Radiometria). Base legal: IN 90/2021.' },
+        { id: 'RU-030', crit: 'I', text: 'Existe cabine de comando, com dimensões e blindagem suficiente para proteção do operador. Base legal: RDC 611/2022.' },
+        { id: 'RU-031', crit: 'N', text: 'A cabine de comando permite ao operador, na posição de disparo, eficaz comunicação e observação visual do paciente. Base legal: RDC 611/2022.' },
+        { id: 'RU-032', crit: 'N', text: 'A localização da cabine de comando está posicionada de modo que, durante as exposições, nenhum indivíduo possa entrar na sala sem ser notado pelo operador. Base legal: RDC 611/2022.' },
+        { id: 'RU-033', crit: 'N', text: 'Existe luz vermelha acima da porta de entrada com advertência: "Não entre quando a luz estiver acesa". Base legal: RDC 611/2022.' },
+        { id: 'RU-034', crit: 'N', text: 'Existe na porta de acesso um símbolo internacional de presença da radiação e advertência de entrada restrita. Base legal: RDC 611/2022.' },
+      ]
+    },
+    {
+      id: 'ru-rx-equipamento',
+      titulo: '4. RADIOGRAFIA CONVENCIONAL — EQUIPAMENTO',
+      itens: [
+        { id: 'RU-035', crit: 'N', text: 'A filtração nominal total permanente do feixe útil de radiação é de, no mínimo, equivalente a 2,5 mm de alumínio. Base legal: IN 90/2021.' },
+        { id: 'RU-036', crit: 'I', text: 'A blindagem do cabeçote apresenta nível mínimo de radiação de fuga, restringida à taxa de kerma no ar de 1 mGy/h a 1 metro do ponto focal, quando operado em condições de ensaio de fuga, comprovado por certificado de adequação emitido pelo fabricante na instalação do tubo de raio X. Base legal: IN 90/2021.' },
+        { id: 'RU-037', crit: 'N', text: 'Possui diafragma com localização luminosa para limitar o campo de radiação à região de interesse clínico, e abre simetricamente (para equipamentos com distância foco-filme variável). Base legal: IN 90/2021.' },
+        { id: 'RU-038', crit: 'N', text: 'Possui sistema para identificar a perpendicularidade do feixe de radiação ao plano do receptor de imagem e para ajustar o centro do feixe ao centro do receptor. Base legal: IN 90/2021.' },
+        { id: 'RU-039', crit: 'N', text: 'O cabeçote apresenta-se estável e íntegro, sem movimento em falso, sem rachaduras e sem vazamento de óleo, e a instalação elétrica está intacta (lâmpadas indicadoras, cabos, conectores etc.). Base legal: IN 90/2021.' },
+        { id: 'RU-040', crit: 'N', text: 'No painel de comando os parâmetros operacionais (tensão do tubo, filtração inerente e adicional, posição do ponto focal, distância fonte-receptor de imagem, tamanho de campo, tempo e corrente do tubo ou seu produto) estão claramente indicados no equipamento. Base legal: IN 90/2021.' },
+        { id: 'RU-041', crit: 'N', text: 'Ocorre emissão de sinal luminoso e/ou sonoro no painel de comando quando o feixe de raios X é acionado. Base legal: IN 90/2021.' },
+        { id: 'RU-042', crit: 'I', text: 'A emissão do feixe de raios X ocorre somente enquanto durar a pressão intencional sobre o botão disparador, exige alívio e nova pressão para repetir a exposição, ou está instalado de forma que dificulte exposição acidental. Base legal: IN 90/2021.' },
+        { id: 'RU-043', crit: 'I', text: 'Existem vestimentas plumbíferas para pacientes, equipe e acompanhantes. Base legal: RDC 611/2022.' },
+        { id: 'RU-044', crit: 'N', text: 'As vestimentas plumbíferas estão em bom estado de conservação e higiene. Base legal: RDC 611/2022.' },
+        { id: 'RU-045', crit: 'N', text: 'O comprimento do cabo disparador é de no mínimo 2 m (equipamento móvel). Base legal: IN 90/2021.' },
+      ]
+    },
+    {
+      id: 'ru-mamografia',
+      titulo: '5. MAMOGRAFIA — EQUIPAMENTO',
+      itens: [
+        { id: 'RU-046', crit: 'N', text: 'A filtração total permanente do feixe útil de radiação atende ao mínimo exigido conforme a combinação alvo/filtro utilizada (Mo/Mo, Mo/Rh, Rh/Rh, W/Mo ou W/Rh). Base legal: RDC 611/2022.' },
+        { id: 'RU-047', crit: 'I', text: 'A blindagem do cabeçote apresenta nível mínimo de radiação de fuga, restringida à taxa de kerma no ar de 1 mGy/h a 1 metro do ponto focal, comprovado por certificado de adequação emitido pelo fabricante na instalação do tubo de raio X. Base legal: RDC 611/2022.' },
+        { id: 'RU-048', crit: 'N', text: 'O equipamento possui sistema de filtração adicional. Base legal: IN 92/2021.' },
+        { id: 'RU-049', crit: 'N', text: 'O equipamento possui suporte de receptor de imagem (bucky) com grade antidifusora. Base legal: IN 92/2021.' },
+        { id: 'RU-050', crit: 'N', text: 'O equipamento possui bandeja de compressão com fixação adequada. Base legal: RDC 611/2022.' },
+        { id: 'RU-051', crit: 'N', text: 'O equipamento possui sistema de colimação. Base legal: IN 92/2021.' },
+        { id: 'RU-052', crit: 'N', text: 'O tamanho nominal do ponto focal não é superior a 0,4 mm. Base legal: RDC 611/2022.' },
+        { id: 'RU-053', crit: 'N', text: 'Observa-se sinal luminoso ou sonoro no painel de comando quando o feixe de raios X é emitido. Base legal: IN 92/2021.' },
+        { id: 'RU-054', crit: 'N', text: 'O equipamento tem indicação no painel de controle dos parâmetros básicos (Tensão kVp, Corrente mA, e Tempo s ou o produto corrente x tempo mAs). Base legal: IN 92/2021.' },
+        { id: 'RU-055', crit: 'I', text: 'Existe sistema para impedir que a distância foco-pele seja não inferior a 50 cm. Base legal: IN 92/2021.' },
+        { id: 'RU-056', crit: 'N', text: 'O dispositivo para manter compressão firme na mama movimenta-se adequadamente (força de compressão entre 15 a 20 kg). Base legal: RDC 611/2022.' },
+        { id: 'RU-057', crit: 'N', text: 'O equipamento dispõe de Controle Automático de Exposição. Base legal: IN 92/2021.' },
+        { id: 'RU-058', crit: 'N', text: 'Existe uma indicação no painel de comando quando o controle automático de exposição é utilizado. Base legal: IN 92/2021.' },
+        { id: 'RU-059', crit: 'N', text: 'O serviço possui monitor (3 a 5 MP) específico para laudos em mamografia. Base legal: IN 92/2021.' },
+        { id: 'RU-060', crit: 'N', text: 'O serviço possui processadora específica e exclusiva para mamografia convencional. Base legal: IN 92/2021.' },
+        { id: 'RU-061', crit: 'N', text: 'O serviço possui negatoscópio específico para mamografia. Base legal: IN 92/2021.' },
+        { id: 'RU-062', crit: 'N', text: 'O setor dispõe de fantoma de mama para testes de qualidade de imagem. Base legal: IN 92/2021.' },
+        { id: 'RU-063', crit: 'I', text: 'A qualidade de imagem do fantoma mamográfico é avaliada diariamente e alcança o critério mínimo (fibra e massa de 0,75 mm, microcalcificação de 0,32 mm), verificado nas radiografias. Base legal: IN 92/2021.' },
+      ]
+    },
+    {
+      id: 'ru-sala-tomografia',
+      titulo: '6. SALA DE TOMOGRAFIA',
+      itens: [
+        { id: 'RU-064', crit: 'N', text: 'As dimensões da sala estão de acordo com a RDC nº 50 (distância de 1,0 m das laterais da mesa às paredes e 0,60 m das laterais do gantry até a parede mais próxima). Base legal: RDC 50/2002 e norma estadual indicada.' },
+        { id: 'RU-065', crit: 'I', text: 'A sala de TC oferece segurança radiológica ao público e profissionais não ocupacionalmente expostos (verificar por meio do Laudo de Radiometria). Base legal: IN 93/2021.' },
+        { id: 'RU-066', crit: 'I', text: 'Existe sala de comando, com dimensões e blindagem suficiente para proteção do operador. Base legal: RDC 611/2022.' },
+        { id: 'RU-067', crit: 'N', text: 'A sala de comando permite ao operador, na posição de disparo, eficaz comunicação e observação visual do paciente. Base legal: RDC 611/2022.' },
+        { id: 'RU-068', crit: 'N', text: 'A localização da sala de comando está posicionada de modo que, durante as exposições, nenhum indivíduo possa entrar na sala sem ser notado pelo operador. Base legal: RDC 611/2022.' },
+      ]
+    },
+    {
+      id: 'ru-tomografia-equipamento',
+      titulo: '7. TOMOGRAFIA COMPUTADORIZADA — EQUIPAMENTO',
+      itens: [
+        { id: 'RU-069', crit: 'N', text: 'A filtração total permanente do feixe útil de radiação é de, no mínimo, o equivalente a 2,5 mm de alumínio. Base legal: RDC 611/2022.' },
+        { id: 'RU-070', crit: 'N', text: 'Existem meios que permitam a determinação visual do plano de referência. Base legal: RDC 611/2022.' },
+        { id: 'RU-071', crit: 'I', text: 'Existe dispositivo que permita ao operador interromper, a qualquer instante, qualquer varredura de duração maior que 0,5 segundos. Base legal: RDC 611/2022.' },
+        { id: 'RU-072', crit: 'N', text: 'É possível visualizar, no painel de controle, os parâmetros de técnica, incluindo espessura de corte, colimação e incremento de varredura, antes do início de uma série. Base legal: RDC 611/2022.' },
+        { id: 'RU-073', crit: 'N', text: 'O equipamento possui meios para ajustar os números de CT, de modo que os dados de calibração do fantoma com água ou material equivalente produzam números iguais a 0 (zero). Base legal: IN 93/2021.' },
+        { id: 'RU-074', crit: 'N', text: 'Possui modulação automática de corrente (aparelhos novos, a partir de 27/05/2021). Base legal: IN 93/2021.' },
+        { id: 'RU-075', crit: 'N', text: 'Possui protocolos pediátricos. Base legal: IN 93/2021.' },
+        { id: 'RU-076', crit: 'N', text: 'Possui tecnologia helicoidal (aparelhos novos a partir de 27/05/2021). Base legal: IN 93/2021.' },
+        { id: 'RU-077', crit: 'N', text: 'O aparelho possui indicação do Índice de Dose em Tomografia Computadorizada Ponderado (CTDIW) ou Volumétrico (CTDIVOL) e do Produto Dose x Comprimento (DLP), para equipamentos comercializados após a publicação desta Instrução Normativa (27/05/2021). Base legal: IN 93/2021.' },
+        { id: 'RU-078', crit: 'N', text: 'O aparelho apresenta o relatório de dose em padrão DICOM, para equipamentos comercializados após a publicação desta Instrução Normativa. Base legal: IN 93/2021.' },
+        { id: 'RU-079', crit: 'N', text: 'Existe a emissão de sinal sonoro e luminoso localizado no painel de controle do equipamento, enquanto durar a exposição radiográfica. Base legal: IN 93/2021.' },
+        { id: 'RU-080', crit: 'N', text: 'O setor dispõe de fantomas para calibrações e testes de constância. Base legal: IN 93/2021.' },
+        { id: 'RU-081', crit: 'I', text: 'Existem vestimentas plumbíferas para pacientes, equipe e acompanhantes. Base legal: RDC 611/2022.' },
+        { id: 'RU-082', crit: 'N', text: 'As vestimentas plumbíferas estão em bom estado de conservação e higiene. Base legal: RDC 611/2022.' },
+      ]
+    },
+    {
+      id: 'ru-ressonancia',
+      titulo: '8. RESSONÂNCIA MAGNÉTICA — SALA/PROCESSO',
+      itens: [
+        { id: 'RU-083', crit: 'N', text: 'As salas do sistema de ressonância magnética dispõem de isolamento acústico, de forma a atender os limites de exposição a níveis de ruído acústico estabelecidos nas normativas aplicáveis. Base legal: IN 97/2021.' },
+        { id: 'RU-084', crit: 'N', text: 'O leiaute da sala está de acordo com o Projeto Básico de Arquitetura aprovado. Base legal: RDC 50/2002 e norma estadual indicada.' },
+        { id: 'RU-085', crit: 'I', text: 'As salas de exames de equipamentos que utilizam líquidos criogênicos com tubo Quench possuem a abertura da porta de acesso para fora do ambiente. Base legal: IN 97/2021.' },
+        { id: 'RU-086', crit: 'I', text: 'A sala de exames possui sinalização nas portas de acesso, informando os riscos e a proibição da entrada de pessoas com implantes ou outros objetos incompatíveis com a tecnologia, em linguagem ou simbologia internacionalmente aceita, compreensível para os indivíduos do público. Base legal: IN 97/2021.' },
+        { id: 'RU-087', crit: 'I', text: 'Possui sistema de evacuação massiva de gases criogênicos. Base legal: IN 97/2021.' },
+        { id: 'RU-088', crit: 'N', text: 'O serviço dispõe de sistema de comunicação entre a sala de comando e a sala de exames, que permita manter contato audiovisual com o paciente durante toda a realização do procedimento. Base legal: IN 97/2021.' },
+        { id: 'RU-089', crit: 'N', text: 'O serviço de saúde classifica seus ambientes conforme os critérios da IN (zonas I, II, III e IV). Base legal: IN 97/2021.' },
+        { id: 'RU-090', crit: 'I', text: 'O serviço de saúde possui sistema de detecção de metais para monitoramento do acesso de pessoas e objetos às zonas III e IV, em quantidade compatível com o número de salas de exame. Base legal: IN 97/2021.' },
+        { id: 'RU-091', crit: 'I', text: 'O serviço garante que nenhuma pessoa entre nas zonas III ou IV com o magneto gerando campo magnético, portando implantes ou objetos incompatíveis que comprometam a segurança ou qualidade do procedimento. Base legal: IN 97/2021.' },
+        { id: 'RU-092', crit: 'N', text: 'O serviço garante que nenhum paciente seja submetido a procedimento radiológico sem que atenda aos critérios clínicos e de segurança estabelecidos nas normativas aplicáveis. Base legal: IN 97/2021.' },
+        { id: 'RU-093', crit: 'N', text: 'O serviço implementou medidas para mitigar os riscos de eventos adversos relacionados ao procedimento radiológico. Base legal: IN 97/2021.' },
+        { id: 'RU-094', crit: 'N', text: 'O serviço de saúde provê proteção auditiva para o paciente e para o acompanhante ou profissional que precisar permanecer dentro da sala de exames, de modo a não exceder os limites de ruído acústico estabelecidos nas normativas aplicáveis. Base legal: IN 97/2021.' },
+      ]
+    },
+    {
+      id: 'ru-procedimentos',
+      titulo: '9. PROCEDIMENTOS RADIOLÓGICOS',
+      itens: [
+        { id: 'RU-095', crit: 'I', text: 'É proibida a permanência de pessoas alheias ao exame na sala de RX. Base legal: RDC 611/2022.' },
+        { id: 'RU-096', crit: 'N', text: 'O técnico mantém-se dentro da cabine e costuma observar o paciente durante os disparos. Base legal: RDC 611/2022.' },
+        { id: 'RU-097', crit: 'N', text: 'Quando necessário, quem segura ou conforta o paciente é o acompanhante, em caráter voluntário. Base legal: RDC 611/2022.' },
+        { id: 'RU-098', crit: 'I', text: 'É obrigatória ao acompanhante, durante as exposições, a utilização de equipamento de proteção individual compatível com o tipo de procedimento radiológico e com a energia da radiação, com atenuação maior ou igual a 0,25 mm equivalente de chumbo. Base legal: RDC 611/2022.' },
+        { id: 'RU-099', crit: 'N', text: 'O técnico utiliza tabela de técnicas radiográficas de acordo com o rendimento de cada equipamento. Base legal: RDC 611/2022.' },
+        { id: 'RU-100', crit: 'N', text: 'O técnico colima o feixe somente à região de interesse. Base legal: IN 90/2021.' },
+        { id: 'RU-101', crit: 'N', text: 'As portas são mantidas fechadas durante os exames. Base legal: RDC 611/2022.' },
+        { id: 'RU-102', crit: 'I', text: 'Os profissionais ocupacionalmente expostos utilizam sempre os dosímetros individuais. Base legal: RDC 611/2022.' },
+        { id: 'RU-103', crit: 'N', text: 'Quando não estiver em uso, o dosímetro é mantido junto ao dosímetro padrão em local seguro da área livre. Base legal: RDC 611/2022.' },
+        { id: 'RU-104', crit: 'N', text: 'Os dosímetros individuais de corpo inteiro são utilizados no tronco. Base legal: RDC 611/2022.' },
+        { id: 'RU-105', crit: 'I', text: 'O técnico protege-se da radiação espalhada por vestimenta ou barreiras protetoras. Base legal: RDC 611/2022.' },
+        { id: 'RU-106', crit: 'N', text: 'Quando é necessário o técnico operador usar avental plumbífero, o dosímetro individual é colocado na parte externa. Base legal: RDC 611/2022.' },
+        { id: 'RU-107', crit: 'I', text: 'Quando possível, os órgãos mais sensíveis do paciente são protegidos com blindagem adequada (0,5 mm de Pb) quando expostos diretamente ao feixe de RX. Base legal: RDC 611/2022.' },
+        { id: 'RU-108', crit: 'I', text: 'Em exames em leitos, em ambientes coletivos, os demais pacientes são protegidos por barreiras protetoras (0,50 mm Pb) ou afastados a pelo menos 2 metros do cabeçote, no caso de RX transportável. Base legal: RDC 611/2022.' },
+        { id: 'RU-109', crit: 'N', text: 'O técnico protege-se da radiação espalhada afastando-se pelo menos 2 m do ponto de radiação e por vestimentas ou barreiras protetoras, no caso de RX transportável. Base legal: RDC 611/2022.' },
+      ]
+    },
+    {
+      id: 'ru-camara-escura',
+      titulo: '10. SALA DE LAUDOS/CÂMARA ESCURA',
+      itens: [
+        { id: 'RU-110', crit: 'N', text: 'O leiaute da câmara escura está de acordo com o projeto aprovado pela VISA. Base legal: RDC 50/2002 e norma estadual indicada.' },
+        { id: 'RU-111', crit: 'N', text: 'Existe vedação suficiente contra entrada de luz (se necessário, revelar filme virgem). Base legal: RDC 611/2022.' },
+        { id: 'RU-112', crit: 'N', text: 'Existe sistema de exaustão de ar em funcionamento. Base legal: RDC 611/2022.' },
+        { id: 'RU-113', crit: 'N', text: 'As paredes possuem revestimento resistente à ação das substâncias químicas utilizadas. Base legal: RDC 611/2022.' },
+        { id: 'RU-114', crit: 'N', text: 'O piso é anticorrosivo, impermeável e antiderrapante. Base legal: RDC 611/2022.' },
+        { id: 'RU-115', crit: 'N', text: 'Existe sistema de iluminação de segurança, localizado à distância não inferior a 1,2 m do ponto de manipulação dos filmes e chassis. Base legal: RDC 611/2022.' },
+        { id: 'RU-116', crit: 'N', text: 'Os chassis e écrans estão íntegros (chassis sem travas quebradas, amassados etc.; écrans limpos, sem manchas, sem pontos de pressão prematura etc.). Base legal: RDC 611/2022.' },
+        { id: 'RU-117', crit: 'N', text: 'A processadora é específica e exclusiva para mamografia. Base legal: IN 92/2021.' },
+        { id: 'RU-118', crit: 'N', text: 'A câmara escura e a(s) processadora(s) são mantidas limpas (processadora automática). Base legal: RDC 611/2022.' },
+        { id: 'RU-119', crit: 'N', text: 'Na câmara escura para revelação manual estão disponíveis cronômetro, termômetro e tabela de tempos e temperatura de revelação. Base legal: RDC 611/2022.' },
+        { id: 'RU-120', crit: 'N', text: 'Os negatoscópios apresentam iluminação intensa e uniforme, na câmara clara. Base legal: RDC 611/2022.' },
+        { id: 'RU-121', crit: 'N', text: 'A posição da iluminação da sala evita reflexos nos negatoscópios. Base legal: RDC 611/2022.' },
+      ]
+    },
+    {
+      id: 'ru-gestao-pessoal',
+      titulo: '11. GESTÃO, DOCUMENTAÇÃO E PESSOAL (RDC 611/2022)',
+      itens: [
+        { id: 'RU-122', crit: 'N', text: 'O serviço possui estrutura organizacional com cadeia hierárquica, responsabilidades definidas, cultura de segurança e melhoria contínua. Base legal: RDC 611/2022, art. 4º.' },
+        { id: 'RU-123', crit: 'N', text: 'O Projeto Básico de Arquitetura contém relação de equipamentos, leiaute, salas de controle, posicionamento, visores, limites de deslocamento, janelas, mobiliário e dispositivos de segurança. Base legal: RDC 611/2022, art. 6º.' },
+        { id: 'RU-124', crit: 'I', text: 'O projeto de blindagem foi elaborado e assinado por profissional habilitado, aprovado pelo responsável legal e pela autoridade sanitária antes dos demais itens, quando aplicável. Base legal: RDC 611/2022, art. 7º e 8º.' },
+        { id: 'RU-125', crit: 'N', text: 'A iluminação da sala de interpretação/laudos é adequada, e qualquer alteração de instalação, equipamento ou parâmetro de blindagem é previamente aprovada ou comunicada à autoridade sanitária. Base legal: RDC 611/2022, art. 9º a 11.' },
+        { id: 'RU-126', crit: 'N', text: 'A equipe multiprofissional está dimensionada de acordo com o perfil de demanda e as normas aplicáveis. Base legal: RDC 611/2022, art. 12.' },
+        { id: 'RU-127', crit: 'I', text: 'Existe supervisor de proteção radiológica formalmente designado, legalmente habilitado, com substituto(s), atribuições definidas e autoridade para interromper atividade insegura. Base legal: RDC 611/2022, art. 14.' },
+        { id: 'RU-128', crit: 'N', text: 'O Programa de Educação Permanente contempla treinamento inicial e anual, treinamento antes de novos processos/pessoas, avaliação de eficácia e registros completos. Base legal: RDC 611/2022, art. 15, §1º a §3º.' },
+        { id: 'RU-129', crit: 'N', text: 'A documentação é rastreável e arquivada pelo prazo aplicável, incluindo PBA, procedimentos, inventário regularizado, relação nominal da equipe e evidências dos três programas. Base legal: RDC 611/2022, art. 16 e 17.' },
+        { id: 'RU-130', crit: 'N', text: 'Existem procedimentos para comunicação, baixa, destino, guarda e descarte seguro de serviços ou equipamentos desativados. Base legal: RDC 611/2022, art. 18 a 20.' },
+        { id: 'RU-131', crit: 'N', text: 'O responsável legal assegura recursos, acesso da autoridade sanitária e cumprimento da RDC; a equipe conhece suas responsabilidades e comunica eventos, gravidez e riscos. Base legal: RDC 611/2022, art. 21 a 23.' },
+      ]
+    },
+    {
+      id: 'ru-qualidade',
+      titulo: '12. GARANTIA DA QUALIDADE E TECNOLOGIA',
+      itens: [
+        { id: 'RU-132', crit: 'N', text: 'Os produtos estão regularizados, são usados conforme finalidade e fabricante, e o gerenciamento tecnológico cobre seleção, aquisição, instalação, manutenção, descarte e rastreabilidade. Base legal: RDC 611/2022, art. 25 a 31.' },
+        { id: 'RU-133', crit: 'I', text: 'Existem padrões de qualidade de imagem, testes de aceitação e constância, manutenção, calibração rastreável dos instrumentos e repetição dos testes após ajustes ou alterações. Base legal: RDC 611/2022, art. 28 a 31.' },
+        { id: 'RU-134', crit: 'I', text: 'Quando há nível de restrição, o equipamento é suspenso ou usado apenas em urgência com parecer formal, e existe plano documentado de adequação e prevenção de recorrência. Base legal: RDC 611/2022, art. 33.' },
+      ]
+    },
+    {
+      id: 'ru-riscos',
+      titulo: '13. PROCESSOS E GERENCIAMENTO DE RISCOS',
+      itens: [
+        { id: 'RU-135', crit: 'N', text: 'Os procedimentos são realizados por profissionais habilitados e solicitados por profissional habilitado, com técnicas adequadas e protocolos escritos, atualizados, acessíveis e conhecidos pela equipe. Base legal: RDC 611/2022, art. 34 a 38.' },
+        { id: 'RU-136', crit: 'N', text: 'O serviço identifica, analisa, trata, monitora, comunica e investiga riscos, falhas e incidentes, executando ações preventivas/corretivas documentadas. Base legal: RDC 611/2022, art. 39 a 41.' },
+      ]
+    },
+    {
+      id: 'ru-protecao-radiologica',
+      titulo: '14. PROTEÇÃO RADIOLÓGICA (RDC 611/2022)',
+      itens: [
+        { id: 'RU-137', crit: 'I', text: 'Os procedimentos observam justificação e otimização, considerando técnica, equipamento, qualidade de imagem e níveis de referência de diagnóstico para adultos e pediatria. Base legal: RDC 611/2022, art. 43 e 44.' },
+        { id: 'RU-138', crit: 'I', text: 'As exposições ocupacionais, de gestantes e do público são controladas dentro dos limites aplicáveis, com restrições de 0,5 mSv/ano para áreas livres e 5 mSv/ano para áreas controladas. Base legal: RDC 611/2022, art. 45 a 49.' },
+        { id: 'RU-139', crit: 'I', text: 'Os ambientes são classificados, sinalizados e controlados, com barreiras físicas adequadas, acesso restrito e somente equipamentos indispensáveis. Base legal: RDC 611/2022, art. 50 e 51.' },
+        { id: 'RU-140', crit: 'I', text: 'São controlados acompanhantes, imobilização, EPIs/EPCs, quantidade e integridade das vestimentas, distância/posicionamento da equipe, exames móveis e proteção de órgãos radiossensíveis. Base legal: RDC 611/2022, art. 55 a 61.' },
+        { id: 'RU-141', crit: 'N', text: 'O levantamento radiométrico contém croqui, identificação, instrumentação/calibração, fatores de operação, pontos de leitura, estimativas, conclusões, assinaturas, e é renovado a cada quatro anos ou após alterações relevantes. Base legal: RDC 611/2022, art. 62 a 64.' },
+        { id: 'RU-142', crit: 'N', text: 'A monitoração individual é realizada durante a jornada/área controlada, com guarda correta, registros, comunicação dos resultados, investigação de doses elevadas e manutenção dos históricos ocupacionais. Base legal: RDC 611/2022, art. 65 a 70.' },
+        { id: 'RU-143', crit: 'N', text: 'O serviço mantém programa e registros de vigilância da saúde ocupacional, investigação e resposta a exposições acidentais, incluindo comunicação à autoridade sanitária quando aplicável. Base legal: RDC 611/2022, art. 71 a 76.' },
+      ]
+    },
+    {
+      id: 'ru-procedimentos-rdc',
+      titulo: '15. PROCEDIMENTOS RADIOLÓGICOS (RDC 611/2022)',
+      itens: [
+        { id: 'RU-144', crit: 'N', text: 'Os procedimentos são justificados, otimizados e registrados; o paciente é identificado, recebe informações, e há prevenção de repetição desnecessária e de eventos adversos. Base legal: RDC 611/2022, art. 77 a 80.' },
+        { id: 'RU-145', crit: 'I', text: 'O serviço possui critérios e registros para exposições médicas de crianças, gestantes, acompanhantes e situações de exposição acidental ou não intencional. Base legal: RDC 611/2022, art. 81 a 84.' },
+        { id: 'RU-146', crit: 'I', text: 'O serviço possui plano de ação para incidentes/acidentes, análise de causa, comunicação, registro e medidas corretivas, inclusive quando houver suspeita de exposição não intencional. Base legal: RDC 611/2022, art. 85 a 90.' },
+      ]
+    },
+  ]
+}
+
 /**
  * Converte os indicadores do ROI da ANVISA no mesmo ChecklistData dos demais
  * roteiros — assim relatório, PDF, fotos, observações e polimento por IA
@@ -2066,6 +2527,8 @@ const CHECKLISTS: Record<string, ChecklistData> = {
   'roteiro-saa-subterraneo': saaSubterraneoChecklist,
   'salao-beleza-barbearia-depilacao': salaoBelezaChecklist,
   'farmacia-resolucao-sesa-590-2014': farmaciaResolucaoSesa5902014Checklist,
+  'roteiro-dedetizadoras': dedetizadorasChecklist,
+  'roteiro-unico-radiologia': roteiroUnicoRadiologiaChecklist,
   'roi-radiografia-medica': checklistDoRoi(
     'Roteiro Objetivo de Inspeção — Radiografia Médica',
     'ANVISA — documento 9.1, versão 1.2',
@@ -2100,6 +2563,20 @@ const CHECKLISTS: Record<string, ChecklistData> = {
     'Roteiro objetivo de inspeção',
     'URGÊNCIA E EMERGÊNCIA',
     ROI_RADIOGRAFIA_MEDICA
+  ),
+  'roi-odontologia': checklistDoRoi(
+    'Roteiro Objetivo de Inspeção — Serviço de Odontologia',
+    'ANVISA — versão 1.2, baseado na RDC nº 1.002/2025',
+    'RDC nº 1.002/2025',
+    'ODONTOLOGIA',
+    ROI_ODONTOLOGIA
+  ),
+  'roi-laboratorio': checklistDoRoi(
+    'Roteiro Objetivo de Inspeção — Serviço EAC Tipo III (Laboratório Clínico)',
+    'ANVISA — documento 13.1, versão 1.2, baseado na RDC nº 786/2023',
+    'RDC nº 786/2023',
+    'LABORATÓRIO CLÍNICO',
+    ROI_LABORATORIO
   ),
 };
 
