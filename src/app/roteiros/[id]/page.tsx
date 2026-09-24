@@ -2443,6 +2443,280 @@ const roteiroUnicoRadiologiaChecklist: ChecklistData = {
 }
 
 /**
+ * RDC Anvisa nº 978/2025 revoga a RDC nº 786/2023 (art. 193) e passa a ser a
+ * base legal dos Serviços de Exames de Análises Clínicas (EAC) — Tipo I, II
+ * e III, Serviço Itinerante e Central de Distribuição. A fonte já é um
+ * checklist Sim/Não/N.A. tradicional (164 itens, seções 3.1 a 3.15), então
+ * não houve necessidade de adaptar modelo de resposta. A fonte não traz
+ * coluna de criticidade própria — a classificação I/N/R abaixo é julgamento
+ * próprio, priorizando regularização/habilitação/segurança do paciente como
+ * imprescindíveis.
+ */
+const rdc978Checklist: ChecklistData = {
+  titulo: 'Roteiro de Inspeção Sanitária — RDC Anvisa nº 978/2025',
+  subtitulo: 'Serviços de Exames de Análises Clínicas (EAC) — revoga a RDC nº 786/2023',
+  categoria: 'SAÚDE',
+  lei: 'RDC Anvisa nº 978/2025',
+  especialidade: 'EXAMES DE ANÁLISES CLÍNICAS (EAC)',
+  secoes: [
+    {
+      id: 'rdc978-regularizacao',
+      titulo: '3.1 REGULARIZAÇÃO, CLASSIFICAÇÃO E ORGANIZAÇÃO DO SERVIÇO',
+      itens: [
+        { id: 'RDC978-001', crit: 'I', text: 'O estabelecimento é um EAS e está classificado de acordo com as atividades efetivamente executadas. Base legal: RDC 978/2025, arts. 54 a 57.' },
+        { id: 'RDC978-002', crit: 'I', text: 'Possui alvará de licenciamento sanitário ou equivalente, com indicação das atividades relacionadas ao EAC. Base legal: RDC 978/2025, art. 73.' },
+        { id: 'RDC978-003', crit: 'N', text: 'O Serviço Tipo I possui alvará indicando também, quando aplicável, as atividades de farmácia ou consultório isolado. Base legal: RDC 978/2025, art. 63.' },
+        { id: 'RDC978-004', crit: 'N', text: 'O estabelecimento está inscrito no CNES. Base legal: RDC 978/2025, art. 74.' },
+        { id: 'RDC978-005', crit: 'I', text: 'Possui Responsável Técnico legalmente habilitado e substituto para situações de impedimento. Base legal: RDC 978/2025, art. 75.' },
+        { id: 'RDC978-006', crit: 'N', text: 'Possui estrutura organizacional documentada. Base legal: RDC 978/2025, art. 76.' },
+        { id: 'RDC978-007', crit: 'N', text: 'Existem ações instituídas para segurança do paciente e melhoria da qualidade. Base legal: RDC 978/2025, art. 64.' },
+        { id: 'RDC978-008', crit: 'I', text: 'Os resultados suspeitos de Doenças de Notificação Compulsória são notificados conforme as normas vigentes. Base legal: RDC 978/2025, arts. 66 e 67.' },
+        { id: 'RDC978-009', crit: 'N', text: 'O Serviço Tipo II está vinculado societária ou contratualmente a apenas um Serviço Tipo III. Base legal: RDC 978/2025, art. 62.' },
+        { id: 'RDC978-010', crit: 'N', text: 'O Posto de Coleta encaminha material biológico somente ao Serviço Tipo III ao qual está vinculado. Base legal: RDC 978/2025, art. 61.' },
+      ]
+    },
+    {
+      id: 'rdc978-tipo-i',
+      titulo: '3.2 CLASSIFICAÇÃO E REQUISITOS ESPECÍFICOS DO SERVIÇO TIPO I',
+      itens: [
+        { id: 'RDC978-011', crit: 'I', text: 'Executa EAC exclusivamente em material obtido por punção capilar, cavidade oral, nasofaringe ou orofaringe, salvo exceção aplicável à administração pública. Base legal: RDC 978/2025, art. 10, I, e art. 69.' },
+        { id: 'RDC978-012', crit: 'N', text: 'Realiza todas as etapas das fases pré-analítica, analítica e pós-analítica no próprio serviço, incluindo CIQ e CEQ. Base legal: RDC 978/2025, art. 10, II.' },
+        { id: 'RDC978-013', crit: 'N', text: 'Não realiza guarda, armazenamento ou transporte de material biológico, exceto materiais de CIQ e CEQ. Base legal: RDC 978/2025, art. 10, III.' },
+        { id: 'RDC978-014', crit: 'I', text: 'Não utiliza metodologia própria (in house). Base legal: RDC 978/2025, art. 10, IV.' },
+        { id: 'RDC978-015', crit: 'N', text: 'Utiliza somente equipamentos que não exigem água reagente produzida no próprio serviço. Base legal: RDC 978/2025, art. 10, V.' },
+        { id: 'RDC978-016', crit: 'I', text: 'O EAC é executado exclusivamente por profissional legalmente habilitado. Base legal: RDC 978/2025, art. 11.' },
+        { id: 'RDC978-017', crit: 'N', text: 'No consultório isolado, os exames estão relacionados à assistência à saúde e à habilitação do profissional executor. Base legal: RDC 978/2025, art. 12.' },
+        { id: 'RDC978-018', crit: 'N', text: 'Possui recepção dimensionada e separada da sala de coleta e execução de EAC. Base legal: RDC 978/2025, art. 13, I.' },
+        { id: 'RDC978-019', crit: 'N', text: 'Possui DML, sanitário de uso público e sala de coleta e execução de EAC. Base legal: RDC 978/2025, art. 13, II a IV.' },
+        { id: 'RDC978-020', crit: 'N', text: 'A sala de coleta possui lavatório, bancada, mesa e cadeira para coleta. Base legal: RDC 978/2025, art. 14, I a IV.' },
+        { id: 'RDC978-021', crit: 'N', text: 'Quando aplicável, possui refrigeração exclusiva para produtos e materiais de controle, com registros de temperatura máxima, mínima e do momento. Base legal: RDC 978/2025, art. 14, V.' },
+        { id: 'RDC978-022', crit: 'N', text: 'Possui área para depósito de equipamentos e materiais e recipientes adequados para perfurocortantes e resíduos. Base legal: RDC 978/2025, art. 14, VI e VII.' },
+        { id: 'RDC978-023', crit: 'N', text: 'A sala possui ventilação natural ou sistema de climatização e iluminação que não prejudica a avaliação do exame e da coloração da pele. Base legal: RDC 978/2025, arts. 16 e 17.' },
+        { id: 'RDC978-024', crit: 'N', text: 'O consultório isolado possui área de procedimento relacionada ao EAC. Base legal: RDC 978/2025, art. 18.' },
+      ]
+    },
+    {
+      id: 'rdc978-tipo-ii',
+      titulo: '3.3 CLASSIFICAÇÃO E REQUISITOS ESPECÍFICOS DO SERVIÇO TIPO II',
+      itens: [
+        { id: 'RDC978-025', crit: 'I', text: 'Executa EAC presencial exclusivamente nos materiais e condições permitidos para o Tipo II. Base legal: RDC 978/2025, art. 22, I, e art. 23, § 4º.' },
+        { id: 'RDC978-026', crit: 'N', text: 'Quando executa o exame no local, realiza todas as etapas aplicáveis no próprio serviço, incluindo CIQ e CEQ. Base legal: RDC 978/2025, art. 22, II.' },
+        { id: 'RDC978-027', crit: 'I', text: 'Não realiza metodologia própria e utiliza somente equipamentos que não exigem água reagente produzida no serviço. Base legal: RDC 978/2025, art. 22, III e IV.' },
+        { id: 'RDC978-028', crit: 'N', text: 'A coleta de outros materiais é limitada à fase pré-analítica para o Serviço Tipo III e realizada por profissional habilitado ou capacitado sob supervisão. Base legal: RDC 978/2025, art. 23, caput e § 1º.' },
+        { id: 'RDC978-029', crit: 'I', text: 'A coleta de sangue venoso ou arterial ocorre somente em Posto de Coleta, quando aplicável. Base legal: RDC 978/2025, art. 23, § 2º.' },
+        { id: 'RDC978-030', crit: 'N', text: 'A transcrição de laudo do Serviço Tipo III, quando realizada, preserva a fidedignidade e a rastreabilidade da etapa analítica. Base legal: RDC 978/2025, art. 23, § 3º.' },
+        { id: 'RDC978-031', crit: 'N', text: 'Coleta, armazenamento, acondicionamento, processamento e transporte de material biológico ocorrem somente no âmbito da fase pré-analítica para o Tipo III. Base legal: RDC 978/2025, art. 24.' },
+        { id: 'RDC978-032', crit: 'N', text: 'Não recebe material biológico de outro serviço de EAC, exceto o encaminhado por Serviço Itinerante ao Posto de Coleta. Base legal: RDC 978/2025, art. 25.' },
+        { id: 'RDC978-033', crit: 'N', text: 'Possui recepção, DML, sanitário público, copa, vestiário/sanitário de funcionários, área para lanches, sala de coleta e sanitário de paciente anexo e acessível a PCD, quando aplicável. Base legal: RDC 978/2025, art. 27.' },
+        { id: 'RDC978-034', crit: 'N', text: 'A sala de coleta possui maca, área de recebimento/triagem/guarda temporária, lavatório, bancada, mesa e cadeira com braçadeira. Base legal: RDC 978/2025, art. 28, I a VI.' },
+        { id: 'RDC978-035', crit: 'N', text: 'Possui refrigeração exclusiva para produtos e controles que exigem temperatura controlada. Base legal: RDC 978/2025, art. 28, VII.' },
+        { id: 'RDC978-036', crit: 'N', text: 'Possui refrigeração exclusiva para material biológico, com registros de temperatura máxima, mínima e do momento. Base legal: RDC 978/2025, art. 28, VIII.' },
+        { id: 'RDC978-037', crit: 'N', text: 'Possui área de expedição, área de depósito de equipamentos e materiais e recipientes para perfurocortantes e resíduos. Base legal: RDC 978/2025, art. 28, IX a XI.' },
+        { id: 'RDC978-038', crit: 'N', text: 'A sala possui sistema de climatização e iluminação adequada para a avaliação do exame e da coloração da pele. Base legal: RDC 978/2025, arts. 29 e 31.' },
+        { id: 'RDC978-039', crit: 'N', text: 'O consultório isolado Tipo II possui área de procedimento exclusiva, salvo compartilhamento permitido no mesmo ambiente com atendimento dos requisitos. Base legal: RDC 978/2025, art. 32.' },
+        { id: 'RDC978-040', crit: 'N', text: 'Se integrar a administração pública, as dispensas e permissões específicas dos arts. 68, 70 e 71 estão formalmente justificadas e atendidas. Base legal: RDC 978/2025, arts. 68, 70 e 71.' },
+      ]
+    },
+    {
+      id: 'rdc978-tipo-iii',
+      titulo: '3.4 CLASSIFICAÇÃO E REQUISITOS ESPECÍFICOS DO SERVIÇO TIPO III',
+      itens: [
+        { id: 'RDC978-041', crit: 'N', text: 'A infraestrutura física atende à RDC nº 50/2002 e atualizações aplicáveis. Base legal: RDC 978/2025, art. 40.' },
+        { id: 'RDC978-042', crit: 'N', text: 'A sala de coleta e execução de EAC possui sistema de climatização. Base legal: RDC 978/2025, art. 41.' },
+        { id: 'RDC978-043', crit: 'N', text: 'A iluminação não prejudica a avaliação do EAC nem a avaliação da coloração da pele do paciente. Base legal: RDC 978/2025, art. 42.' },
+        { id: 'RDC978-044', crit: 'N', text: 'O Serviço Tipo III pode realizar todos os EAC e todas as fases do processo operacional dentro dos limites da autorização sanitária. Base legal: RDC 978/2025, art. 35.' },
+        { id: 'RDC978-045', crit: 'I', text: 'O envio de material a Laboratório de Apoio está formalizado e possui rastreabilidade. Base legal: RDC 978/2025, arts. 35 a 37.' },
+        { id: 'RDC978-046', crit: 'N', text: 'A qualidade do Laboratório de Apoio é avaliada anualmente quanto à regularidade sanitária e à qualidade analítica. Base legal: RDC 978/2025, art. 38.' },
+        { id: 'RDC978-047', crit: 'N', text: 'Quando o Laboratório de Apoio é estrangeiro, há comprovação de regularidade no país de origem e tradução juramentada disponível. Base legal: RDC 978/2025, art. 39.' },
+      ]
+    },
+    {
+      id: 'rdc978-itinerante',
+      titulo: '3.5 SERVIÇO DE EAC ITINERANTE',
+      itens: [
+        { id: 'RDC978-048', crit: 'N', text: 'O Serviço Itinerante é próprio ou contratado por Serviço Tipo III. Base legal: RDC 978/2025, art. 43.' },
+        { id: 'RDC978-049', crit: 'N', text: 'Possui sede fixa e alvará com indicação expressa das atividades, quando contratado. Base legal: RDC 978/2025, art. 44.' },
+        { id: 'RDC978-050', crit: 'I', text: 'Está regularizado na autoridade sanitária da localidade onde executa as atividades. Base legal: RDC 978/2025, art. 45.' },
+        { id: 'RDC978-051', crit: 'I', text: 'Possui Responsável Técnico habilitado e substituto para impedimentos. Base legal: RDC 978/2025, art. 46.' },
+        { id: 'RDC978-052', crit: 'I', text: 'Não executa EAC com a estrutura física em movimento, salvo situação de urgência ou emergência permitida. Base legal: RDC 978/2025, art. 47.' },
+        { id: 'RDC978-053', crit: 'N', text: 'Após a montagem no local, realiza e registra medidas e verificações dos equipamentos. Base legal: RDC 978/2025, art. 48.' },
+        { id: 'RDC978-054', crit: 'N', text: 'Coleta e transporta material biológico somente para o Serviço Tipo III vinculado, salvo a exceção prevista para Posto de Coleta vinculado. Base legal: RDC 978/2025, art. 50.' },
+        { id: 'RDC978-055', crit: 'N', text: 'Não realiza metodologia própria e utiliza equipamentos que não exigem água reagente produzida no serviço. Base legal: RDC 978/2025, art. 51, II e III.' },
+        { id: 'RDC978-056', crit: 'N', text: 'A coleta e execução são realizadas por profissional habilitado ou capacitado sob supervisão. Base legal: RDC 978/2025, art. 52.' },
+        { id: 'RDC978-057', crit: 'N', text: 'O local garante privacidade e atendimento individualizado. Base legal: RDC 978/2025, art. 51, § 5º.' },
+        { id: 'RDC978-058', crit: 'N', text: 'Realiza CIQ e CEQ conforme a Resolução e as determinações do Tipo III mantenedor, quando aplicável. Base legal: RDC 978/2025, art. 53.' },
+      ]
+    },
+    {
+      id: 'rdc978-central-distribuicao',
+      titulo: '3.6 CENTRAL DE DISTRIBUIÇÃO',
+      itens: [
+        { id: 'RDC978-059', crit: 'N', text: 'A Central possui alvará com indicação expressa das atividades realizadas. Base legal: RDC 978/2025, art. 149.' },
+        { id: 'RDC978-060', crit: 'I', text: 'Possui Responsável Técnico legalmente habilitado. Base legal: RDC 978/2025, art. 146.' },
+        { id: 'RDC978-061', crit: 'N', text: 'Possui estrutura organizacional documentada. Base legal: RDC 978/2025, art. 150.' },
+        { id: 'RDC978-062', crit: 'N', text: 'Possui sala de recebimento, triagem e guarda temporária com área mínima de 3,0 m², bancada e lavatório. Base legal: RDC 978/2025, art. 151, I.' },
+        { id: 'RDC978-063', crit: 'N', text: 'Possui vestiários/sanitários, expurgo, DML, recipientes para resíduos e perfurocortantes e área para depósito de equipamentos e materiais. Base legal: RDC 978/2025, art. 151, II a VI.' },
+        { id: 'RDC978-064', crit: 'N', text: 'Possui área para recebimento e expedição dos recipientes de transporte. Base legal: RDC 978/2025, art. 151, VII.' },
+        { id: 'RDC978-065', crit: 'N', text: 'Registra o monitoramento de temperatura e umidade controladas. Base legal: RDC 978/2025, art. 151, parágrafo único.' },
+        { id: 'RDC978-066', crit: 'N', text: 'Verifica e registra condições de transporte e armazenamento, incluindo temperatura, umidade, luz, validade, quantidade e integridade da carga. Base legal: RDC 978/2025, art. 147.' },
+        { id: 'RDC978-067', crit: 'I', text: 'Não recebe material biológico de Serviço Itinerante, não viola embalagem primária e não executa fases analítica ou pós-analítica. Base legal: RDC 978/2025, arts. 145 e 148.' },
+        { id: 'RDC978-068', crit: 'N', text: 'Não realiza atividade não associada ao armazenamento, acondicionamento e transporte de material biológico. Base legal: RDC 978/2025, art. 152.' },
+      ]
+    },
+    {
+      id: 'rdc978-contratos',
+      titulo: '3.7 CONTRATOS, RESPONSABILIDADES E FORNECEDORES',
+      itens: [
+        { id: 'RDC978-069', crit: 'N', text: 'Os contratos relacionados às atividades de EAC definem responsabilidades, funções, critérios de controle e qualificação. Base legal: RDC 978/2025, arts. 79 e 82.' },
+        { id: 'RDC978-070', crit: 'N', text: 'Os contratos autorizam auditorias entre as partes. Base legal: RDC 978/2025, art. 82, I.' },
+        { id: 'RDC978-071', crit: 'N', text: 'Os contratos asseguram rastreabilidade e cumprimento das fases aplicáveis. Base legal: RDC 978/2025, art. 82, II e III.' },
+        { id: 'RDC978-072', crit: 'N', text: 'Há obrigação contratual de comunicar desvios de qualidade e riscos em tempo hábil. Base legal: RDC 978/2025, art. 82, IV.' },
+        { id: 'RDC978-073', crit: 'N', text: 'As partes fornecem informações necessárias para operação segura e redução de riscos. Base legal: RDC 978/2025, art. 82, V.' },
+        { id: 'RDC978-074', crit: 'N', text: 'Os produtos, materiais e conhecimentos recebidos são adequados ao propósito de uso. Base legal: RDC 978/2025, art. 81.' },
+        { id: 'RDC978-075', crit: 'N', text: 'Quando aplicável, há documentos que comprovam a regularidade sanitária de fornecedores e prestadores. Base legal: RDC 978/2025, art. 80, parágrafo único.' },
+      ]
+    },
+    {
+      id: 'rdc978-pgq-tecnologias',
+      titulo: '3.8 PROGRAMA DE GARANTIA DA QUALIDADE E GERENCIAMENTO DE TECNOLOGIAS',
+      itens: [
+        { id: 'RDC978-076', crit: 'I', text: 'O Serviço implementou Programa de Garantia da Qualidade (PGQ). Base legal: RDC 978/2025, art. 84.' },
+        { id: 'RDC978-077', crit: 'N', text: 'O PGQ contempla gerenciamento de tecnologias, riscos, documentos, pessoal e educação permanente, processos operacionais e GCQ. Base legal: RDC 978/2025, art. 86.' },
+        { id: 'RDC978-078', crit: 'N', text: 'A GCQ é documentada e monitorada pelo RT por meio de indicadores de desempenho. Base legal: RDC 978/2025, art. 87.' },
+        { id: 'RDC978-079', crit: 'I', text: 'Todos os produtos sujeitos à vigilância sanitária estão regularizados junto à Anvisa e são usados conforme finalidade e instruções do fabricante. Base legal: RDC 978/2025, art. 88.' },
+        { id: 'RDC978-080', crit: 'N', text: 'Existe gerenciamento documentado de seleção, aquisição, transporte, recebimento, armazenamento, instalação, calibração, uso, descarte e rastreabilidade das tecnologias. Base legal: RDC 978/2025, art. 89.' },
+        { id: 'RDC978-081', crit: 'N', text: 'O Serviço monitora desempenho e segurança, investiga incidentes, eventos adversos e queixas técnicas e adota medidas preventivas. Base legal: RDC 978/2025, art. 90.' },
+        { id: 'RDC978-082', crit: 'N', text: 'Há procedimento para notificação no Notivisa ou sistema substituto, quando aplicável. Base legal: RDC 978/2025, art. 90, § 1º.' },
+        { id: 'RDC978-083', crit: 'N', text: 'Há registros de manutenção preventiva e corretiva dos equipamentos. Base legal: RDC 978/2025, art. 92.' },
+        { id: 'RDC978-084', crit: 'N', text: 'Há registros de medidas e verificações dos equipamentos. Base legal: RDC 978/2025, art. 93.' },
+        { id: 'RDC978-085', crit: 'N', text: 'Existem procedimentos documentados de calibração, realizados na frequência do fabricante ou, na ausência desta, no mínimo anual. Base legal: RDC 978/2025, art. 94.' },
+        { id: 'RDC978-086', crit: 'I', text: 'Existem meios para manter produtos e material biológico conservados e seguros durante falhas de energia. Base legal: RDC 978/2025, art. 95.' },
+        { id: 'RDC978-087', crit: 'N', text: 'Equipamentos com temperatura controlada registram temperatura máxima, mínima e do momento. Base legal: RDC 978/2025, art. 96.' },
+        { id: 'RDC978-088', crit: 'N', text: 'O recebimento de reagentes e insumos é registrado com lote, condição de transporte, data e dados de rastreabilidade. Base legal: RDC 978/2025, art. 100.' },
+        { id: 'RDC978-089', crit: 'N', text: 'Reagentes e insumos fracionados ou preparados possuem rótulo completo, incluindo nome, especificação, lote, preparo, responsável, validade, armazenamento e riscos. Base legal: RDC 978/2025, art. 101.' },
+        { id: 'RDC978-090', crit: 'I', text: 'Não são utilizados reagentes, insumos ou produtos para diagnóstico in vitro vencidos ou revalidados após o vencimento. Base legal: RDC 978/2025, art. 102.' },
+        { id: 'RDC978-091', crit: 'N', text: 'A área de armazenamento possui controle de temperatura e umidade conforme as instruções do fabricante. Base legal: RDC 978/2025, art. 104.' },
+      ]
+    },
+    {
+      id: 'rdc978-sistemas-informacao',
+      titulo: '3.9 SISTEMAS DE INFORMAÇÃO E PROTEÇÃO DE DADOS',
+      itens: [
+        { id: 'RDC978-092', crit: 'N', text: 'Existe política de acesso a dados e informações compatível com a proteção dos dados do paciente e a LGPD. Base legal: RDC 978/2025, art. 105.' },
+        { id: 'RDC978-093', crit: 'N', text: 'O sistema controla acesso, lançamentos e alterações, mantendo histórico de data, horário, usuário e local. Base legal: RDC 978/2025, art. 105, II.' },
+        { id: 'RDC978-094', crit: 'N', text: 'Existe processo sistematizado para liberação de resultados e laudos. Base legal: RDC 978/2025, art. 105, III.' },
+        { id: 'RDC978-095', crit: 'N', text: 'Existem política de privacidade, confidencialidade e proteção contra acessos não autorizados. Base legal: RDC 978/2025, art. 105, IV e V.' },
+        { id: 'RDC978-096', crit: 'N', text: 'O sistema foi avaliado e verificado antes da implementação, com registros de disponibilidade, confiabilidade, integridade e responsabilidades. Base legal: RDC 978/2025, art. 106.' },
+      ]
+    },
+    {
+      id: 'rdc978-riscos-biosseguranca',
+      titulo: '3.10 RISCOS, BIOSSEGURANÇA, RESÍDUOS E LIMPEZA',
+      itens: [
+        { id: 'RDC978-097', crit: 'N', text: 'O gerenciamento de riscos contempla identificação, análise, avaliação, tratamento, monitoramento e comunicação. Base legal: RDC 978/2025, art. 109, I.' },
+        { id: 'RDC978-098', crit: 'N', text: 'São identificadas falhas de equipamentos e erros humanos, com medidas preventivas. Base legal: RDC 978/2025, art. 109, II.' },
+        { id: 'RDC978-099', crit: 'N', text: 'Falhas e descumprimentos são investigados e geram ações preventivas e corretivas documentadas. Base legal: RDC 978/2025, art. 109, III e IV.' },
+        { id: 'RDC978-100', crit: 'I', text: 'Existem instruções atualizadas de biossegurança para riscos biológicos, químicos, físicos, ocupacionais e ambientais. Base legal: RDC 978/2025, art. 110, I.' },
+        { id: 'RDC978-101', crit: 'I', text: 'Há instruções para uso de EPI e EPC, procedimentos para acidentes e, quando aplicável, manuseio e transporte de material biológico. Base legal: RDC 978/2025, art. 110, II a IV.' },
+        { id: 'RDC978-102', crit: 'I', text: 'O Serviço possui e implementa PGRSS conforme as normas aplicáveis. Base legal: RDC 978/2025, art. 111.' },
+        { id: 'RDC978-103', crit: 'N', text: 'Existem instruções escritas para limpeza, desinfecção e esterilização, quando aplicável. Base legal: RDC 978/2025, art. 112.' },
+        { id: 'RDC978-104', crit: 'N', text: 'A limpeza é registrada diariamente no início e no término do funcionamento; os ambientes estão limpos antes dos atendimentos. Base legal: RDC 978/2025, art. 113.' },
+        { id: 'RDC978-105', crit: 'N', text: 'Saneantes e produtos de limpeza/desinfecção estão regularizados e são usados conforme o fabricante. Base legal: RDC 978/2025, art. 114.' },
+      ]
+    },
+    {
+      id: 'rdc978-documentos-pessoal',
+      titulo: '3.11 GESTÃO DE DOCUMENTOS E PESSOAL',
+      itens: [
+        { id: 'RDC978-106', crit: 'N', text: 'Documentos e registros são mantidos por, no mínimo, cinco anos. Base legal: RDC 978/2025, art. 115.' },
+        { id: 'RDC978-107', crit: 'N', text: 'Alterações em registros têm data, nome ou assinatura válida e preservam o dado original. Base legal: RDC 978/2025, art. 116.' },
+        { id: 'RDC978-108', crit: 'N', text: 'O PGQ e seus documentos estão em língua portuguesa. Base legal: RDC 978/2025, art. 116, parágrafo único.' },
+        { id: 'RDC978-109', crit: 'N', text: 'Estão disponíveis projeto arquitetônico aprovado, relação de procedimentos, inventário, relação da equipe, registros de educação permanente, PGQ, CIQ e CEQ. Base legal: RDC 978/2025, art. 117.' },
+        { id: 'RDC978-110', crit: 'N', text: 'O Serviço disponibiliza documentos comprobatórios de regularidade sanitária quando requisitado. Base legal: RDC 978/2025, art. 118.' },
+        { id: 'RDC978-111', crit: 'N', text: 'Nos locais de execução existem procedimentos para registro e liberação de resultados, resultados críticos e revisão/liberação de laudos. Base legal: RDC 978/2025, art. 119.' },
+        { id: 'RDC978-112', crit: 'N', text: 'A equipe está dimensionada conforme o perfil de demanda. Base legal: RDC 978/2025, art. 120.' },
+        { id: 'RDC978-113', crit: 'I', text: 'Há supervisor do pessoal técnico, legalmente habilitado e presente durante o funcionamento, com substituto quando necessário. Base legal: RDC 978/2025, art. 122.' },
+        { id: 'RDC978-114', crit: 'N', text: 'Existem registros de formação e qualificação compatíveis com as funções. Base legal: RDC 978/2025, art. 123.' },
+        { id: 'RDC978-115', crit: 'N', text: 'Existe Programa de Educação Permanente para toda a equipe, com treinamento inicial e periódico mínimo anual. Base legal: RDC 978/2025, arts. 124 e 125.' },
+        { id: 'RDC978-116', crit: 'N', text: 'O treinamento é baseado em riscos quando novos processos, técnicas ou tecnologias são implantados ou antes da entrada de novos trabalhadores. Base legal: RDC 978/2025, art. 125, II.' },
+        { id: 'RDC978-117', crit: 'N', text: 'A eficácia dos treinamentos é avaliada e os registros contêm data, horário, carga horária, conteúdo, instrutor e trabalhadores envolvidos. Base legal: RDC 978/2025, art. 125, III, e art. 127.' },
+      ]
+    },
+    {
+      id: 'rdc978-pre-analitica',
+      titulo: '3.12 FASE PRÉ-ANALÍTICA, RASTREABILIDADE E TRANSPORTE',
+      itens: [
+        { id: 'RDC978-118', crit: 'I', text: 'A rastreabilidade do material biológico é garantida nas fases pré-analítica, analítica e pós-analítica. Base legal: RDC 978/2025, art. 128.' },
+        { id: 'RDC978-119', crit: 'N', text: 'Há instruções acessíveis ao paciente sobre preparo e coleta. Base legal: RDC 978/2025, art. 132, I.' },
+        { id: 'RDC978-120', crit: 'I', text: 'A identificação do paciente é comprovada por documento válido com foto ou pela exceção normativa aplicável. Base legal: RDC 978/2025, art. 132, II.' },
+        { id: 'RDC978-121', crit: 'N', text: 'Existem instruções escritas, atualizadas e disponíveis para as atividades pré-analíticas. Base legal: RDC 978/2025, art. 132, III.' },
+        { id: 'RDC978-122', crit: 'N', text: 'O cadastro do paciente contém os dados mínimos exigidos, incluindo identificação, nascimento, sexo biológico, nome da mãe e contato. Base legal: RDC 978/2025, art. 134.' },
+        { id: 'RDC978-123', crit: 'N', text: 'O cadastro do EAC contém solicitante, datas e horários, unidade/CNES, exames, material, profissionais envolvidos, prazo, urgência e informações clínicas relevantes. Base legal: RDC 978/2025, art. 136.' },
+        { id: 'RDC978-124', crit: 'N', text: 'É fornecido comprovante de atendimento com registro, paciente, data, prazo, exames e contato, salvo a exceção do exame com laudo imediato. Base legal: RDC 978/2025, art. 137.' },
+        { id: 'RDC978-125', crit: 'I', text: 'O material é identificado no momento da coleta ou recebimento, com nome, nascimento/idade, tipo de material e registro do paciente. Base legal: RDC 978/2025, art. 138.' },
+        { id: 'RDC978-126', crit: 'N', text: 'A data e o horário da coleta são rastreáveis. Base legal: RDC 978/2025, art. 138, § 2º.' },
+        { id: 'RDC978-127', crit: 'N', text: 'Existem critérios documentados de aceitação, rejeição, identificação e realização de exames em material biológico. Base legal: RDC 978/2025, art. 139.' },
+        { id: 'RDC978-128', crit: 'I', text: 'O transporte segue a RDC nº 504/2021 e demais normas específicas aplicáveis. Base legal: RDC 978/2025, art. 140.' },
+        { id: 'RDC978-129', crit: 'N', text: 'A embalagem terciária contém as informações exigidas para o transporte de material biológico. Base legal: RDC 978/2025, art. 143.' },
+        { id: 'RDC978-130', crit: 'N', text: 'O envio a Laboratórios de Apoio é rastreável e realizado sob responsabilidade do Serviço. Base legal: RDC 978/2025, art. 141.' },
+      ]
+    },
+    {
+      id: 'rdc978-analitica',
+      titulo: '3.13 FASE ANALÍTICA E METODOLOGIA PRÓPRIA',
+      itens: [
+        { id: 'RDC978-131', crit: 'N', text: 'Existem instruções escritas, atualizadas e disponíveis para todos os processos analíticos. Base legal: RDC 978/2025, art. 154, I.' },
+        { id: 'RDC978-132', crit: 'N', text: 'A fase analítica possui meios de rastreabilidade. Base legal: RDC 978/2025, art. 154, II.' },
+        { id: 'RDC978-133', crit: 'I', text: 'Estão definidos limites de risco, valores críticos/alerta e fluxo de comunicação para decisões imediatas. Base legal: RDC 978/2025, art. 154, III.' },
+        { id: 'RDC978-134', crit: 'N', text: 'Quando aplicável, a pureza da água reagente é definida e verificada por avaliações e testes. Base legal: RDC 978/2025, art. 154, IV e V.' },
+        { id: 'RDC978-135', crit: 'N', text: 'O processo analítico está fundamentado em instruções do fabricante, bibliografia ou pesquisa cientificamente válida. Base legal: RDC 978/2025, art. 155.' },
+        { id: 'RDC978-136', crit: 'N', text: 'Quando realiza teste de sensibilidade a antimicrobianos, segue as normas específicas e utiliza culturas de referência aplicáveis. Base legal: RDC 978/2025, art. 156.' },
+        { id: 'RDC978-137', crit: 'I', text: 'A metodologia própria, quando existente, é utilizada somente por Serviço Tipo III. Base legal: RDC 978/2025, art. 157.' },
+        { id: 'RDC978-138', crit: 'N', text: 'A metodologia própria possui documentação de processo, rastreabilidade, aprovação, validação e desempenho analítico. Base legal: RDC 978/2025, art. 158.' },
+        { id: 'RDC978-139', crit: 'N', text: 'O laudo especifica os resultados obtidos por metodologia própria. Base legal: RDC 978/2025, art. 159.' },
+        { id: 'RDC978-140', crit: 'N', text: 'Existe estudo e relatório de validação com procedimentos, materiais, parâmetros, critérios de aceitação e resultados. Base legal: RDC 978/2025, arts. 163 e 164.' },
+        { id: 'RDC978-141', crit: 'I', text: 'Não há comercialização, repasse, doação ou entrega para consumo de reagentes ou produtos provenientes de metodologia própria, ressalvada a exceção do Tipo II vinculado. Base legal: RDC 978/2025, art. 160.' },
+      ]
+    },
+    {
+      id: 'rdc978-pos-analitica',
+      titulo: '3.14 FASE PÓS-ANALÍTICA E LAUDOS',
+      itens: [
+        { id: 'RDC978-142', crit: 'N', text: 'Existem instruções para liberação e assinatura válida de laudos em rotina, plantão, urgência e emergência. Base legal: RDC 978/2025, art. 165.' },
+        { id: 'RDC978-143', crit: 'I', text: 'Existe fluxo de comunicação de resultados que exigem decisão imediata. Base legal: RDC 978/2025, art. 165, parágrafo único.' },
+        { id: 'RDC978-144', crit: 'I', text: 'Os laudos são legíveis, sem rasuras, em português, datados e assinados por profissional habilitado. Base legal: RDC 978/2025, art. 166.' },
+        { id: 'RDC978-145', crit: 'N', text: 'O laudo identifica o Serviço, CNES, endereço, telefone, RT, profissional signatário, paciente, coleta, exame, material, método, resultado e unidade. Base legal: RDC 978/2025, art. 167, I a IX.' },
+        { id: 'RDC978-146', crit: 'N', text: 'O laudo apresenta valores de referência, limitações e dados de interpretação. Base legal: RDC 978/2025, art. 167, X.' },
+        { id: 'RDC978-147', crit: 'N', text: 'O laudo informa metodologia própria e restrições do material, quando aplicável. Base legal: RDC 978/2025, art. 167, XI e XII.' },
+        { id: 'RDC978-148', crit: 'N', text: 'O laudo apresenta data de emissão e assinatura legalmente válida. Base legal: RDC 978/2025, art. 167, XIII e XIV.' },
+        { id: 'RDC978-149', crit: 'N', text: 'O laudo transcrito de Laboratório de Apoio mantém a fidedignidade e identifica o laboratório executor. Base legal: RDC 978/2025, arts. 168 e 169.' },
+        { id: 'RDC978-150', crit: 'N', text: 'Retificações são feitas em novo laudo e, quando relevantes, o paciente/responsável é contatado e o contato é registrado. Base legal: RDC 978/2025, art. 170.' },
+      ]
+    },
+    {
+      id: 'rdc978-gcq',
+      titulo: '3.15 GESTÃO DO CONTROLE DA QUALIDADE (GCQ), CIQ E CEQ',
+      itens: [
+        { id: 'RDC978-151', crit: 'I', text: 'A GCQ assegura a confiabilidade dos EAC e inclui CIQ e CEQ. Base legal: RDC 978/2025, arts. 171 e 172.' },
+        { id: 'RDC978-152', crit: 'N', text: 'CIQ e CEQ são realizados no próprio Serviço, in loco. Base legal: RDC 978/2025, art. 173.' },
+        { id: 'RDC978-153', crit: 'N', text: 'Existem instruções escritas e registros dos controles da qualidade. Base legal: RDC 978/2025, art. 174.' },
+        { id: 'RDC978-154', crit: 'N', text: 'A GCQ é aplicada a todos os EAC realizados. Base legal: RDC 978/2025, art. 175.' },
+        { id: 'RDC978-155', crit: 'N', text: 'A documentação da GCQ contém exames, frequência, critérios, limites, avaliação e registros de resultados. Base legal: RDC 978/2025, art. 176, I a IV.' },
+        { id: 'RDC978-156', crit: 'N', text: 'Há relatório anual de desempenho do CEQ para os exames que utilizam amostras controle comerciais. Base legal: RDC 978/2025, art. 176, V.' },
+        { id: 'RDC978-157', crit: 'I', text: 'O CIQ é realizado individualmente para o Serviço, em todos os equipamentos e para todos os analitos. Base legal: RDC 978/2025, arts. 177 a 180.' },
+        { id: 'RDC978-158', crit: 'N', text: 'O CIQ registra resultados, critérios de aceitação/rejeição, liberação/rejeição de análises, inadequações, investigação e ações. Base legal: RDC 978/2025, art. 180.' },
+        { id: 'RDC978-159', crit: 'N', text: 'São utilizadas amostras controle regularizadas ou, quando indisponíveis, forma alternativa fundamentada em literatura científica. Base legal: RDC 978/2025, arts. 181 e 182.' },
+        { id: 'RDC978-160', crit: 'N', text: 'A frequência do CIQ atende às trocas de lote, remessas, corridas analíticas e manutenções, conforme o produto e o fabricante. Base legal: RDC 978/2025, art. 183.' },
+        { id: 'RDC978-161', crit: 'N', text: 'A redução de frequência por certificação lote a lote, quando adotada, possui justificativa, treinamento e certificados disponíveis. Base legal: RDC 978/2025, art. 184.' },
+        { id: 'RDC978-162', crit: 'I', text: 'O CEQ é realizado individualmente para o Serviço, em todos os equipamentos e para todos os analitos. Base legal: RDC 978/2025, arts. 185 a 188.' },
+        { id: 'RDC978-163', crit: 'N', text: 'A disponibilidade de ensaios de proficiência é verificada no mínimo anualmente; na ausência, há avaliação alternativa fundamentada. Base legal: RDC 978/2025, art. 189.' },
+        { id: 'RDC978-164', crit: 'N', text: 'Somente o Serviço Tipo III doa material biológico ao Provedor de Ensaio de Proficiência, quando aplicável. Base legal: RDC 978/2025, art. 190.' },
+      ]
+    },
+  ]
+}
+
+/**
  * Converte os indicadores do ROI da ANVISA no mesmo ChecklistData dos demais
  * roteiros — assim relatório, PDF, fotos, observações e polimento por IA
  * continuam funcionando sem tratamento especial. O que muda é só a forma de
@@ -2529,6 +2803,7 @@ const CHECKLISTS: Record<string, ChecklistData> = {
   'farmacia-resolucao-sesa-590-2014': farmaciaResolucaoSesa5902014Checklist,
   'roteiro-dedetizadoras': dedetizadorasChecklist,
   'roteiro-unico-radiologia': roteiroUnicoRadiologiaChecklist,
+  'rdc-978-2025-eac': rdc978Checklist,
   'roi-radiografia-medica': checklistDoRoi(
     'Roteiro Objetivo de Inspeção — Radiografia Médica',
     'ANVISA — documento 9.1, versão 1.2',

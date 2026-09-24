@@ -1,5 +1,5 @@
 {
-  "version": "2.14.0",
+  "version": "2.15.0",
   "documents": [
     {
       "id": "codigo-sanitario-estadual-pr",
@@ -100,6 +100,16 @@
       "tema": "Saneamento, Resíduos e Meio Ambiente",
       "descricao": "Resolução da ANVISA que dispõe sobre os requisitos sanitários para o funcionamento de empresas especializadas na prestação de serviços de controle de vetores e pragas urbanas, incluindo requisitos técnicos, de infraestrutura e de responsabilidade técnica. Base do roteiro de inspeção de empresas dedetizadoras.",
       "keywords": "rdc 622, anvisa, controle de pragas, vetores, dedetizadora, desinfestacao, pragas urbanas, saneante"
+    },
+    {
+      "id": "rdc-978-2025-eac",
+      "titulo": "RDC nº 978/2025 — Serviços de Exames de Análises Clínicas (EAC)",
+      "path": "/documentos-biblioteca/rdc978.pdf",
+      "esfera": "federal",
+      "categoria": "RDC",
+      "tema": "Serviços de Saúde (Assistência)",
+      "descricao": "Resolução da ANVISA que dispõe sobre o funcionamento de serviços que executam as atividades relacionadas aos Exames de Análises Clínicas (EAC), classificando-os em Tipo I, II e III, Serviço Itinerante e Central de Distribuição, e estabelecendo requisitos de infraestrutura, responsabilidade técnica, gerenciamento da qualidade, biossegurança, fases pré-analítica, analítica e pós-analítica, e controle interno e externo da qualidade. Revoga a RDC nº 786/2023.",
+      "keywords": "rdc 978, anvisa, exames de analises clinicas, eac, laboratorio clinico, posto de coleta, servico itinerante, central de distribuicao, controle da qualidade, rdc 786/2023 revogada"
     },
     {
       "id": "portaria-344-1998",

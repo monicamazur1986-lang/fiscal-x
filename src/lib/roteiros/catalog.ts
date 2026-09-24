@@ -224,4 +224,14 @@ export const roteirosCatalog: RoteiroCatalogItem[] = [
     itens: 146,
     pdfUrl: '/documentos-roteiros/Roteiro_Unico_RDC611_Impressao.pdf',
   },
+  {
+    id: 'rdc-978-2025-eac',
+    grupo: 'servicos-saude',
+    titulo: 'Roteiro de Inspeção Sanitária — Exames de Análises Clínicas (EAC)',
+    categoria: 'Saúde',
+    iconName: 'scan',
+    base: 'RDC Anvisa nº 978/2025',
+    itens: 164,
+    pdfUrl: '/documentos-roteiros/Roteiro_de_Inspe%C3%A7%C3%A3o_Sanit%C3%A1ria_%E2%80%94_RDC_Anvisa_n%C2%BA_978_2025.pdf',
+  },
 ];

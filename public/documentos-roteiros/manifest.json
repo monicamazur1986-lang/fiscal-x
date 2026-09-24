@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "documents": [
     {
       "id": "guia-clinica-estetica",
@@ -139,6 +139,16 @@
       "esfera": "federal",
       "descricao": "Roteiro único que consolida radiografia convencional, mamografia, tomografia computadorizada e ressonância magnética num só instrumento, baseado na RDC Anvisa nº 611/2022 e nas Instruções Normativas nº 90 a 97/2021.",
       "keywords": "radiologia RX mamografia tomografia ressonancia magnetica RDC 611/2022",
+      "linkOficial": ""
+    },
+    {
+      "id": "rdc-978-2025-eac",
+      "titulo": "Roteiro de Inspeção Sanitária — RDC Anvisa nº 978/2025",
+      "path": "/documentos-roteiros/Roteiro_de_Inspe%C3%A7%C3%A3o_Sanit%C3%A1ria_%E2%80%94_RDC_Anvisa_n%C2%BA_978_2025.pdf",
+      "categoria": "Saúde",
+      "esfera": "federal",
+      "descricao": "Roteiro de inspeção sanitária tradicional (Sim/Não/N.A.) para serviços que executam Exames de Análises Clínicas (EAC) — Tipo I, II e III, Serviço Itinerante e Central de Distribuição —, baseado na RDC Anvisa nº 978/2025, que revoga a RDC nº 786/2023.",
+      "keywords": "eac exames de analises clinicas laboratorio clinico rdc 978/2025 rdc 786/2023 revogada",
       "linkOficial": ""
     }
   ]
