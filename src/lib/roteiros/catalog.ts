@@ -231,7 +231,7 @@ export const roteirosCatalog: RoteiroCatalogItem[] = [
     categoria: 'Saúde',
     iconName: 'scan',
     base: 'RDC Anvisa nº 978/2025',
-    itens: 50,
-    pdfUrl: '/documentos-roteiros/Roteiro_RDC978_ST1_ST2_ST3.pdf',
+    itens: 164,
+    pdfUrl: '/documentos-roteiros/Roteiro_de_Inspe%C3%A7%C3%A3o_Sanit%C3%A1ria_%E2%80%94_RDC_Anvisa_n%C2%BA_978_2025.pdf',
   },
 ];
