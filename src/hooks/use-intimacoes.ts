@@ -110,8 +110,18 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
       // Cada listener guarda o proprio resultado; a lista exibida e a uniao
       // dos dois. Sem isso o segundo snapshot apagaria o primeiro.
       const porConsulta: Intimacao[][] = consultas.map(() => []);
+      // `loading` só pode cair depois que TODAS as consultas já responderam
+      // pelo menos uma vez — não só a primeira. Sem isso, a consulta
+      // "essencial" (a própria) costuma responder primeiro, `loading` já
+      // cai, e uma tela de detalhe (ex.: /intimacoes/[id]) que só espera
+      // `!loading` para decidir "não encontrado" concluía isso ANTES do
+      // snapshot de compartilhadas chegar — um 404 (ou "não encontrado")
+      // em toda autuação que um colega compartilhou, principalmente na
+      // primeira visita (sem cache local desta consulta ainda).
+      const respondidas = new Set<number>();
 
-      const publicar = () => {
+      const publicar = (indice: number) => {
+        respondidas.add(indice);
         const porId = new Map<string, Intimacao>();
         porConsulta.flat().forEach((item) => porId.set(String(item.id), item));
         const items = Array.from(porId.values()).sort((a, b) =>
@@ -119,7 +129,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
         );
         salvarCacheColecao(LOCAL_STORAGE_KEY, items);
         setIntimacoes(items);
-        setLoading(false);
+        if (respondidas.size === consultas.length) setLoading(false);
       };
 
       const unsubscribes: (() => void)[] = [];
@@ -148,7 +158,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
             updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
           } as Intimacao;
         });
-        publicar();
+        publicar(indice);
       }, (err) => {
         if (!essencial) {
           // Regras/índice ainda não publicados (firebase deploy --only
@@ -161,7 +171,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
           );
           porConsulta[indice] = [];
           unsubscribes[indice]?.();
-          publicar();
+          publicar(indice);
           return;
         }
           console.warn("Firestore offline ou sem permissão, usando local.");

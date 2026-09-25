@@ -285,7 +285,15 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
       // Cada listener guarda o próprio resultado; a lista publicada é a
       // união dos dois — sem isso, o segundo snapshot apagaria o primeiro.
       const porConsulta: Inspecao[][] = consultas.map(() => []);
-      const publicar = () => {
+      // `loading` só pode cair depois que TODAS as consultas responderam
+      // ao menos uma vez, não só a primeira — mesmo raciocínio e mesmo bug
+      // de use-intimacoes.ts: a consulta "essencial" (a própria) costuma
+      // responder antes da de compartilhadas, e uma tela de detalhe que só
+      // espera `!loading` via decidir "relatório não encontrado" antes do
+      // snapshot de compartilhadas chegar.
+      const respondidas = new Set<number>();
+      const publicar = (indice: number) => {
+        respondidas.add(indice);
         const porId = new Map<string, Inspecao>();
         porConsulta.flat().forEach((item) => porId.set(String(item.id), item));
         const items = Array.from(porId.values());
@@ -314,14 +322,14 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
 
         salvarCacheColecao(LOCAL_STORAGE_KEY, merged, 'ultimos');
         setInspecoes(merged);
-        setLoading(false);
+        if (respondidas.size === consultas.length) setLoading(false);
       };
 
       const unsubscribes: (() => void)[] = [];
       consultas.forEach(({ essencial, q }, indice) => {
         unsubscribes[indice] = onSnapshot(q, (snapshot) => {
           porConsulta[indice] = snapshot.docs.map(mapearDoc);
-          publicar();
+          publicar(indice);
         }, (err) => {
           if (!essencial) {
             // Regras/índice ainda não publicados (firebase deploy --only
@@ -332,7 +340,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
             console.warn('Roteiros/relatórios compartilhados indisponíveis (' + (err?.code || 'erro') + ').');
             porConsulta[indice] = [];
             unsubscribes[indice]?.();
-            publicar();
+            publicar(indice);
             return;
           }
           // Antes esse erro era engolido em silêncio — foi assim que o bug

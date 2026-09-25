@@ -1027,8 +1027,8 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             { tipo: 'despacho_encaminhamento_tip', titulo: PAS_PECA_TITULOS.despacho_encaminhamento_tip, conteudoHtml: conteudoFinal, assinaturaUrl, assinadoForaDoSistema: assinadoForaDoSistema || !!anexoExternoFile, anexoUrl, criadoEm: dataAto },
           ]);
           // O TIP passa a nascer como AUTUAÇÃO DE VERDADE em Autuações — mesmo
-          // mecanismo do "Gerar Termo de Intimação" do roteiro (ver
-          // GerarIntimacaoDialog) — e não mais como texto redigido direto
+          // mecanismo do "Gerar Autuação" do roteiro (ver
+          // GerarAutuacaoDialog) — e não mais como texto redigido direto
           // aqui. Fica RASCUNHO até o fiscal completar/assinar em Autuações;
           // handleAnexarTip traz o PDF dela pros autos quando estiver pronta.
           // Prazo/data de ciência ficam de fora daqui de propósito: só se

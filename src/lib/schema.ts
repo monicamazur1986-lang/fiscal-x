@@ -306,8 +306,8 @@ export const intimacaoSchema = z.object({
   documentoOrigemId: z.string().optional().default(''),
   autoInfracaoVinculadaId: z.string().optional().default(''),
   /**
-   * Vistoria que originou o documento, quando ele nasceu do botão "Gerar Termo
-   * de Intimação" do relatório de inspeção (GerarIntimacaoDialog).
+   * Vistoria que originou o documento, quando ele nasceu do botão "Gerar
+   * Autuação" do relatório de inspeção (GerarAutuacaoDialog).
    *
    * O diálogo já mandava este campo, mas ele não existia aqui — e z.object()
    * descarta chave desconhecida em silêncio, então o vínculo nunca chegava ao

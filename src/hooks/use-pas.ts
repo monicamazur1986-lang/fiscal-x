@@ -78,21 +78,31 @@ export function usePas(options?: { municipioIdOverride?: string }) {
         ];
 
     const porConsulta: Pas[][] = consultas.map(() => []);
-    const publicar = () => {
+    // `loading` só pode cair depois que TODAS as consultas responderam ao
+    // menos uma vez, não só a primeira que chegar — mesmo bug de
+    // use-intimacoes.ts/use-inspecoes.ts: a consulta dos próprios processos
+    // costuma responder antes da de compartilhados, e a tela de detalhe
+    // (que também depende deste `processos` pra achar o PAS pelo id, ver
+    // comentário acima) mostrava "Processo não encontrado" pra um PAS que
+    // só existia na consulta de compartilhados, ainda sem resposta.
+    const respondidas = new Set<number>();
+    const publicar = (indice: number) => {
+      respondidas.add(indice);
       const porId = new Map<string, Pas>();
       porConsulta.flat().forEach((item) => porId.set(String(item.id), item));
       const items = Array.from(porId.values()).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
       setProcessos(items);
       try { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items)); } catch (e) { /* cota do localStorage */ }
-      setLoading(false);
+      if (respondidas.size === consultas.length) setLoading(false);
     };
 
     const unsubscribes = consultas.map((q, indice) => onSnapshot(q, (snapshot) => {
       porConsulta[indice] = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }) as Pas);
-      publicar();
+      publicar(indice);
     }, (err) => {
       console.error('Falha ao sincronizar processos (PAS) com o Firestore:', err);
-      setLoading(false);
+      porConsulta[indice] = [];
+      publicar(indice);
     }));
     return () => unsubscribes.forEach((u) => u());
   }, [user, profile, configError, options?.municipioIdOverride]);
