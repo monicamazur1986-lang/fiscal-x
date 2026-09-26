@@ -717,7 +717,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
           : `${documento.tipoTermo || 'Termo Vinculado'}${documento.numeroProcesso ? ` nº ${documento.numeroProcesso}` : ''}`;
         // eslint-disable-next-line no-await-in-loop -- geração de PDF é pesada, uma por vez
         const blob = await gerarPdfBlobDeIntimacao(documento, config);
-        anexos.push({ id: documento.id, titulo, blob });
+        anexos.push({ id: documento.id, titulo, blob, dataIntimacao: documento.dataIntimacao });
       }
       await anexarDocumentosOrigemAoPas(pas.id, pas.municipioId, anexos, pecas);
       toast({ title: "Documento de origem anexado aos autos" });

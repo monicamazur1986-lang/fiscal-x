@@ -212,7 +212,7 @@ function PasPageInner() {
             : `${documento.tipoTermo || 'Termo Vinculado'}${documento.numeroProcesso ? ` nº ${documento.numeroProcesso}` : ''}`;
           // eslint-disable-next-line no-await-in-loop -- geração de PDF é pesada, uma por vez
           const blob = await gerarPdfBlobDeIntimacao(documento, config);
-          anexos.push({ id: documento.id, titulo, blob });
+          anexos.push({ id: documento.id, titulo, blob, dataIntimacao: documento.dataIntimacao });
         }
         await anexarDocumentosOrigemAoPas(id, normalizeId(profile.municipioId!), anexos, []);
       } catch (e) {

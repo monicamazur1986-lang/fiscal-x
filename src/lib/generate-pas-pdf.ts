@@ -574,6 +574,14 @@ async function baixarAnexo(url: string): Promise<{ bytes: Uint8Array; mime: stri
   // já usado pelo brasão no timbre) resolve isso.
   const resp = await fetch(`/api/proxy-image?url=${encodeURIComponent(url)}`, { cache: 'no-store' });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  // O proxy nasceu pro brasão do timbre: quando o download de origem falha,
+  // ele devolve 200 com um pixel transparente de propósito (degrade gracioso
+  // pra um <img>, que ignora o cabeçalho abaixo). Aqui o "documento" É o
+  // conteúdo — aceitar esse pixel como se fosse o anexo de verdade juntava
+  // uma imagem em branco invisível nos autos, sem aviso nenhum, toda vez que
+  // o Storage falhava mesmo que só por um instante. Ver X-Proxy-Fallback em
+  // src/app/api/proxy-image/route.ts.
+  if (resp.headers.get('X-Proxy-Fallback')) throw new Error('Proxy devolveu o retrato de reserva — arquivo de origem indisponível.');
   const buffer = await resp.arrayBuffer();
   return { bytes: new Uint8Array(buffer), mime: resp.headers.get('Content-Type') || '' };
 }

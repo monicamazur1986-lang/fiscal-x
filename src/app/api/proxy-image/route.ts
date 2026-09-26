@@ -23,6 +23,17 @@ const ALLOWED_IMAGE_HOSTS = new Set([
  * download falhar, é melhor não mostrar nenhuma imagem do que mostrar uma
  * marca errada (ex.: o mascote do sistema) no lugar do brasão do município.
  */
+/**
+ * `X-Proxy-Fallback` avisa quem sabe ler cabeçalho que isto NÃO é o arquivo
+ * pedido — um `<img>` de brasão ignora silenciosamente (é exatamente o
+ * degrade gracioso que este proxy nasceu para dar), mas o merge de anexo do
+ * PDF do PAS (generate-pas-pdf.ts) passou a checar este cabeçalho: sem ele,
+ * um Storage temporariamente fora do ar devolvia este pixel como se fosse o
+ * documento anexado de verdade — `resp.ok` (200) não detectava nada, e o
+ * anexo entrava nos autos como uma imagem em branco invisível, sem aviso
+ * nenhum, em vez do "não pôde ser incluído" que o resto do código já sabe
+ * mostrar.
+ */
 function fallbackImage() {
   const transparentPixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
   return new NextResponse(transparentPixel, {
@@ -32,6 +43,7 @@ function fallbackImage() {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'X-Proxy-Fallback': '1',
     },
   });
 }
@@ -90,11 +102,19 @@ async function fetchImage(url: string) {
     });
 
     if (!response.ok) throw new Error(`Falha no download: ${response.status}`);
+    if (!response.body) throw new Error('Resposta sem corpo.');
 
-    const arrayBuffer = await response.arrayBuffer();
     const contentType = response.headers.get('Content-Type') || 'image/jpeg';
 
-    return new NextResponse(arrayBuffer, {
+    // Repassa o corpo como STREAM, não como um `arrayBuffer()` inteiro na
+    // memória de uma vez. Um anexo de PAS (relatório escaneado, por
+    // exemplo) passa fácil de 30 MB — bufferizar a resposta inteira antes
+    // de devolver batia num teto de tamanho da própria infraestrutura
+    // (Cloud Run/App Hosting) para respostas não streamadas: o cliente
+    // recebia os primeiros ~32 MB e nada mais, sem erro nenhum sinalizado
+    // aqui — só um PDF truncado do outro lado, que o pdf.js rejeitava como
+    // "Invalid PDF structure" (mensagem "documento não pôde ser incluído").
+    return new NextResponse(response.body, {
       status: 200,
       headers: {
         'Content-Type': contentType,

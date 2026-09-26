@@ -158,12 +158,11 @@ export function usePas(options?: { municipioIdOverride?: string }) {
   const anexarDocumentosOrigemAoPas = useCallback(async (
     pasId: string,
     municipioId: string,
-    documentos: { id: string; titulo: string; blob: Blob }[],
+    documentos: { id: string; titulo: string; blob: Blob; dataIntimacao?: Date }[],
     pecasExistentes: { id: string; numero: number; refPecaNumero?: number }[]
   ) => {
     if (!user || !profile) throw new Error('Não autenticado.');
     if (!db || !storage || configError) throw new Error('Sem conexão com o banco de dados.');
-    const criadoEm = new Date().toISOString();
     const deslocamento = documentos.length;
 
     for (const peca of pecasExistentes) {
@@ -195,8 +194,12 @@ export function usePas(options?: { municipioIdOverride?: string }) {
         origemIntimacaoId: documento.id,
         assinadoForaDoSistema: true,
         criadoPorUid: user.uid,
+        // Fiel à data original do documento (autuação/termo), não à data em
+        // que ele foi anexado ao PAS — sem isso, um Auto de Infração lavrado
+        // há semanas entrava nos autos "datado" do dia do clique em "Abrir
+        // PAS", divergindo do próprio documento anexado.
+        criadoEm: documento.dataIntimacao ? new Date(documento.dataIntimacao).toISOString() : new Date().toISOString(),
         criadoPorNome: profile.displayName || 'Fiscal',
-        criadoEm,
       }));
     }
   }, [user, profile, configError]);
