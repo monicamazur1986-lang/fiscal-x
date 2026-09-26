@@ -570,18 +570,18 @@ async function baixarAnexo(url: string): Promise<{ bytes: Uint8Array; mime: stri
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     return { bytes, mime };
   }
-  // O Storage não devolve CORS liberado pra fetch — o proxy interno (o mesmo
-  // já usado pelo brasão no timbre) resolve isso.
-  const resp = await fetch(`/api/proxy-image?url=${encodeURIComponent(url)}`, { cache: 'no-store' });
+  // Direto no Storage, sem o proxy interno (/api/proxy-image): esse proxy
+  // nasceu pro brasão do timbre (arquivo pequeno) e roda numa função
+  // serverless com teto de resposta de ~32 MB — um anexo de PAS (relatório
+  // escaneado, por exemplo) passa fácil disso, e chegava truncado no
+  // cliente, rejeitado pelo pdf.js como "Invalid PDF structure" ("documento
+  // não pôde ser incluído"), mesmo bufferizando ou passando a resposta em
+  // stream — o teto é da infraestrutura, não de como o proxy monta a
+  // resposta. O bucket do Storage passou a ter CORS liberado pra este app
+  // (ver bucket.setCorsConfiguration), então o fetch direto já funciona sem
+  // o proxy, sem limite de tamanho nenhum no meio do caminho.
+  const resp = await fetch(url, { cache: 'no-store' });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  // O proxy nasceu pro brasão do timbre: quando o download de origem falha,
-  // ele devolve 200 com um pixel transparente de propósito (degrade gracioso
-  // pra um <img>, que ignora o cabeçalho abaixo). Aqui o "documento" É o
-  // conteúdo — aceitar esse pixel como se fosse o anexo de verdade juntava
-  // uma imagem em branco invisível nos autos, sem aviso nenhum, toda vez que
-  // o Storage falhava mesmo que só por um instante. Ver X-Proxy-Fallback em
-  // src/app/api/proxy-image/route.ts.
-  if (resp.headers.get('X-Proxy-Fallback')) throw new Error('Proxy devolveu o retrato de reserva — arquivo de origem indisponível.');
   const buffer = await resp.arrayBuffer();
   return { bytes: new Uint8Array(buffer), mime: resp.headers.get('Content-Type') || '' };
 }
