@@ -1287,11 +1287,18 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       // fase processual, não autos novos por arquivo. As já salvas num
       // rascunho (provasRascunho) entram direto — foram enviadas ao Storage
       // quando o rascunho foi salvo, reenviar de novo duplicaria o arquivo.
-      const anexosAdicionais: { url: string; nome: string }[] =
-        provasRascunho.map((p) => ({ url: p.url, nome: p.nome }));
-      for (const prova of provasSelecionadas) {
-        const url = await uploadArquivoPas(pas, prova.file);
-        anexosAdicionais.push({ url, nome: prova.nome });
+      // Só no modo "sistema": no modo "já pronto" o campo de provas nem
+      // aparece (ver painel acima), mas se sobrou algo no estado de uma
+      // troca de modo anterior, não deve entrar — o único anexo desse
+      // modo é o arquivo escolhido na revisão a seguir (anexoUrl).
+      const anexosAdicionais: { url: string; nome: string }[] = modoRelatorio === 'sistema'
+        ? provasRascunho.map((p) => ({ url: p.url, nome: p.nome }))
+        : [];
+      if (modoRelatorio === 'sistema') {
+        for (const prova of provasSelecionadas) {
+          const url = await uploadArquivoPas(pas, prova.file);
+          anexosAdicionais.push({ url, nome: prova.nome });
+        }
       }
       // Modo "sistema": fatos já É o HTML de verdade (documento rico, com
       // foto inserível no meio do texto) — entra direto, sem conversão nem
@@ -1769,7 +1776,20 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                         </button>
                         <button
                           type="button"
-                          onClick={() => setModoRelatorio('anexo')}
+                          onClick={() => {
+                            // Provas (se houver) só existem pra complementar um
+                            // texto redigido no sistema — no modo "já pronto",
+                            // o único anexo é o arquivo da tela seguinte (ver
+                            // PasPecaReviewDialog). Sem limpar aqui, uma prova
+                            // anexada antes de trocar de modo ficava "escondida"
+                            // (a seção que a mostra desaparece no modo anexo) e
+                            // ainda assim entrava na peça — o mesmo relatório
+                            // pronto acabava duplicado: uma vez como prova, outra
+                            // como o anexo principal.
+                            setModoRelatorio('anexo');
+                            setProvasSelecionadas([]);
+                            setProvasRascunho([]);
+                          }}
                           className={cn("px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-colors", modoRelatorio === 'anexo' ? "bg-white text-[#0E4A44] shadow-sm" : "text-[#A39D8C] hover:text-[#6B6659]")}
                         >
                           Já pronto (anexar PDF)
@@ -1842,46 +1862,56 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                           </div>
                         </>
                       )}
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-2">
-                          <Label className="text-xs text-[#6B6659]">Provas anexadas</Label>
-                          <PasDica chave="provas" />
+                      {/* Só no modo "sistema": provas são o complemento de um
+                          texto redigido aqui. No modo "já pronto", o único
+                          anexo é o arquivo da tela seguinte — mostrar este
+                          campo também dava DOIS lugares pra "anexar o
+                          documento pronto" (aqui como prova, lá como o
+                          anexo principal), e o mesmo arquivo entrava
+                          duplicado nos autos quando o fiscal usava os dois
+                          sem saber que só um bastava. */}
+                      {modoRelatorio === 'sistema' && (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs text-[#6B6659]">Provas anexadas</Label>
+                            <PasDica chave="provas" />
+                          </div>
+                          {/* Um arquivo por vez, não `multiple` — cada anexo passa
+                              pelo diálogo de nomear antes de entrar na lista (ver
+                              provaParaNomear abaixo). O nome do arquivo puro (cheio
+                              de sublinhado e data/hora do celular) nunca é o que
+                              aparece nos autos. */}
+                          <input
+                            ref={provasInputRef}
+                            type="file"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) { setProvaParaNomear(file); setNomeProvaParaNomear(sugerirNomeDocumento(file.name)); }
+                              e.target.value = '';
+                            }}
+                          />
+                          <div className="flex flex-wrap gap-1.5">
+                            {/* Já salvas num rascunho anterior — enviadas ao Storage
+                                na hora, então sobrevivem à troca de aparelho.
+                                Removê-las aqui só tira da lista local; some de
+                                vez do rascunho salvo na próxima gravação. */}
+                            {provasRascunho.map((p, i) => (
+                              <span key={`rascunho-${i}`} className="flex items-center gap-1 bg-[#E3F1EA] rounded px-2 py-1 text-xs text-[#1F7A5C]">
+                                {p.nome}
+                                <button type="button" onClick={() => setProvasRascunho(prev => prev.filter((_, idx) => idx !== i))}><X className="h-3 w-3 text-[#1F7A5C]/60 hover:text-rose-500" /></button>
+                              </span>
+                            ))}
+                            {provasSelecionadas.map((p, i) => (
+                              <span key={i} className="flex items-center gap-1 bg-[#F5F2EA] rounded px-2 py-1 text-xs text-[#6B6659]">
+                                {p.nome}
+                                <button type="button" onClick={() => setProvasSelecionadas(prev => prev.filter((_, idx) => idx !== i))}><X className="h-3 w-3 text-[#A39D8C] hover:text-rose-500" /></button>
+                              </span>
+                            ))}
+                            <Button type="button" variant="outline" size="sm" onClick={() => provasInputRef.current?.click()} className="h-7 rounded-md text-[11px] gap-1"><Paperclip className="h-3 w-3" /> Anexar arquivo</Button>
+                          </div>
                         </div>
-                        {/* Um arquivo por vez, não `multiple` — cada anexo passa
-                            pelo diálogo de nomear antes de entrar na lista (ver
-                            provaParaNomear abaixo). O nome do arquivo puro (cheio
-                            de sublinhado e data/hora do celular) nunca é o que
-                            aparece nos autos. */}
-                        <input
-                          ref={provasInputRef}
-                          type="file"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) { setProvaParaNomear(file); setNomeProvaParaNomear(sugerirNomeDocumento(file.name)); }
-                            e.target.value = '';
-                          }}
-                        />
-                        <div className="flex flex-wrap gap-1.5">
-                          {/* Já salvas num rascunho anterior — enviadas ao Storage
-                              na hora, então sobrevivem à troca de aparelho.
-                              Removê-las aqui só tira da lista local; some de
-                              vez do rascunho salvo na próxima gravação. */}
-                          {provasRascunho.map((p, i) => (
-                            <span key={`rascunho-${i}`} className="flex items-center gap-1 bg-[#E3F1EA] rounded px-2 py-1 text-xs text-[#1F7A5C]">
-                              {p.nome}
-                              <button type="button" onClick={() => setProvasRascunho(prev => prev.filter((_, idx) => idx !== i))}><X className="h-3 w-3 text-[#1F7A5C]/60 hover:text-rose-500" /></button>
-                            </span>
-                          ))}
-                          {provasSelecionadas.map((p, i) => (
-                            <span key={i} className="flex items-center gap-1 bg-[#F5F2EA] rounded px-2 py-1 text-xs text-[#6B6659]">
-                              {p.nome}
-                              <button type="button" onClick={() => setProvasSelecionadas(prev => prev.filter((_, idx) => idx !== i))}><X className="h-3 w-3 text-[#A39D8C] hover:text-rose-500" /></button>
-                            </span>
-                          ))}
-                          <Button type="button" variant="outline" size="sm" onClick={() => provasInputRef.current?.click()} className="h-7 rounded-md text-[11px] gap-1"><Paperclip className="h-3 w-3" /> Anexar arquivo</Button>
-                        </div>
-                      </div>
+                      )}
                       <div className="flex items-center gap-2">
                         <Button onClick={handleSalvarRelatorio} disabled={isSalvandoRelatorio || isSalvandoRascunhoRelatorio} className="bg-[#0E4A44] hover:bg-[#0B3A35]">
                           {isSalvandoRelatorio ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} {modoRelatorio === 'anexo' ? 'Continuar para anexar o PDF' : 'Salvar Relatório'}
