@@ -99,7 +99,7 @@ function SolicitarAcessoForm() {
       await registerWithEmailPassword({
         email: formData.email.toLowerCase().trim(),
         password: formData.password,
-        nome: formData.nome.toUpperCase(),
+        nome: formData.nome,
         municipioId: normalizedMunicipioId,
         role: role,
         metadata: {
@@ -227,7 +227,7 @@ function SolicitarAcessoForm() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <Label className="text-[11px] font-black uppercase text-slate-500 ml-1">Nome Completo</Label>
-                <Input value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="h-14 rounded-2xl bg-slate-50 border-none uppercase font-bold" required />
+                <Input value={formData.nome} onChange={(e) => setFormData({...formData, nome: e.target.value})} className="h-14 rounded-2xl bg-slate-50 border-none font-bold" required />
               </div>
               <div className="space-y-1">
                 <Label className="text-[11px] font-black uppercase text-slate-500 ml-1">CPF</Label>

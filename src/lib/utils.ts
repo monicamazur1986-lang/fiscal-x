@@ -11,13 +11,19 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function normalizeId(text: string): string {
   if (!text) return "";
+  // O .trim() precisa vir ANTES de trocar espa\u00e7o por h\u00edfen \u2014 ver coment\u00e1rio
+  // detalhado acima de ehMinhaAssinatura, abaixo, onde isso causava um bug
+  // real: um espa\u00e7o sobrando no FIM do nome (ex.: "M\u00f4nica Mazur ") virava um
+  // h\u00edfen que nunca desaparecia, e duas grafias do "mesmo" nome paravam de
+  // bater na compara\u00e7\u00e3o.
   return text
+    .trim()
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, "-")
     .replace(/[^\w-]/g, "")
-    .trim();
+    .replace(/^-+|-+$/g, "");
 }
 
 /**

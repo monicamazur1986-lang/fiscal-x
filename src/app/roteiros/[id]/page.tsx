@@ -23,9 +23,8 @@ import {
   MicOff, 
   Sparkles, 
   Smartphone, 
-  Search, 
+  Search,
   CheckCircle2,
-  Scale,
   ListFilter,
   CheckSquare,
   Square,
@@ -34,13 +33,11 @@ import {
   Image as ImageIcon,
   Eraser,
   Landmark,
-  Clock,
   Pencil,
   ScrollText,
   ChevronRight,
   Users,
   Share2,
-  type LucideIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -118,27 +115,27 @@ function normalizarTexto(texto: string): string {
  * uma linha explicando, ícone com cor e um distintivo com o estado atual.
  */
 function TituloEtapa({
-  icone: Icone,
+  emoji,
   titulo,
   descricao,
   distintivo,
   preenchida,
 }: {
-  icone: LucideIcon;
+  emoji: string;
   titulo: string;
   descricao: string;
   /** Resumo do estado (ex.: "15 dias", "3 de 40 respondidos"). */
   distintivo?: string;
-  /** Pinta o ícone de verde quando a etapa já foi cumprida. */
+  /** Pinta o distintivo de verde quando a etapa já foi cumprida. */
   preenchida?: boolean;
 }) {
   return (
     <div className="flex items-center gap-3 flex-1 min-w-0 text-left">
       <div className={cn(
-        "p-2 rounded-xl shrink-0 transition-colors",
-        preenchida ? "bg-[#E4EEEC] text-[#1F7A5C]" : "bg-[#F1EEE4] text-[#6B6659]"
+        "h-11 w-11 rounded-full flex items-center justify-center shrink-0 transition-colors",
+        preenchida ? "bg-[#E4EEEC]" : "bg-[#F1EEE4]"
       )}>
-        <Icone className="h-5 w-5" />
+        <span className="text-[22px] leading-none" role="img" aria-hidden="true">{emoji}</span>
       </div>
       <div className="min-w-0 flex-1">
         <p className="font-serif font-bold text-[16px] text-[#262420] leading-tight">{titulo}</p>
@@ -4620,7 +4617,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
 
           <div className="bg-white p-5 md:p-6 rounded-2xl border border-[#E4DFD1] shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)] space-y-4">
             <div className="space-y-2">
-                <TituloEtapa icone={Building2} titulo="Estabelecimento" descricao="Quem está sendo inspecionado" preenchida={!!idData.fantasia} />
+                <TituloEtapa emoji="🏢" titulo="Estabelecimento" descricao="Quem está sendo inspecionado" preenchida={!!idData.fantasia} />
                 <div className="bg-[#FAF8F3] border border-[#E4DFD1] divide-y divide-[#E4DFD1]">
                    {/* PONTO DE PARTIDA DO PREENCHIMENTO.
                        Consultar o CNPJ traz razão social, endereço, bairro,
@@ -4739,7 +4736,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             <Accordion type="single" collapsible>
               <AccordionItem value="responsavel" className="border border-[#E4DFD1] rounded-xl bg-white px-4 transition-all duration-200 hover:border-[#0E4A44]/30 data-[state=open]:border-[#0E4A44]/40 data-[state=open]:bg-[#FCFBF7] data-[state=open]:shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
                 <AccordionTrigger className="py-3 hover:no-underline [&>svg]:text-primary">
-                  <TituloEtapa icone={Users} titulo="Responsável pelo estabelecimento" descricao="Quem acompanhou a vistoria e quando ela foi feita" preenchida={!!idData.responsavel} />
+                  <TituloEtapa emoji="🧑‍💼" titulo="Responsável pelo estabelecimento" descricao="Quem acompanhou a vistoria e quando ela foi feita" preenchida={!!idData.responsavel} />
                 </AccordionTrigger>
                 <AccordionContent className="pt-3 space-y-2">
                 {(mostrarResponsavelTecnico || idData.responsavelTecnico || idData.responsavelTecnicoRegistro) ? (
@@ -4793,7 +4790,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
               <AccordionItem value="introducao" className="border border-[#E4DFD1] rounded-xl bg-white px-4 transition-all duration-200 hover:border-[#0E4A44]/30 data-[state=open]:border-[#0E4A44]/40 data-[state=open]:bg-[#FCFBF7] data-[state=open]:shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
                 <AccordionTrigger className="py-3 hover:no-underline [&>svg]:text-primary">
                   <TituloEtapa
-                    icone={FileText}
+                    emoji="📝"
                     titulo="Introdução"
                     descricao="Texto que abre o relatório"
                     preenchida={!!introducaoHtml}
@@ -4847,7 +4844,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
               <AccordionItem value="prazo" className="border border-[#E4DFD1] rounded-xl bg-white px-4 transition-all duration-200 hover:border-[#0E4A44]/30 data-[state=open]:border-[#0E4A44]/40 data-[state=open]:bg-[#FCFBF7] data-[state=open]:shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
                 <AccordionTrigger className="py-3 hover:no-underline [&>svg]:text-primary">
                   <TituloEtapa
-                    icone={Clock}
+                    emoji="⏳"
                     titulo="Prazo"
                     descricao="Dias para o estabelecimento se adequar"
                     distintivo={idData.prazoDias ? `${idData.prazoDias} dias` : undefined}
@@ -5198,7 +5195,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                 <AccordionItem value="nova-nao-conformidade" className="border border-[#E4DFD1] rounded-xl bg-white px-4 transition-all duration-200 hover:border-[#0E4A44]/30 data-[state=open]:border-[#0E4A44]/40 data-[state=open]:bg-[#FCFBF7] data-[state=open]:shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
                   <AccordionTrigger className="py-3 hover:no-underline [&>svg]:text-primary">
                     <TituloEtapa
-                      icone={Plus}
+                      emoji="➕"
                       titulo="Item fora do roteiro"
                       descricao="Registre algo que o roteiro oficial não prevê"
                       distintivo={customItems.length > 0 ? `${customItems.length}` : undefined}
@@ -5310,7 +5307,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
               <AccordionItem value="conclusao" className="border border-[#E4DFD1] rounded-xl bg-white px-4 transition-all duration-200 hover:border-[#0E4A44]/30 data-[state=open]:border-[#0E4A44]/40 data-[state=open]:bg-[#FCFBF7] data-[state=open]:shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
                 <AccordionTrigger className="py-3 hover:no-underline [&>svg]:text-primary">
                   <TituloEtapa
-                    icone={Scale}
+                    emoji="⚖️"
                     titulo="Conclusão"
                     descricao="Texto que encerra o relatório"
                     preenchida={!!conclusaoHtml}
@@ -5420,7 +5417,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                 <div className="bg-white border border-[#E4DFD1] rounded-2xl shadow-sm overflow-hidden">
                     <div className="flex items-center justify-between gap-3 px-5 sm:px-6 py-4 border-b border-[#F1EEE4] bg-[#FAF8F3]">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="p-2 rounded-xl bg-[#E4EEEC] text-[#0E4A44] shrink-0"><PenTool className="h-5 w-5" /></div>
+                        <div className="h-11 w-11 rounded-full flex items-center justify-center shrink-0 bg-[#E4EEEC]"><span className="text-[22px] leading-none" role="img" aria-hidden="true">✍️</span></div>
                         <div className="min-w-0">
                           <h3 className="font-serif font-bold text-[17px] text-[#262420] leading-tight">Assinaturas</h3>
                           <p className="text-xs text-[#6B6659]">Última etapa antes de gerar o relatório</p>

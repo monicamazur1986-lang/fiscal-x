@@ -138,7 +138,7 @@ function useLivePagination(containerRef: React.RefObject<HTMLDivElement>, header
 }
 
 function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<Intimacao>, intimacaoId?: string }) {
-    const { generateNewNumeroProcesso, saveIntimacao, updateIntimacaoMeta, compartilharIntimacao, compartilharComAutoridades, criarRetificacao, criarCopia, intimacoes, loading: loadingIntimacoes } = useIntimacoes();
+    const { generateNewNumeroProcesso, saveIntimacao, updateIntimacaoMeta, compartilharIntimacao, compartilharComAutoridades, criarRetificacao, criarCopia, permanentDelete, intimacoes, loading: loadingIntimacoes } = useIntimacoes();
     const [isCriandoRetificacaoOuCopia, setIsCriandoRetificacaoOuCopia] = useState(false);
     const [compartilharAberto, setCompartilharAberto] = useState(false);
     const [abrindoCompartilhar, setAbrindoCompartilhar] = useState(false);
@@ -198,6 +198,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
     const [hasAnexo, setHasAnexo] = useState(false);
     const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
     const [showClearDraftConfirm, setShowClearDraftConfirm] = useState(false);
+    const [isApagandoRascunho, setIsApagandoRascunho] = useState(false);
 
     const methods = useForm<IntimacaoFormValues>({
         resolver: zodResolver(intimacaoSchema),
@@ -685,49 +686,59 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
         }
     };
 
+    // "Apagar" num rascunho que AINDA NÃO foi salvo na nuvem (ex.: acabou de
+    // trocar o tipo do card, autosave não disparou ainda) não tem nada pra
+    // excluir de verdade — só reinicia o formulário em branco, mesma tela.
+    //
+    // Mas um rascunho que JÁ existe no Firestore (autosave já rodou, ou veio
+    // de uma Cópia/Retificação que a pessoa decidiu não usar) precisa ser
+    // EXCLUÍDO de fato — resetar os campos e continuar na mesma tela deixava
+    // o documento vazio ocupando lugar em "Em andamento" para sempre, porque
+    // nada aqui limpava mainIdRef/anexoIdRef. Mesmo padrão do roteiro
+    // (handleDeleteDraft em roteiros/[id]/page.tsx): existe → apaga e sai;
+    // não existe → só limpa e continua.
     const handleClearDraft = async () => {
         setShowClearDraftConfirm(false);
-        const now = new Date();
-        const novoNumero = await generateNewNumeroProcesso();
-        const base = intimacaoSchema.parse({});
-        const autoridadesAtuais = methods.getValues('autoridades') || [];
+        setIsApagandoRascunho(true);
+        try {
+            const idsParaExcluir = [mainIdRef.current, anexoIdRef.current].filter(Boolean) as string[];
+            if (idsParaExcluir.length > 0) {
+                await permanentDelete(idsParaExcluir);
+                isDirtyRef.current = false;
+                toast({ title: "Rascunho Excluído" });
+                router.push('/intimacoes/nova');
+                return;
+            }
 
-        methods.reset({
-            ...base,
-            numeroProcesso: novoNumero,
-            status: 'rascunho',
-            tipoTermo: 'TERMO DE INTIMAÇÃO',
-            comarca: config.municipioNome || 'PRUDENTÓPOLIS',
-            dataIntimacao: now,
-            dataDocumento: format(now, 'dd/MM/yyyy'),
-            horaDocumento: format(now, 'HH:mm'),
-            prazo: prazoTextoDoTipo('TERMO DE INTIMAÇÃO', config.autuacaoTextos, profile?.municipioId),
-            teor: atoTextoDoTipo('TERMO DE INTIMAÇÃO', config.autuacaoTextos, profile?.municipioId),
-            autoridades: autoridadesAtuais,
-        });
+            const now = new Date();
+            const novoNumero = await generateNewNumeroProcesso();
+            const base = intimacaoSchema.parse({});
+            const autoridadesAtuais = methods.getValues('autoridades') || [];
 
-        if (hasAnexo) {
-            const autoridadesAnexoAtual = anexoMethods.getValues('autoridades') || [];
-            anexoMethods.reset({
+            methods.reset({
                 ...base,
-                numeroProcesso: await generateNewNumeroProcesso(),
+                numeroProcesso: novoNumero,
                 status: 'rascunho',
-                tipoTermo: 'AUTO DE INFRAÇÃO',
+                tipoTermo: 'TERMO DE INTIMAÇÃO',
                 comarca: config.municipioNome || 'PRUDENTÓPOLIS',
                 dataIntimacao: now,
                 dataDocumento: format(now, 'dd/MM/yyyy'),
                 horaDocumento: format(now, 'HH:mm'),
-                prazo: prazoTextoDoTipo('AUTO DE INFRAÇÃO', config.autuacaoTextos, profile?.municipioId),
-                teor: atoTextoDoTipo('AUTO DE INFRAÇÃO', config.autuacaoTextos, profile?.municipioId),
-                autoridades: autoridadesAnexoAtual,
+                prazo: prazoTextoDoTipo('TERMO DE INTIMAÇÃO', config.autuacaoTextos, profile?.municipioId),
+                teor: atoTextoDoTipo('TERMO DE INTIMAÇÃO', config.autuacaoTextos, profile?.municipioId),
+                autoridades: autoridadesAtuais,
             });
-        }
 
-        anexoIdRef.current = undefined;
-        setHasAnexo(false);
-        isDirtyRef.current = false;
-        setLastAutoSavedAt(null);
-        toast({ title: "Rascunho Limpo", description: "O formulário foi reiniciado em branco." });
+            setHasAnexo(false);
+            isDirtyRef.current = false;
+            setLastAutoSavedAt(null);
+            toast({ title: "Rascunho Limpo", description: "O formulário foi reiniciado em branco." });
+        } catch (e: any) {
+            console.error("Erro ao excluir rascunho:", e);
+            toast({ variant: "destructive", title: "Erro ao excluir", description: e?.message || "Verifique sua conexão e tente novamente." });
+        } finally {
+            setIsApagandoRascunho(false);
+        }
     };
 
     // Gera o PDF página a página, repetindo o cabeçalho em cada uma (em vez de
@@ -999,11 +1010,11 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                 : "border-2 border-[#7A4F9C]/35 bg-white ring-4 ring-[#7A4F9C]/5"
                         )}>
                             <div className="min-w-0 flex items-start gap-3">
-                                <div className="h-10 w-10 shrink-0 rounded-xl bg-[#F0E9F7] text-[#7A4F9C] flex items-center justify-center">
-                                    <Users className="h-5 w-5" />
+                                <div className="h-11 w-11 shrink-0 rounded-full bg-[#F0E9F7] flex items-center justify-center">
+                                    <span className="text-[22px] leading-none" role="img" aria-hidden="true">🤝</span>
                                 </div>
                                 <div className="min-w-0">
-                                    <p className="font-serif text-base text-[#5B3A75]">Edição compartilhada</p>
+                                    <p className="font-serif text-base text-[#262420]">Edição compartilhada</p>
                                     <p className="text-xs text-[#6B6659] mt-1">
                                         {compartilhadoCom.length === 0
                                             ? 'Só você edita esta autuação. Compartilhe para um colega fiscal preencher e finalizar junto.'
@@ -1035,9 +1046,14 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                             {!hasAnexo ? (
                                 tipoTermoAtual === TIPO_QUE_GERA_INTERDICAO_OU_APREENSAO ? (
                                     <>
-                                        <div>
-                                            <p className="font-serif text-base text-primary">Termo Vinculado</p>
-                                            <p className="text-xs text-[#6B6659] mt-1">Gera uma Interdição ou Apreensão com os mesmos dados do estabelecimento, autoridades e fundamentação, para assinatura própria e exportação em um único PDF.</p>
+                                        <div className="min-w-0 flex items-start gap-3">
+                                            <div className="h-11 w-11 shrink-0 rounded-full bg-[#E4EEEC] flex items-center justify-center">
+                                                <span className="text-[22px] leading-none" role="img" aria-hidden="true">🔗</span>
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="font-serif text-base text-[#262420]">Termo Vinculado</p>
+                                                <p className="text-xs text-[#6B6659] mt-1">Gera uma Interdição ou Apreensão com os mesmos dados do estabelecimento, autoridades e fundamentação, para assinatura própria e exportação em um único PDF.</p>
+                                            </div>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2 shrink-0">
                                             <Button type="button" onClick={() => handleGerarAnexo('TERMO DE INTERDIÇÃO')} disabled={isFinalized} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-12 px-5 bg-primary text-white">
@@ -1050,9 +1066,14 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                     </>
                                 ) : (
                                     <>
-                                        <div>
-                                            <p className="font-serif text-base text-primary">Auto de Infração Vinculado</p>
-                                            <p className="text-xs text-[#6B6659] mt-1">Gera um Auto de Infração com os mesmos dados do estabelecimento, autoridades e fundamentação, para assinatura própria e exportação em um único PDF.</p>
+                                        <div className="min-w-0 flex items-start gap-3">
+                                            <div className="h-11 w-11 shrink-0 rounded-full bg-[#E4EEEC] flex items-center justify-center">
+                                                <span className="text-[22px] leading-none" role="img" aria-hidden="true">🔗</span>
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="font-serif text-base text-[#262420]">Auto de Infração Vinculado</p>
+                                                <p className="text-xs text-[#6B6659] mt-1">Gera um Auto de Infração com os mesmos dados do estabelecimento, autoridades e fundamentação, para assinatura própria e exportação em um único PDF.</p>
+                                            </div>
                                         </div>
                                         <Button type="button" onClick={() => handleGerarAnexo('AUTO DE INFRAÇÃO')} disabled={isFinalized} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-12 px-6 bg-primary text-white shrink-0">
                                             <FileText className="h-4 w-4" /> Gerar Auto de Infração Vinculado
@@ -1061,7 +1082,12 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                 )
                             ) : (
                                 <>
-                                    <p className="font-serif text-base text-primary">{tipoAnexoAtual} Vinculado <span className="whitespace-nowrap">Nº {anexoMethods.watch('numeroProcesso')}</span></p>
+                                    <div className="min-w-0 flex items-start gap-3">
+                                        <div className="h-11 w-11 shrink-0 rounded-full bg-[#E4EEEC] flex items-center justify-center">
+                                            <span className="text-[22px] leading-none" role="img" aria-hidden="true">🔗</span>
+                                        </div>
+                                        <p className="font-serif text-base text-[#262420] pt-2.5">{tipoAnexoAtual} Vinculado <span className="whitespace-nowrap">Nº {anexoMethods.watch('numeroProcesso')}</span></p>
+                                    </div>
                                     {!anexoIsFinalized && !isFinalized && (
                                         <Button type="button" variant="outline" onClick={handleRemoverAnexo} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-10 px-4 text-rose-600 border-rose-300 shrink-0">
                                             <Trash2 className="h-4 w-4" /> Remover
@@ -1144,10 +1170,11 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                 <Button
                                     type="button"
                                     onClick={() => setShowClearDraftConfirm(true)}
+                                    disabled={isApagandoRascunho}
                                     variant="outline"
                                     className="h-16 flex-col gap-1 rounded-2xl border-rose-200 text-rose-600 font-black uppercase text-[10px] sm:text-[11px] tracking-widest shadow-md hover:bg-rose-50 hover:text-rose-700"
                                 >
-                                    <Trash2 className="h-5 w-5" />
+                                    {isApagandoRascunho ? <Loader2 className="h-5 w-5 animate-spin" /> : <Trash2 className="h-5 w-5" />}
                                     Apagar
                                 </Button>
 
@@ -1289,14 +1316,20 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             <AlertDialog open={showClearDraftConfirm} onOpenChange={setShowClearDraftConfirm}>
                 <AlertDialogContent className="rounded-lg">
                     <AlertDialogHeader>
-                        <AlertDialogTitle className="font-serif text-xl text-[#262420]">Apagar rascunho?</AlertDialogTitle>
+                        <AlertDialogTitle className="font-serif text-xl text-[#262420]">
+                            {mainIdRef.current ? "Excluir este rascunho?" : "Apagar rascunho?"}
+                        </AlertDialogTitle>
                         <AlertDialogDescription>
-                            Isso reinicia o formulário em branco. O conteúdo atual será perdido e o documento precisará ser preenchido novamente.
+                            {mainIdRef.current
+                                ? "Este documento já foi salvo na nuvem. Excluir remove ele por completo — inclusive o Auto de Infração vinculado, se houver — e volta para a escolha de tipo de documento. Não é possível desfazer."
+                                : "Isso reinicia o formulário em branco. O conteúdo atual será perdido e o documento precisará ser preenchido novamente."}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel className="rounded-xl font-black uppercase text-[10px] tracking-widest">Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleClearDraft} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-rose-600 hover:bg-rose-700">Apagar</AlertDialogAction>
+                        <AlertDialogAction onClick={handleClearDraft} className="rounded-xl font-black uppercase text-[10px] tracking-widest bg-rose-600 hover:bg-rose-700">
+                            {mainIdRef.current ? "Excluir" : "Apagar"}
+                        </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
@@ -1304,7 +1337,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             <SignaturePad isOpen={!!signatureTarget} onOpenChange={(o) => !o && setSignatureTarget(null)} onSave={handleSignatureSave} title="Assinatura Digital Oficial" />
 
             <Dialog open={!!editingFiscal} onOpenChange={(o) => !o && setEditingFiscal(null)}>
-                <DialogContent className="rounded-lg sm:max-w-md"><DialogHeader><DialogTitle className="font-serif text-xl text-[#262420]">Editar Autoridade</DialogTitle></DialogHeader>{editingFiscal && (<div className="space-y-5 py-4"><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-[#A39D8C] ml-1">Nome Completo</Label><Input value={editingFiscal.data.nome} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, nome: e.target.value.toUpperCase()}})} className="h-12 rounded-lg bg-[#FAF8F3] border-none font-bold text-xs uppercase" /></div><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-[#A39D8C] ml-1">Cargo</Label><Input value={editingFiscal.data.cargo} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, cargo: e.target.value.toUpperCase()}})} className="h-12 rounded-lg bg-[#FAF8F3] border-none font-bold text-xs uppercase" /></div><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-[#A39D8C] ml-1">Identidade</Label><Input value={editingFiscal.data.rg} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, rg: e.target.value.toUpperCase()}})} className="h-12 rounded-lg bg-[#FAF8F3] border-none font-bold text-xs" /></div></div>)}<DialogFooter><Button onClick={() => { if (editingFiscal) { const upd = editingFiscal.doc === 'main' ? update : anexoUpdate; upd(editingFiscal.index, { ...editingFiscal.data, municipioId: editingFiscal.data.municipioId || '', signature: editingFiscal.data.signature || '' }); setEditingFiscal(null); toast({ title: "Dados Atualizados" }); } }} className="w-full h-12 rounded-xl bg-primary text-white font-black uppercase text-[10px] tracking-widest shadow-lg">Salvar Alterações</Button></DialogFooter></DialogContent>
+                <DialogContent className="rounded-lg sm:max-w-md"><DialogHeader><DialogTitle className="font-serif text-xl text-[#262420]">Editar Autoridade</DialogTitle></DialogHeader>{editingFiscal && (<div className="space-y-5 py-4"><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-[#A39D8C] ml-1">Nome Completo</Label><Input value={editingFiscal.data.nome} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, nome: e.target.value}})} className="h-12 rounded-lg bg-[#FAF8F3] border-none font-bold text-xs" /></div><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-[#A39D8C] ml-1">Cargo</Label><Input value={editingFiscal.data.cargo} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, cargo: e.target.value}})} className="h-12 rounded-lg bg-[#FAF8F3] border-none font-bold text-xs" /></div><div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-[#A39D8C] ml-1">Identidade</Label><Input value={editingFiscal.data.rg} onChange={(e) => setEditingFiscal({...editingFiscal, data: {...editingFiscal.data, rg: e.target.value.toUpperCase()}})} className="h-12 rounded-lg bg-[#FAF8F3] border-none font-bold text-xs" /></div></div>)}<DialogFooter><Button onClick={() => { if (editingFiscal) { const upd = editingFiscal.doc === 'main' ? update : anexoUpdate; upd(editingFiscal.index, { ...editingFiscal.data, municipioId: editingFiscal.data.municipioId || '', signature: editingFiscal.data.signature || '' }); setEditingFiscal(null); toast({ title: "Dados Atualizados" }); } }} className="w-full h-12 rounded-xl bg-primary text-white font-black uppercase text-[10px] tracking-widest shadow-lg">Salvar Alterações</Button></DialogFooter></DialogContent>
             </Dialog>
         </FormProvider>
     );

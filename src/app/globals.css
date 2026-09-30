@@ -250,6 +250,15 @@
       color: #000000 !important;
       box-shadow: 0 20px 60px rgba(0,0,0,0.05);
       font-family: 'Times New Roman', Times, serif;
+      /* Só na tela — papel de verdade não tem canto arredondado. Zerado de
+         volta durante a geração do PDF (ver regra .pdf-folha-sem-tracking
+         abaixo), que reaproveita a mesma classe já usada para neutralizar
+         letter-spacing na captura (ver pdf-letter-spacing.ts). */
+      border-radius: 6px;
+    }
+
+    .pdf-folha-sem-tracking.document-paper {
+      border-radius: 0;
     }
 
     /* Trava texto sem quebra (link colado, palavra longa num campo de texto
@@ -262,32 +271,45 @@
       word-break: break-word;
     }
 
+    /* Paleta alinhada ao resto do sistema (bege/marrom neutro, mesma família
+       de #262420/#6B6659/#FAF8F3 usada em Biblioteca, Roteiros etc.) em vez
+       do cinza-azulado genérico do Tailwind (#94a3b8/#f8fafc) que estava
+       aqui antes. As linhas do grid (#DDD4C0) são um tom mais claro que o
+       resto da paleta (#A39D8C) de propósito — a estrutura de caixas do
+       documento datilografado continua, mas sem parecer uma planilha rígida
+       cheia de linhas escuras; quem carrega contraste é o texto, não a
+       grade. */
     .section-box {
-      border: 1pt solid #94a3b8 !important;
+      border: 1pt solid #DDD4C0 !important;
       margin-bottom: -1pt;
       background-color: #ffffff !important;
     }
 
     .sub-header-row {
-        font-size: 9pt;
+        font-size: 9.5pt;
         font-weight: bold;
         text-transform: uppercase;
-        background-color: #f8fafc !important;
-        padding: 4pt 10pt !important;
-        border-bottom: 1pt solid #94a3b8;
-        color: #171717 !important;
+        letter-spacing: 0.03em;
+        background-color: #FAF8F3 !important;
+        padding: 6pt 12pt !important;
+        border-bottom: 1pt solid #DDD4C0;
+        border-left: 3pt solid #0E4A44;
+        color: #262420 !important;
     }
 
     .data-row {
         display: flex;
         flex-direction: row;
-        border-bottom: 1pt solid #94a3b8;
+        border-bottom: 1pt solid #DDD4C0;
         width: 100%;
     }
 
     .data-cell {
-        padding: 4pt 8pt !important;
-        border-right: 1pt solid #94a3b8;
+        /* Mais respiro que a célula datilografada original (era 4pt 8pt) —
+           o mesmo grid de caixas fica menos denso sem deixar de parecer um
+           formulário oficial. */
+        padding: 6pt 10pt !important;
+        border-right: 1pt solid #DDD4C0;
         flex: 1;
         display: flex;
         flex-direction: column;
@@ -302,12 +324,12 @@
         font-size: 7.5pt;
         font-weight: 800;
         text-transform: uppercase;
-        color: #64748b;
-        /* Rótulo e valor ficam em blocos empilhados; com 2pt de respiro entre
-           eles, mais o padding da célula, a identificação sozinha comia meia
-           página. 1pt mantém a leitura sem o vazio. */
-        margin-bottom: 1pt;
-        letter-spacing: 0.05em;
+        color: #6B6659;
+        /* Rótulo e valor ficam em blocos empilhados; com mais respiro na
+           célula (ver .data-cell acima) 1.5pt já não some tanto quanto o
+           1pt original, e ainda evita o vazio de um respiro maior. */
+        margin-bottom: 1.5pt;
+        letter-spacing: 0.06em;
         display: block;
         line-height: 1.2;
     }
@@ -316,7 +338,11 @@
         font-size: 10.5pt;
         font-weight: bold;
         color: #000000;
-        text-transform: uppercase;
+        /* Caixa alta forçada não é exigência legal, só convenção herdada do
+           documento datilografado — texto digitado pelo fiscal (nome,
+           endereço, responsável...) agora aparece como foi escrito.
+           Documentos já salvos antes desta mudança continuam como estavam
+           gravados (o texto em si já tinha sido salvo em caixa alta). */
         width: 100%;
         /* Sem padding próprio (é pra parecer o preenchimento de um documento
            datilografado) — em iOS/Android o navegador aplica um arredondamento
@@ -327,7 +353,7 @@
 
     .signature-block {
         text-align: center;
-        border-top: 1pt solid #94a3b8 !important;
+        border-top: 1pt solid #DDD4C0 !important;
         padding-top: 10pt !important;
         min-width: 180pt;
     }
@@ -342,7 +368,7 @@
     .signature-title {
         font-size: 8pt;
         font-weight: bold;
-        color: #64748b;
+        color: #6B6659;
         text-transform: uppercase;
     }
 }

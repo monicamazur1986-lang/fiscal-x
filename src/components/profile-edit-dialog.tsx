@@ -96,7 +96,7 @@ export function ProfileEditDialog({ isOpen, onOpenChange }: ProfileEditDialogPro
     setIsSaving(true)
     try {
       await updateProfileData({
-        displayName: name.toUpperCase(),
+        displayName: name,
         photoURL: photoUrl,
         assinaturaSalva: assinatura
       })
@@ -152,9 +152,9 @@ export function ProfileEditDialog({ isOpen, onOpenChange }: ProfileEditDialogPro
                    <Pencil className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-300" />
                    <Input
                      value={name}
-                     onChange={e => setName(e.target.value.toUpperCase())}
-                     className="h-14 pl-11 rounded-2xl bg-white border-none shadow-inner font-black text-slate-800 uppercase text-sm"
-                     placeholder="SEU NOME"
+                     onChange={e => setName(e.target.value)}
+                     className="h-14 pl-11 rounded-2xl bg-white border-none shadow-inner font-black text-slate-800 text-sm"
+                     placeholder="Seu nome"
                    />
                 </div>
              </div>

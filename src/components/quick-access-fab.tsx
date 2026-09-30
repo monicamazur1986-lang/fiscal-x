@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react"
 import { LifeBuoy, X, type LucideIcon } from "lucide-react"
 
-import { DASHBOARD_MENU_ITEMS, darkenHex, type DashboardMenuItem } from "@/lib/dashboard-menu-items"
+import { DASHBOARD_MENU_ITEMS, type DashboardMenuItem } from "@/lib/dashboard-menu-items"
 
 // Reaproveita a mesma lista de itens do Dashboard (em vez de manter um rol
 // separado aqui) — era assim que "Nova Autuação", "Documentos", "Roteiros",
@@ -193,9 +193,9 @@ export function QuickAccessFab() {
                 >
                   <div
                     className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover:scale-110"
-                    style={{ backgroundImage: `linear-gradient(135deg, ${a.color}, ${darkenHex(a.color, 30)})`, color: '#fff' }}
+                    style={{ backgroundColor: `${a.color}1A` }}
                   >
-                    <a.icon className="h-4 w-4" />
+                    <span className="text-[20px] leading-none" role="img" aria-hidden="true">{a.emoji}</span>
                   </div>
                   <span className="text-[11px] leading-tight text-[#262420] font-medium">{a.label}</span>
                   {a.emDesenvolvimento && (

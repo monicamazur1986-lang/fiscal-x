@@ -320,7 +320,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const newProfile: UserProfile & { cpf?: string; cargo?: string; nascimento?: string; createdAt: string } = {
         uid: cred.user.uid,
         email: normalizedEmail,
-        displayName: data.nome.toUpperCase(),
+        displayName: data.nome,
         photoURL: "",
         isAuthorized: isRoot,
         role: isRoot ? 'root' : data.role,

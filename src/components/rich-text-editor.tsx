@@ -321,11 +321,15 @@ export function RichTextEditor({
           "data-field-input outline-none overflow-y-visible whitespace-pre-wrap break-words text-black font-serif",
           !value && !disabled && "before:content-[attr(data-placeholder)] before:text-zinc-300 before:pointer-events-none"
         )}
-        style={{ 
-          minHeight, 
+        style={{
+          minHeight,
           color: '#000000',
-          fontSize, 
-          lineHeight: '1.1',
+          fontSize,
+          // 1.1 era denso demais pra parágrafos longos (relato dos fatos,
+          // fundamentação) com o texto justificado — linhas quase coladas
+          // dificultam achar onde uma termina e a próxima começa. 1.3 dá
+          // esse respiro sem exagerar em campos curtos de uma linha.
+          lineHeight: '1.3',
           textAlign: 'justify',
           width: '100%',
           display: 'block',

@@ -119,6 +119,175 @@ export function computePageGroups(
 }
 
 /**
+ * Acha a posição real de texto (nó + deslocamento) sob uma coordenada Y da
+ * tela — a mesma consulta que o navegador faz para saber onde cai o cursor
+ * ao clicar num texto. Evita reimplementar quebra de linha à mão: pergunta
+ * ao próprio motor de renderização, então funciona com qualquer marcação
+ * aninhada (negrito, itálico, parágrafos) sem conhecer a estrutura por
+ * dentro.
+ */
+function posicaoNoPontoY(el: HTMLElement, y: number): { node: Node; offset: number } | null {
+  const rect = el.getBoundingClientRect();
+  const x = rect.left + Math.min(4, rect.width / 2);
+  const doc = document as any;
+  if (doc.caretRangeFromPoint) {
+    const range = doc.caretRangeFromPoint(x, y);
+    return range ? { node: range.startContainer, offset: range.startOffset } : null;
+  }
+  if (doc.caretPositionFromPoint) {
+    const pos = doc.caretPositionFromPoint(x, y);
+    return pos ? { node: pos.offsetNode, offset: pos.offset } : null;
+  }
+  return null;
+}
+
+/**
+ * A coordenada de corte raramente cai exatamente na borda entre duas linhas
+ * — cai em algum ponto da linha que ocupa aquele pixel, que pode estar no
+ * meio de uma palavra. Caminha pra trás dentro do MESMO nó de texto até o
+ * espaço anterior, garantindo que o corte sempre separe palavras inteiras.
+ * No raro caso de não achar espaço nenhum (uma "palavra" maior que a janela
+ * inteira), desiste de mover o ponto — dividirBlocoPorLinha vai descartar
+ * esse corte se ele não separar nada de verdade.
+ */
+function snapParaLimiteDePalavra(ponto: { node: Node; offset: number }): { node: Node; offset: number } {
+  const { node, offset } = ponto;
+  if (node.nodeType !== Node.TEXT_NODE) return ponto;
+  const texto = node.textContent || '';
+  if (offset <= 0 || /\s/.test(texto[offset - 1])) return ponto;
+  let i = offset;
+  while (i > 0 && !/\s/.test(texto[i - 1])) i--;
+  return { node, offset: i };
+}
+
+/**
+ * Divide o CONTEÚDO de `el` em duas metades de HTML, cortando exatamente na
+ * borda de uma linha visual — nunca no meio de uma palavra ou de uma letra.
+ * Usa a posição real do texto sob a coordenada de corte (ver posicaoNoPontoY)
+ * em vez de contar linhas "no chute", então continua correta mesmo com
+ * fontes, parágrafos e formatação variados dentro do mesmo bloco.
+ */
+function dividirBlocoPorLinha(el: HTMLElement, alturaDisponivelPx: number): { antes: string; depois: string } | null {
+  const rect = el.getBoundingClientRect();
+  const yCorte = rect.top + alturaDisponivelPx;
+  if (yCorte <= rect.top + 4 || yCorte >= rect.bottom - 4) return null;
+
+  let ponto = posicaoNoPontoY(el, yCorte);
+  if (!ponto) return null;
+  ponto = snapParaLimiteDePalavra(ponto);
+
+  try {
+    const tudo = document.createRange();
+    tudo.selectNodeContents(el);
+
+    const antesRange = document.createRange();
+    antesRange.setStart(tudo.startContainer, tudo.startOffset);
+    antesRange.setEnd(ponto.node, ponto.offset);
+    if (antesRange.collapsed) return null;
+
+    const depoisRange = document.createRange();
+    depoisRange.setStart(ponto.node, ponto.offset);
+    depoisRange.setEnd(tudo.endContainer, tudo.endOffset);
+    if (depoisRange.collapsed) return null;
+
+    const wrapAntes = document.createElement('div');
+    wrapAntes.appendChild(antesRange.cloneContents());
+    const wrapDepois = document.createElement('div');
+    wrapDepois.appendChild(depoisRange.cloneContents());
+
+    return { antes: wrapAntes.innerHTML, depois: wrapDepois.innerHTML };
+  } catch {
+    return null; // Ponto fora da árvore de `el` — melhor não dividir do que dividir errado.
+  }
+}
+
+/**
+ * Corta UM bloco (seção inteira) em pedaços pequenos o bastante para caber
+ * em qualquer página, cortando sempre numa borda de linha. Trabalha numa
+ * cópia isolada, fora da tela — nunca no documento real, que continua
+ * editável por trás da geração do PDF.
+ */
+function dividirBlocoEmPaginas(original: HTMLElement, larguraReferenciaPx: number, janelaDeCortePx: number): HTMLElement[] | null {
+  const bancada = document.createElement('div');
+  bancada.style.position = 'fixed';
+  // PRECISA estar dentro da janela visível (não em left:-99999px como o
+  // resto da geração de PDF usa) — caretRangeFromPoint só encontra posição
+  // de texto sob coordenadas de tela REALMENTE visíveis; fora da janela ele
+  // simplesmente não acha nada, e a divisão falha silenciosamente. Opacidade
+  // quase zero mantém isto imperceptível; z-index alto evita que outro
+  // elemento da própria página "tampe" o ponto que estamos testando.
+  bancada.style.top = '0';
+  bancada.style.left = '0';
+  bancada.style.zIndex = '999999';
+  bancada.style.opacity = '0.0001';
+  bancada.style.width = `${larguraReferenciaPx}px`;
+  document.body.appendChild(bancada);
+
+  try {
+    const restante = original.cloneNode(true) as HTMLElement;
+    restante.style.marginTop = '0';
+    bancada.appendChild(restante);
+
+    const pedacos: HTMLElement[] = [];
+    let guarda = 0;
+    // Limite de segurança: um bloco sem nenhuma linha detectável (ex.: uma
+    // imagem isolada maior que a página) nunca converge — sem o guarda, o
+    // laço rodaria para sempre em vez de desistir e manter o comportamento
+    // antigo (folha sob medida, ver "precisaPaginaAlta" em renderDocumentIntoPdf).
+    while (restante.offsetHeight > janelaDeCortePx && guarda < 60) {
+      guarda++;
+      const corte = dividirBlocoPorLinha(restante, janelaDeCortePx);
+      if (!corte) break;
+
+      const parte = restante.cloneNode(false) as HTMLElement;
+      parte.innerHTML = corte.antes;
+      pedacos.push(parte);
+
+      restante.innerHTML = corte.depois;
+    }
+    pedacos.push(restante.cloneNode(true) as HTMLElement);
+
+    return pedacos.length > 1 ? pedacos : null;
+  } finally {
+    bancada.remove();
+  }
+}
+
+/**
+ * QUEBRA DE PÁGINA POR LINHA.
+ *
+ * `computePageGroups` só decide para qual página um bloco INTEIRO vai — nunca
+ * olha pra dentro dele. Um relato de fatos mais longo que uma página cheia
+ * (comum em autos de infração com narrativa extensa) não tinha pra onde ir:
+ * ficava sozinho na própria página e, mesmo assim, estourava — daí a folha
+ * "sob medida" (ver `precisaPaginaAlta`), que evita cortar texto às custas de
+ * gerar uma página fora do tamanho A4 padrão.
+ *
+ * Aqui, ANTES de agrupar, qualquer bloco maior que a maior janela disponível
+ * é dividido em pedaços do tamanho da MENOR janela (a da 1ª página, mais
+ * apertada) — pequenos o bastante pra caber em qualquer página — sempre numa
+ * borda de linha. Os pedaços voltam a ser filhos comuns: o agrupador normal
+ * decide onde cada um entra, inclusive juntando mais de um pedaço pequeno na
+ * mesma página quando sobra espaço.
+ */
+function expandirBlocosAltosDemais(
+  filhos: HTMLElement[],
+  larguraReferenciaPx: number,
+  firstPageWindowPx: number,
+  continuationWindowPx: number
+): HTMLElement[] {
+  const janelaMaiorPx = Math.max(firstPageWindowPx, continuationWindowPx);
+  const janelaMenorPx = Math.min(firstPageWindowPx, continuationWindowPx);
+  const resultado: HTMLElement[] = [];
+  for (const filho of filhos) {
+    if (filho.offsetHeight <= janelaMaiorPx) { resultado.push(filho); continue; }
+    const pedacos = dividirBlocoEmPaginas(filho, larguraReferenciaPx, janelaMenorPx);
+    resultado.push(...(pedacos ?? [filho]));
+  }
+  return resultado;
+}
+
+/**
  * html2canvas tem um bug conhecido: não recalcula `object-fit`/`object-contain`
  * corretamente durante a captura — o brasão podia sair do tamanho combinado
  * (bem maior, espremendo o texto ao lado) mesmo a tela mostrando certo,
@@ -207,7 +376,8 @@ export async function renderDocumentIntoPdf(
   const bodyChildren = Array.from(bodyContainer.children).filter(
     (el) => !el.hasAttribute('data-live-page-header')
   ) as HTMLElement[];
-  const pages = computePageGroups(bodyChildren, firstPageWindowPx, continuationWindowPx);
+  const bodyChildrenDivididos = expandirBlocosAltosDemais(bodyChildren, bodyContainer.offsetWidth, firstPageWindowPx, continuationWindowPx);
+  const pages = computePageGroups(bodyChildrenDivididos, firstPageWindowPx, continuationWindowPx);
 
   for (let i = 0; i < pages.length; i++) {
     const pageEl = document.createElement('div');

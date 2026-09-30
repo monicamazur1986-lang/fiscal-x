@@ -30,6 +30,39 @@ import { lerContadorLocal, salvarContadorLocal } from '@/lib/contador-autuacoes'
 
 const LOCAL_STORAGE_KEY = 'fiscal_x_intimacoes_v4';
 
+/** Escapa caracteres especiais de regex antes de montar um padrão a partir
+ *  de texto digitado pelo fiscal (razão social, nome do responsável). */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * "Criar Cópia" zera os dados de identificação (autor, reu, endereço...),
+ * mas o texto livre de "EXIGÊNCIAS A REGULARIZAR"/relato/prazo às vezes cita
+ * o nome do ESTABELECIMENTO ANTIGO por extenso, porque o fiscal digitou à
+ * mão em vez de se referir de forma genérica — copiar esse texto sem tocar
+ * nele levava o nome errado para o novo documento, mesmo com a
+ * identificação (item 1) já correta.
+ *
+ * Troca cada ocorrência literal do nome antigo (autor/responsável) por uma
+ * referência neutra ao item 1 — que a cópia mantém sempre correta, porque
+ * aponta para a identificação, não repete um nome congelado no texto.
+ */
+function genericizarReferenciaAoEstabelecimento(texto: string, autorAntigo?: string, reuAntigo?: string): string {
+  let resultado = texto || '';
+  const autor = (autorAntigo || '').trim();
+  const reu = (reuAntigo || '').trim();
+  // Nomes muito curtos (ou vazios) não entram — o risco de casar um trecho
+  // comum do texto por coincidência supera o benefício aqui.
+  if (autor.length > 2) {
+    resultado = resultado.replace(new RegExp(escapeRegex(autor), 'gi'), 'O ESTABELECIMENTO IDENTIFICADO NO ITEM 1');
+  }
+  if (reu.length > 2 && reu.toUpperCase() !== autor.toUpperCase()) {
+    resultado = resultado.replace(new RegExp(escapeRegex(reu), 'gi'), 'O RESPONSÁVEL IDENTIFICADO NO ITEM 1');
+  }
+  return resultado;
+}
+
 export function useIntimacoes(options?: { municipioIdOverride?: string }) {
   const { profile, user, configError } = useAuth(); //
   const [intimacoes, setIntimacoes] = useState<Intimacao[]>([]); //
@@ -416,6 +449,13 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
           reu: '', reuCargo: '', responsavelLegalIdentidade: '', responsavelLegalConselho: '',
           responsavelTecnico: '', responsavelTecnicoConselho: '', responsavelTecnicoIdentidade: '',
           itensApreendidos: [],
+          // O relato/exigências/prazo é intencionalmente mantido (é o
+          // motivo de existir a cópia — reaproveitar o mesmo teor para
+          // vários estabelecimentos), mas não pode seguir citando o nome do
+          // estabelecimento ANTIGO por extenso (ver genericizarReferencia...
+          // acima) agora que a identificação foi zerada para o novo.
+          teor: genericizarReferenciaAoEstabelecimento(original.teor || '', original.autor, original.reu),
+          prazo: genericizarReferenciaAoEstabelecimento(original.prazo || '', original.autor, original.reu),
           refDocumentoId: '',
           refDocumentoNumero: '',
         };

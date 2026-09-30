@@ -471,8 +471,8 @@ export function DocumentoOficialBody({
   })();
 
   const sectionBlocks: React.ReactNode[] = [
-    <div key="tipo-numero" className="section-box flex flex-row overflow-visible min-h-[30pt] mb-4" style={{ border: '1pt solid #94a3b8' }}>
-      <div className="flex-1 border-r border-[#94a3b8] p-2 flex items-center justify-center text-center">
+    <div key="tipo-numero" className="section-box flex flex-row overflow-visible min-h-[30pt] mb-4" style={{ border: '1pt solid #DDD4C0' }}>
+      <div className="flex-1 border-r border-[#DDD4C0] p-2 flex items-center justify-center text-center">
         <FormField control={control} name="tipoTermo" render={({ field }) => (
           isGeneratingPdf ? <h1 className="font-black text-[12pt] md:text-[14pt] uppercase text-black">{field.value}</h1> : (
             <Select onValueChange={(v) => { field.onChange(v); onTipoTermoChange?.(v); }} value={field.value} disabled={isFinalized}>
@@ -699,8 +699,8 @@ export function DocumentoOficialBody({
       <div className="flex flex-col">
         {fields.length > 0 ? fields.map((f, i) => (
           <div key={f.id} className="flex flex-row border-b border-black/10 last:border-b-0 group">
-            <div style={{ flex: '0 0 34%' }} className="p-1.5 border-r border-black/10 text-center flex items-center justify-center"><span className="text-[9.5pt] text-black uppercase font-black">{(f as any).nome}</span></div>
-            <div style={{ flex: '0 0 33%' }} className="p-1.5 border-r border-black/10 text-center flex items-center justify-center"><span className="text-[9pt] text-black uppercase font-bold">{(f as any).cargo}</span></div>
+            <div style={{ flex: '0 0 34%' }} className="p-1.5 border-r border-black/10 text-center flex items-center justify-center"><span className="text-[9.5pt] text-black font-black">{(f as any).nome}</span></div>
+            <div style={{ flex: '0 0 33%' }} className="p-1.5 border-r border-black/10 text-center flex items-center justify-center"><span className="text-[9pt] text-black font-bold">{(f as any).cargo}</span></div>
             <div style={{ flex: '0 0 33%' }} className="p-1.5 text-center flex items-center justify-center relative"><span className="text-[9pt] text-black uppercase font-bold">{(f as any).rg}</span>
               {!isFinalized && !isGeneratingPdf && (
                 // Sempre visíveis por padrão — em toque (celular/tablet) não existe
@@ -817,7 +817,7 @@ export function DocumentoOficialBody({
                         <button type="button" onClick={() => onRequestSignature({ type: 'fiscal', index: i })} className="no-print text-primary text-[6pt] font-black tracking-widest uppercase underline">[Assinar Fiscal]</button>
                       )
                     ) : (
-                      <p className="no-print text-zinc-300 text-[6pt] font-black tracking-widest uppercase text-center">Aguardando {(f as any).nome}</p>
+                      <p className="no-print text-[#A39D8C] text-[7pt] font-black tracking-widest uppercase text-center">Aguardando {(f as any).nome}</p>
                     )
                   )}
                 </div>

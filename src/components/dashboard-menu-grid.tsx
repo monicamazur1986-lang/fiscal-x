@@ -47,10 +47,16 @@ function MenuTile({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
-    background: `linear-gradient(135deg, ${item.color} 0%, ${darkenHex(item.color, 28)} 100%)`,
+    // Um brilho suave no canto (radial) por cima do degradê de base dá
+    // profundidade de vidro/esmalte em vez de uma cor chapada — e a sombra
+    // ganha um tom da própria cor do cartão, junto com a sombra neutra
+    // grande, pra ficar "aquele verde"/"aquele roxo" também por fora,
+    // não só dentro do cartão.
+    background: `radial-gradient(130% 130% at 12% 8%, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0) 50%), linear-gradient(135deg, ${item.color} 0%, ${darkenHex(item.color, 32)} 100%)`,
+    boxShadow: `0 10px 24px -12px rgba(38,36,32,0.4), 0 6px 16px -10px ${item.color}80, inset 0 1px 0 0 rgba(255,255,255,0.18)`,
   };
 
-  const baseClass = "group relative flex min-h-[124px] flex-col items-center justify-center gap-2 rounded-lg p-4 text-center shadow-[0_10px_24px_-12px_rgba(38,36,32,0.4)] transition-all duration-200";
+  const baseClass = "group relative flex min-h-[124px] flex-col items-center justify-center gap-2 rounded-lg p-4 text-center transition-all duration-200";
 
   const inner = (
     <>
@@ -69,11 +75,15 @@ function MenuTile({
           <Star className={cn("h-3.5 w-3.5", isFavorito ? "fill-amber-400 text-amber-400" : "text-[#C9C2AC]")} />
         </button>
       )}
-      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/15">
-        <item.icon className="h-5 w-5 text-white" />
+      <div className="flex h-10 w-10 items-center justify-center">
+        <span className="text-[28px] leading-none [filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.25))]" role="img" aria-hidden="true">{item.emoji}</span>
       </div>
       <div className="min-w-0">
-        <p className="font-serif text-[15px] font-semibold text-white leading-tight">{item.label}</p>
+        {/* text-shadow — não só font-weight — porque o contraste de branco
+            sobre as cores mais claras da paleta (ex.: o dourado do Fiscal
+            AI) cai abaixo do confortável; a sombra sutil devolve a leitura
+            sem precisar escurecer a cor do cartão. */}
+        <p className="font-serif text-[15px] font-bold text-white leading-tight [text-shadow:0_1px_3px_rgba(0,0,0,0.35)]">{item.label}</p>
         {item.emDesenvolvimento && (
           <span className="mt-1.5 inline-block rounded-full bg-black/25 px-2 py-[3px] text-[8px] font-black uppercase tracking-[0.12em] leading-none text-white/90">
             Em desenvolvimento
@@ -109,7 +119,7 @@ function MenuTile({
     <Link
       href={item.href}
       style={style}
-      className={cn(baseClass, "hover:-translate-y-1 hover:shadow-[0_16px_32px_-14px_rgba(38,36,32,0.45)] active:scale-[0.98] active:duration-75")}
+      className={cn(baseClass, "hover:-translate-y-1 hover:brightness-[1.06] active:scale-[0.98] active:duration-75")}
     >
       {inner}
     </Link>

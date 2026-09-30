@@ -9,6 +9,7 @@ import {
   UserCheck,
   Clock,
   HelpCircle,
+  Camera,
 } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
 import { useInspecoes } from "@/hooks/use-inspecoes"
@@ -20,11 +21,14 @@ import { AvisoBoasVindas } from "@/components/aviso-boas-vindas"
 import { AlertCard } from "@/components/alert-card"
 import { DashboardMenuGrid } from "@/components/dashboard-menu-grid"
 import { DASHBOARD_MENU_ITEMS } from "@/lib/dashboard-menu-items"
+import { mensagemDoDia } from "@/lib/mensagens-do-dia"
+import { ProfileEditDialog } from "@/components/profile-edit-dialog"
 import { isSameDay, format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
 export default function Dashboard() {
   const { profile } = useAuth()
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
   const { inspecoes } = useInspecoes()
   const { intimacoes } = useIntimacoes()
   const { pendingUsersCount, pendingUserNames, pendingChamadosCount } = usePendingAlerts()
@@ -69,6 +73,19 @@ export default function Dashboard() {
 
   const userName = profile?.displayName || "Fiscal";
 
+  // Resumo do dia — versão curta debaixo do nome (o detalhe de cada item já
+  // está na seção "Avisos", mais abaixo). Sem nada agendado, convida a
+  // começar algo em vez de só informar que está vazio.
+  const totalCompromissos = agendaHoje.length;
+  const totalPrazos = prazosVencendoHoje.length;
+  const resumoDoDia = (() => {
+    if (totalCompromissos === 0 && totalPrazos === 0) return null;
+    const partes: string[] = [];
+    if (totalCompromissos > 0) partes.push(`${totalCompromissos} ${totalCompromissos === 1 ? 'compromisso agendado' : 'compromissos agendados'}`);
+    if (totalPrazos > 0) partes.push(`${totalPrazos} ${totalPrazos === 1 ? 'prazo vencendo hoje' : 'prazos vencendo hoje'}`);
+    return `Hoje você tem ${partes.join(' e ')}.`;
+  })();
+
   const pendingNotificationTitle = pendingUserNames.length === 1
     ? `${pendingUserNames[0]} aguardando aprovação`
     : pendingUserNames.length > 1
@@ -79,30 +96,62 @@ export default function Dashboard() {
     <div className="flex-1 flex flex-col min-h-screen bg-[#F5F2EA] p-4 sm:p-6 lg:p-8">
       <div className="max-w-6xl mx-auto w-full space-y-8">
 
-        <section className="relative overflow-hidden rounded-2xl bg-[#EEEBE3] border border-[#E4DFD1] p-5 sm:p-7 shadow-[0_1px_2px_rgba(38,36,32,0.04),0_12px_28px_-14px_rgba(38,36,32,0.18)]">
+        <section className="relative overflow-hidden rounded-2xl bg-[#EEEBE3] border border-[#E4DFD1] p-5 sm:p-8 shadow-[0_1px_2px_rgba(38,36,32,0.04),0_12px_28px_-14px_rgba(38,36,32,0.18)]">
           <div className="absolute -top-12 -right-12 w-48 h-48 bg-[#9C7A3C]/10 blur-[80px] rounded-full pointer-events-none" />
-          <div className="relative z-10 flex items-center gap-4 sm:gap-5">
-            <Avatar className="h-16 w-16 sm:h-20 sm:w-20 ring-4 ring-white shadow-md shrink-0">
-              <AvatarImage src={profile?.photoURL} className="object-cover" />
-              <AvatarFallback className="bg-[#0E4A44] text-white font-black text-xl sm:text-2xl uppercase">
-                {userName[0]}
-              </AvatarFallback>
-            </Avatar>
+          <div className="relative z-10 flex items-center gap-4 sm:gap-6">
+            {/* Halo suave atrás do avatar (mesmo tom do sistema) em vez de
+                mexer no formato da foto em si — dá destaque sem inventar
+                moldura estranha. Tocar na foto abre "Meu Perfil" direto
+                pra trocar a imagem, sem precisar achar o menu no topo. */}
+            <button
+              type="button"
+              onClick={() => setIsProfileOpen(true)}
+              aria-label="Alterar foto de perfil"
+              title="Alterar foto de perfil"
+              className="relative shrink-0 group"
+            >
+              <div className="absolute inset-0 rounded-full bg-[#0E4A44]/15 blur-lg scale-125" />
+              <Avatar className="relative h-24 w-24 sm:h-32 sm:w-32 ring-4 ring-white shadow-lg transition-transform group-hover:scale-[1.03] group-active:scale-95">
+                <AvatarImage src={profile?.photoURL} className="object-cover" />
+                <AvatarFallback className="bg-[#0E4A44] text-white font-black text-3xl sm:text-4xl uppercase">
+                  {userName[0]}
+                </AvatarFallback>
+              </Avatar>
+              <span className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-[#0E4A44] text-white flex items-center justify-center ring-2 ring-white shadow-md group-hover:bg-[#0B3A35] transition-colors">
+                <Camera className="h-4 w-4" />
+              </span>
+            </button>
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm font-medium text-[#6B6659]">{greeting},</p>
+              <p className="text-sm sm:text-base font-medium text-[#6B6659]">{greeting},</p>
               <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                <h1 className="font-serif text-xl sm:text-3xl font-bold text-[#262420] truncate">{userName}</h1>
+                <h1 className="font-serif text-2xl sm:text-4xl font-bold text-[#262420] truncate">{userName}</h1>
                 {isGestor && (
                   <span className="shrink-0 text-[10px] font-black uppercase tracking-wide text-white bg-[#9C7A3C] px-2.5 py-1 rounded-full">Gestor</span>
                 )}
               </div>
-            </div>
-            <div className="shrink-0 text-right">
-              <p className="text-lg sm:text-2xl font-black text-[#0E4A44] tabular-nums leading-none">{currentTime}</p>
-              <p className="text-[10px] sm:text-xs font-semibold text-[#6B6659] capitalize mt-1.5">{format(new Date(), "dd 'de' MMMM", { locale: ptBR })}</p>
+              {/* Data e hora juntas, numa linha discreta — antes ficavam
+                  destacadas num bloco à parte, competindo com o nome pela
+                  atenção. */}
+              <p className="mt-1.5 text-xs sm:text-sm font-semibold text-[#9C7A3C] tabular-nums">
+                {currentTime} · <span className="capitalize">{format(new Date(), "dd 'de' MMMM", { locale: ptBR })}</span>
+              </p>
             </div>
           </div>
+
+          {/* Resumo do dia — versão curta; o detalhe de cada compromisso/prazo
+              já está na seção "Avisos", mais abaixo. */}
+          {resumoDoDia && (
+            <div className="relative z-10 mt-4 pt-4 border-t border-[#E4DFD1]">
+              <p className="text-sm text-[#262420]">{resumoDoDia}</p>
+            </div>
+          )}
         </section>
+
+        {/* Dica fixa do dia. */}
+        <div className="flex items-start gap-3 rounded-xl border border-[#E4DFD1] bg-white p-4">
+          <span className="text-[20px] leading-none shrink-0" role="img" aria-hidden="true">💡</span>
+          <p className="text-[12.5px] text-[#6B6659] leading-snug">{mensagemDoDia()}</p>
+        </div>
 
         {/* Orientação do período de teste — antes dos avisos operacionais,
             porque fala de como usar o sistema, não do que fazer hoje. */}
@@ -169,6 +218,8 @@ export default function Dashboard() {
           </Link>
         </div>
       </div>
+
+      <ProfileEditDialog isOpen={isProfileOpen} onOpenChange={setIsProfileOpen} />
     </div>
   )
 }

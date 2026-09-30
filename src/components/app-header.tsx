@@ -17,7 +17,6 @@ import { usePathname, useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
 import { usePendingAlerts } from "@/hooks/use-pending-alerts"
-import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ProfileEditDialog } from "./profile-edit-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
@@ -266,11 +265,13 @@ export function AppHeader() {
             </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                  <Avatar className="h-9 w-9">
-                    <AvatarImage src={profile?.photoURL || ""} alt={profile?.displayName || "User"} />
-                    <AvatarFallback>{(profile?.displayName || "U")[0]}</AvatarFallback>
-                  </Avatar>
+                <Button
+                  variant="ghost"
+                  aria-label="Conta e configurações"
+                  title="Conta e configurações"
+                  className="flex items-center justify-center h-10 w-10 rounded-full text-[#6B6659] hover:bg-[#F1EEE4] hover:text-[#0E4A44] active:bg-[#E4EEEC] transition-colors shrink-0"
+                >
+                  <Settings className="h-7 w-7" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="end" forceMount>
