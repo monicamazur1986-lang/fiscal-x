@@ -18,7 +18,7 @@ import { Textarea } from "./ui/textarea"
 import type { MunicipalityConfig } from "@/hooks/use-app-config"
 import { sanitizeHtml } from "@/lib/sanitize-html"
 import { estruturaDoTipo } from "@/lib/autuacao-estrutura"
-import { cn } from "@/lib/utils"
+import { cn, ehMinhaAssinatura } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
 import { useAppConfig } from "@/hooks/use-app-config"
 
@@ -414,6 +414,7 @@ export function DocumentoOficialBody({
   showCnpjLookup = true, onCnpjLookup, isSearchingCnpj = false,
   onSubmit, livePageBreaks,
 }: DocumentoOficialBodyProps) {
+  const { profile } = useAuth();
   // Nome curto: os 3 campos (nome, cargo/conselho, documento) cabem numa linha
   // só, já que RG/CPF e conselho são sempre curtos. Nome muito longo: cargo e
   // documento descem para a linha seguinte, para não espremer o nome.
@@ -621,7 +622,7 @@ export function DocumentoOficialBody({
     mostrarResponsavelTecnico ? (
       <div key="resp-tecnico" className="section-box relative" style={{ borderTop: 'none' }}>
         {!isFinalized && !isGeneratingPdf && (
-          <button type="button" onClick={handleRemoverResponsavelTecnico} className="no-print absolute right-2 top-2 z-10 h-6 w-6 flex items-center justify-center rounded-full bg-white text-[#A39D8C] hover:text-rose-500 shadow-sm border border-[#E4DFD1]">
+          <button type="button" onClick={handleRemoverResponsavelTecnico} aria-label="Remover Responsável Técnico" className="no-print absolute right-2 top-2 z-10 h-9 w-9 flex items-center justify-center rounded-full bg-white text-[#A39D8C] hover:text-rose-500 shadow-sm border border-[#E4DFD1]">
             <X className="h-3.5 w-3.5" />
           </button>
         )}
@@ -706,8 +707,8 @@ export function DocumentoOficialBody({
                 // :hover pra revelar esses controles, então ficavam invisíveis e
                 // intocáveis. Some só em telas md+ (mouse), onde hover faz sentido.
                 <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-1 no-print opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity bg-white/80 p-0.5 rounded shadow-sm">
-                  <Button type="button" variant="ghost" size="icon" onClick={() => onEditAutoridade(i, f as any)} className="h-5 w-5"><Pencil className="h-2.5 w-2.5" /></Button>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => onRemoveAutoridade(i)} className="h-5 w-5 text-rose-500"><Trash2 className="h-2.5 w-2.5" /></Button>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => onEditAutoridade(i, f as any)} aria-label={`Editar ${(f as any).nome}`} className="h-8 w-8"><Pencil className="h-3.5 w-3.5" /></Button>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => onRemoveAutoridade(i)} aria-label={`Remover ${(f as any).nome}`} className="h-8 w-8 text-rose-500"><Trash2 className="h-3.5 w-3.5" /></Button>
                 </div>
               )}
             </div>
@@ -787,15 +788,43 @@ export function DocumentoOficialBody({
       <div className="p-6">
         <div className="grid grid-cols-2 gap-12">
           <div className="space-y-12">
-            {fields.map((f, i) => (
+            {fields.map((f, i) => {
+              const ehMinhaLinha = ehMinhaAssinatura((f as any).nome, profile?.displayName);
+              return (
               <div key={f.id} className="flex flex-col items-center">
                 <div className="min-h-[50pt] flex flex-col items-center justify-end">
                   {(f as any).signature && <img src={(f as any).signature} className="h-10 object-contain mb-0" alt="S" />}
-                  {!isFinalized && !isGeneratingPdf && <button type="button" onClick={() => onRequestSignature({ type: 'fiscal', index: i })} className="no-print text-primary text-[6pt] font-black tracking-widest uppercase underline">[Assinar Fiscal]</button>}
+                  {/* Só a pessoa logada com este nome assina esta linha — nunca
+                      um colega, mesmo com acesso de edição ao documento (ver
+                      ehMinhaAssinatura em lib/utils.ts). Com assinatura salva
+                      no perfil, um clique já resolve; sem ela, abre o quadro
+                      pra desenhar, como sempre. */}
+                  {!isFinalized && !isGeneratingPdf && !(f as any).signature && (
+                    ehMinhaLinha ? (
+                      profile?.assinaturaSalva ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const atuais = getValues('autoridades');
+                            atuais[i] = { ...atuais[i], signature: profile.assinaturaSalva! };
+                            setValue('autoridades', [...atuais]);
+                          }}
+                          className="no-print text-primary text-[6pt] font-black tracking-widest uppercase underline"
+                        >
+                          [Assinar Eletronicamente]
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => onRequestSignature({ type: 'fiscal', index: i })} className="no-print text-primary text-[6pt] font-black tracking-widest uppercase underline">[Assinar Fiscal]</button>
+                      )
+                    ) : (
+                      <p className="no-print text-zinc-300 text-[6pt] font-black tracking-widest uppercase text-center">Aguardando {(f as any).nome}</p>
+                    )
+                  )}
                 </div>
                 <div className="signature-block w-full"><p className="signature-name">{(f as any).nome}</p><p className="signature-title">{(f as any).cargo} — RG/CPF: {(f as any).rg || "---"}</p></div>
               </div>
-            ))}
+              );
+            })}
           </div>
           <div className="space-y-12">
             {!recusouAssinar ? (
@@ -876,20 +905,24 @@ export function DocumentoOficialBody({
 
           </td></tr>
         </tbody>
-        {config.footerRichText && (
+        {
           // <tfoot> repete no rodapé de cada página impressa, mesmo truque já
-          // usado no <thead> pro cabeçalho — opcional, só aparece se o gestor
-          // configurar um texto de rodapé em Identidade Municipal.
+          // usado no <thead> pro cabeçalho. O texto de rodapé em si é opcional
+          // (só aparece se o gestor configurar em Identidade Municipal), mas a
+          // nota da base legal da assinatura eletrônica simples é fixa — por
+          // isso o <tfoot> deixou de depender de config.footerRichText.
           <tfoot>
             <tr><td style={{ padding: 0, border: 'none' }}>
               <footer
                 className="pt-1.5 mt-2 border-t border-black/20 text-center text-black"
                 style={{ fontFamily: "'Times New Roman', Times, serif" }}
-                dangerouslySetInnerHTML={{ __html: sanitizeHtml(config.footerRichText) }}
-              />
+              >
+                {config.footerRichText && <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(config.footerRichText) }} />}
+                <p className="text-[6.5pt] italic opacity-60">Assinatura eletrônica simples, admitida para este ato nos termos dos arts. 4º, I, e 5º da Lei nº 14.063/2020 e do art. 10, § 2º, da Medida Provisória nº 2.200-2/2001.</p>
+              </footer>
             </td></tr>
           </tfoot>
-        )}
+        }
       </table>
     </form>
   );

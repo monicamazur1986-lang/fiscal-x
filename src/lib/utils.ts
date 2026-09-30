@@ -21,6 +21,22 @@ export function normalizeId(text: string): string {
 }
 
 /**
+ * A pessoa logada é a mesma que dá nome a esta linha de assinatura?
+ *
+ * Mesmo casamento por nome normalizado já usado em compartilharComAutoridades
+ * (use-intimacoes.ts) — uma autoridade sanitária não tem uid próprio no
+ * documento, só nome/cargo/RG. Usado pra travar quem pode assinar cada linha:
+ * só o próprio fiscal, logado, assina a linha com o seu nome. Sem isso,
+ * qualquer pessoa com acesso de edição ao documento podia desenhar a
+ * assinatura de outro fiscal listado nele.
+ */
+export function ehMinhaAssinatura(nomeDaLinha: string | undefined, meuNome: string | undefined | null): boolean {
+  const a = normalizeId(nomeDaLinha || '');
+  const b = normalizeId(meuNome || '');
+  return !!a && a === b;
+}
+
+/**
  * Gera um prefixo de 4 caracteres para o município
  */
 export function getMuniPrefix(muniId: string): string {

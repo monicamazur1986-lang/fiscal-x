@@ -172,8 +172,16 @@ export function AppHeader() {
   // voltar saber se existe para onde voltar sem sair do sistema.
   const passosNoApp = useRef(0);
   const rotaAnteriorRef = useRef(pathname);
+  // Rota de onde a pessoa estava ANTES desta página — usada só quando uma
+  // vistoria/checklist em andamento intercepta o clique em "Início" (ver
+  // handleInicioClick abaixo). Sem isso, o guard sempre recebia "/dashboard"
+  // fixo como destino: excluir/salvar um rascunho e sair jogava a pessoa
+  // pro Início em vez de devolver pra tela de onde ela veio, em qualquer
+  // lista (roteiros, PAS, documentos) — não é um bug só do roteiro.
+  const rotaAntesDestaRef = useRef<string | null>(null);
   useEffect(() => {
     if (rotaAnteriorRef.current !== pathname) {
+      rotaAntesDestaRef.current = rotaAnteriorRef.current;
       rotaAnteriorRef.current = pathname;
       passosNoApp.current += 1;
     }
@@ -186,10 +194,6 @@ export function AppHeader() {
   // guard registrado, ele assume a navegação (abre o diálogo de
   // salvar/excluir) e este clique não navega direto.
   const handleInicioClick = (e: React.MouseEvent) => {
-    if (requestChecklistExit("/dashboard")) {
-      e.preventDefault();
-      return;
-    }
     // VOLTAR É VOLTAR UM PASSO, não pular para o início.
     //
     // Este botão era um link cravado em /dashboard: de dentro de uma pasta da
@@ -200,7 +204,17 @@ export function AppHeader() {
     // O contador vem do próprio app (ver o efeito abaixo) em vez de
     // history.length, que conta também as páginas visitadas antes de entrar
     // aqui — usá-lo levaria a pessoa para fora do sistema.
-    if (passosNoApp.current > 0) {
+    const temPassoAnterior = passosNoApp.current > 0 && !!rotaAntesDestaRef.current;
+
+    // Se houver uma vistoria/checklist em andamento, o guard assume a
+    // navegação (abre o diálogo de salvar/excluir) — passamos pra ele a rota
+    // de onde a pessoa veio, não mais "/dashboard" fixo, pra ela devolver pro
+    // lugar certo depois de decidir.
+    if (requestChecklistExit(temPassoAnterior ? rotaAntesDestaRef.current! : "/dashboard")) {
+      e.preventDefault();
+      return;
+    }
+    if (temPassoAnterior) {
       e.preventDefault();
       passosNoApp.current -= 1;
       router.back();

@@ -1,5 +1,6 @@
 import { addDays, isWeekend, startOfDay, differenceInDays, format } from "date-fns";
 import { isFeriadoNacional } from "./feriados-nacionais";
+import { baseLegalDoMunicipio } from "./base-legal-municipal";
 
 /**
  * Soma dias úteis (pula sábado/domingo e feriado nacional) a uma data — usado
@@ -28,13 +29,19 @@ export interface PrazoInfo {
 /**
  * Calcula o vencimento do prazo de uma autuação finalizada. Compartilhado
  * entre a listagem de Documentos e o alerta da Dashboard, pra nunca divergir.
+ *
+ * `municipioId` decide a contagem (corridos/úteis) pela base legal daquele
+ * município (ver base-legal-municipal.ts) — sem isso, todo documento contava
+ * sempre em dias úteis, mesmo num município com código próprio que conta em
+ * dias corridos (caso de Prudentópolis), esticando o prazo real da lei.
  */
-export function calculateDeadline(doc: { status?: string; dataIntimacao?: any; prazoDias?: number }): PrazoInfo | null {
+export function calculateDeadline(doc: { status?: string; dataIntimacao?: any; prazoDias?: number; municipioId?: string | null }): PrazoInfo | null {
   if (doc.status !== 'finalizado') return null;
   const baseDate = doc.dataIntimacao ? new Date(doc.dataIntimacao) : new Date();
   const daysAllowed = doc.prazoDias || 15;
+  const contagemPrazo = baseLegalDoMunicipio(doc.municipioId).contagemPrazo;
 
-  const deadlineDate = addBusinessDays(baseDate, daysAllowed);
+  const deadlineDate = addPrazo(baseDate, daysAllowed, contagemPrazo);
   const today = startOfDay(new Date());
   const remaining = differenceInDays(deadlineDate, today);
 

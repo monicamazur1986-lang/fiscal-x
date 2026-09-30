@@ -884,7 +884,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const temDespachoInstrucao = pecas.some(p => p.tipo === 'despacho_instrucao');
   const temRelatorioInstrucao = pecas.some(p => p.tipo === 'relatorio_instrucao');
   const temDefesaOuInformacao = !!pas.defesa || pecas.some(p => p.tipo === 'termo_informacao');
-  const deadline = pas.prazoDefesaData ? calculateDeadline({ status: 'finalizado', dataIntimacao: pas.dataCienciaAI, prazoDias: 15 }) : null;
+  const deadline = pas.prazoDefesaData ? calculateDeadline({ status: 'finalizado', dataIntimacao: pas.dataCienciaAI, prazoDias: baseLegalDoMunicipio(pas.municipioId).defesa.dias, municipioId: pas.municipioId }) : null;
   const prazoVencido = deadline ? deadline.remaining < 0 : false;
   // Não existe um cadastro de "coordenador(a)" no sistema — o modelo de
   // referência sempre endereça os despachos/termos a uma pessoa específica,
@@ -1095,7 +1095,12 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       const dataCiencia = tipAutuacao.dataRecebimento
         ? new Date(tipAutuacao.dataRecebimento)
         : new Date(tipAutuacao.dataIntimacao);
-      const prazoRecursal = addPrazo(dataCiencia, baseLegal.recurso.dias, baseLegal.contagemPrazo);
+      // tipAutuacao.prazoDias, não baseLegal.recurso.dias direto: o TIP pode
+      // ter sido ajustado pro prazo de multa (diasMulta, Art. 30, VI, em
+      // Prudentópolis) pelo ajuste manual de prazo em Documentos — ignorar
+      // esse valor e recalcular sempre do "demais casos" fazia o recurso de
+      // uma multa aparecer com 5 dias a mais do que a lei permite.
+      const prazoRecursal = addPrazo(dataCiencia, tipAutuacao.prazoDias || baseLegal.recurso.dias, baseLegal.contagemPrazo);
 
       await adicionarPecas([{
         tipo: 'termo_imposicao_penalidade',
@@ -1265,16 +1270,22 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
 
   const handleSalvarRelatorio = async () => {
     // No modo "sistema", precisa ter conteúdo de verdade antes de abrir a
-    // revisão. fatos é HTML de um editor rico — vazio de verdade não é ""
-    // (o SunEditor sem nada digitado costuma devolver "<p><br></p>"), e
-    // uma foto sem nenhuma palavra ao redor ainda é conteúdo válido. No
-    // modo "anexo" essa exigência não existe — o relatório já está pronto
-    // fora do sistema, e é ele (anexado na revisão a seguir) que vale,
-    // não um texto escrito aqui só pra passar da validação.
+    // revisão — MAS conteúdo de verdade não é só texto digitado. fatos é
+    // HTML de um editor rico — vazio de verdade não é "" (o SunEditor sem
+    // nada digitado costuma devolver "<p><br></p>"), e uma foto sem nenhuma
+    // palavra ao redor já é conteúdo válido. Uma prova anexada TAMBÉM conta
+    // como conteúdo: sem isso, quem tinha o relatório pronto como arquivo e
+    // o anexava aqui como prova (em vez de trocar pro modo "já pronto")
+    // ficava travado pedindo pra "descrever os fatos" de um documento que
+    // já estava anexado — o texto solto que a mensagem pedia não tinha
+    // nada a acrescentar ao que o próprio arquivo já dizia. No modo "anexo"
+    // essa exigência não existe — o relatório já está pronto fora do
+    // sistema, e é ele (anexado na revisão a seguir) que vale.
     if (modoRelatorio === 'sistema') {
-      const temConteudoReal = /<img[\s>]/i.test(fatos) || fatos.replace(/<[^>]*>/g, '').trim().length > 0;
-      if (!temConteudoReal) {
-        toast({ variant: "destructive", title: "Descreva os fatos antes de salvar" });
+      const temTextoReal = /<img[\s>]/i.test(fatos) || fatos.replace(/<[^>]*>/g, '').trim().length > 0;
+      const temProvaAnexada = provasRascunho.length > 0 || provasSelecionadas.length > 0;
+      if (!temTextoReal && !temProvaAnexada) {
+        toast({ variant: "destructive", title: "Descreva os fatos ou anexe um documento antes de salvar" });
         return;
       }
     }
@@ -1533,7 +1544,8 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                   <button
                     type="button"
                     title="Excluir processo"
-                    className="h-9 w-9 rounded-md flex items-center justify-center border border-[#E4DFD1] bg-white text-[#A39D8C] hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-colors shrink-0"
+                    aria-label="Excluir processo"
+                    className="h-10 w-10 rounded-md flex items-center justify-center border border-[#E4DFD1] bg-white text-[#A39D8C] hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-colors shrink-0"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -1899,13 +1911,13 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                             {provasRascunho.map((p, i) => (
                               <span key={`rascunho-${i}`} className="flex items-center gap-1 bg-[#E3F1EA] rounded px-2 py-1 text-xs text-[#1F7A5C]">
                                 {p.nome}
-                                <button type="button" onClick={() => setProvasRascunho(prev => prev.filter((_, idx) => idx !== i))}><X className="h-3 w-3 text-[#1F7A5C]/60 hover:text-rose-500" /></button>
+                                <button type="button" onClick={() => setProvasRascunho(prev => prev.filter((_, idx) => idx !== i))} aria-label={`Remover ${p.nome}`} className="p-1 -m-0.5 rounded hover:bg-white/60"><X className="h-3 w-3 text-[#1F7A5C]/60 hover:text-rose-500" /></button>
                               </span>
                             ))}
                             {provasSelecionadas.map((p, i) => (
                               <span key={i} className="flex items-center gap-1 bg-[#F5F2EA] rounded px-2 py-1 text-xs text-[#6B6659]">
                                 {p.nome}
-                                <button type="button" onClick={() => setProvasSelecionadas(prev => prev.filter((_, idx) => idx !== i))}><X className="h-3 w-3 text-[#A39D8C] hover:text-rose-500" /></button>
+                                <button type="button" onClick={() => setProvasSelecionadas(prev => prev.filter((_, idx) => idx !== i))} aria-label={`Remover ${p.nome}`} className="p-1 -m-0.5 rounded hover:bg-white/60"><X className="h-3 w-3 text-[#A39D8C] hover:text-rose-500" /></button>
                               </span>
                             ))}
                             <Button type="button" variant="outline" size="sm" onClick={() => provasInputRef.current?.click()} className="h-7 rounded-md text-[11px] gap-1"><Paperclip className="h-3 w-3" /> Anexar arquivo</Button>
@@ -2236,7 +2248,8 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                       disabled={isBaixandoPdf}
                       onClick={() => iniciarDownload(etapa.pecas, etapa.label)}
                       title={`Baixar as peças de ${cor.rotulo}`}
-                      className="shrink-0 h-8 w-8 rounded-lg flex items-center justify-center text-[#6B6659] hover:bg-white/70 transition-colors disabled:opacity-40"
+                      aria-label={`Baixar as peças de ${cor.rotulo}`}
+                      className="shrink-0 h-10 w-10 rounded-lg flex items-center justify-center text-[#6B6659] hover:bg-white/70 transition-colors disabled:opacity-40"
                     >
                       <FileDown className="h-4 w-4" />
                     </button>
@@ -2289,6 +2302,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                           type="button"
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPecaEmLeitura(peca); }}
                           title="Visualizar esta peça como documento"
+                          aria-label="Visualizar esta peça como documento"
                           className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-[#6B6659] hover:bg-[#F5F2EA] hover:border-[#0E4A44]/30 transition-colors shrink-0"
                         >
                           <Eye className="h-5 w-5" />
@@ -2298,6 +2312,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleBaixarPeca(peca); }}
                           disabled={isBaixandoPdf}
                           title="Baixar PDF desta peça"
+                          aria-label="Baixar PDF desta peça"
                           className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC] hover:border-[#0E4A44]/40 transition-colors shrink-0 disabled:opacity-50"
                         >
                           {isBaixandoPdf && pecasParaBaixar?.length === 1 && pecasParaBaixar[0].id === peca.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <FileDown className="h-5 w-5" />}
@@ -2309,6 +2324,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                         type="button"
                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPecaParaExcluir(peca); }}
                         title="Excluir esta peça dos autos"
+                        aria-label="Excluir esta peça dos autos"
                         className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-rose-500 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-colors shrink-0"
                       >
                         <Trash2 className="h-5 w-5" />
@@ -2317,7 +2333,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                     <ChevronDown className="h-4 w-4 text-[#C4BEAC] shrink-0 transition-transform group-open:rotate-180" />
                   </summary>
                   <div className="px-4 pb-4 space-y-2">
-                    <div className="text-sm text-[#3F3B33] leading-relaxed pl-9" dangerouslySetInnerHTML={{ __html: peca.conteudoHtml }} />
+                    <div className="text-sm text-[#3F3B33] leading-relaxed pl-9" dangerouslySetInnerHTML={{ __html: sanitizeHtml(peca.conteudoHtml) }} />
                     {peca.refPecaNumero && (
                       <p className="text-xs text-[#A39D8C] pl-9">Retifica a peça nº {peca.refPecaNumero}.</p>
                     )}
@@ -2475,7 +2491,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                   <Paperclip className="h-4 w-4 text-[#6B6659] shrink-0" />
                   <span className="flex-1 text-sm text-[#262420] truncate">{docComplementarArquivo.name}</span>
                   <span className="text-[11px] text-[#A39D8C] shrink-0 tabular-nums">{Math.round(docComplementarArquivo.size / 1024)} KB</span>
-                  <button type="button" onClick={() => setDocComplementarArquivo(null)} title="Remover arquivo" className="shrink-0">
+                  <button type="button" onClick={() => setDocComplementarArquivo(null)} title="Remover arquivo" aria-label="Remover arquivo" className="shrink-0 h-9 w-9 -mr-1.5 flex items-center justify-center rounded-md hover:bg-[#F5F2EA]">
                     <X className="h-4 w-4 text-[#A39D8C] hover:text-rose-500" />
                   </button>
                 </div>
@@ -2711,6 +2727,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             style={{ fontFamily: "'Times New Roman', Times, serif" }}
           >
             {config.footerRichText && <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(config.footerRichText) }} />}
+            <p className="text-[6.5pt] italic opacity-60">Assinatura eletrônica simples, admitida para este ato nos termos dos arts. 4º, I, e 5º da Lei nº 14.063/2020 e do art. 10, § 2º, da Medida Provisória nº 2.200-2/2001.</p>
             <p data-pdf-pagenum className="mt-1">Página 1 de 1</p>
           </div>
         </div>
@@ -2762,6 +2779,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             style={{ fontFamily: "'Times New Roman', Times, serif" }}
           >
             {config.footerRichText && <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(config.footerRichText) }} />}
+            <p className="text-[6.5pt] italic opacity-60">Assinatura eletrônica simples, admitida para este ato nos termos dos arts. 4º, I, e 5º da Lei nº 14.063/2020 e do art. 10, § 2º, da Medida Provisória nº 2.200-2/2001.</p>
             <p data-pdf-pagenum className="mt-1">Página 1 de 1</p>
           </div>
         </div>

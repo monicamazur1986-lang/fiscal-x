@@ -25,6 +25,7 @@ const TIPOS_AUTUACAO = [
     label: "Auto de Infração",
     description: "Registra a irregularidade e abre prazo de defesa. Ponto de partida mais comum.",
     icon: Gavel,
+    emoji: "🧾",
     accent: "#0E4A44",
   },
   {
@@ -32,6 +33,7 @@ const TIPOS_AUTUACAO = [
     label: "Termo de Apreensão",
     description: "Recolhe produtos irregulares. Defesa corre no Auto vinculado.",
     icon: PackageX,
+    emoji: "📦",
     accent: "#A15437",
   },
   {
@@ -39,6 +41,7 @@ const TIPOS_AUTUACAO = [
     label: "Termo de Apreensão e Inutilização",
     description: "Recolhe e já inutiliza produtos impróprios, num só documento.",
     icon: Trash2,
+    emoji: "🗑️",
     accent: "#A15437",
   },
   {
@@ -46,6 +49,7 @@ const TIPOS_AUTUACAO = [
     label: "Termo de Desinterdição",
     description: "Encerra a interdição e libera o reinício das atividades.",
     icon: Unlock,
+    emoji: "🔓",
     accent: "#9C7A3C",
   },
   {
@@ -53,6 +57,7 @@ const TIPOS_AUTUACAO = [
     label: "Termo de Imposição de Penalidade",
     description: "Aplica a penalidade ao final do processo. Abre prazo de recurso.",
     icon: Scale,
+    emoji: "⚖️",
     accent: "#3D5A73",
   },
   {
@@ -60,6 +65,7 @@ const TIPOS_AUTUACAO = [
     label: "Termo de Interdição",
     description: "Suspende o funcionamento até a regularização.",
     icon: Lock,
+    emoji: "🔒",
     accent: "#9C7A3C",
   },
   {
@@ -67,6 +73,7 @@ const TIPOS_AUTUACAO = [
     label: "Termo de Intimação",
     description: "Notifica formalmente uma exigência, sem caracterizar infração ainda.",
     icon: ScrollText,
+    emoji: "📜",
     accent: "#0E4A44",
   },
   {
@@ -74,6 +81,7 @@ const TIPOS_AUTUACAO = [
     label: "Termo de Inutilização",
     description: "Formaliza a inutilização de produtos impróprios.",
     icon: Ban,
+    emoji: "🚫",
     accent: "#A15437",
   },
 ] as const;
@@ -108,20 +116,24 @@ function EscolherTipoAutuacao() {
               onClick={() => router.push(`/intimacoes/nova?tipo=${encodeURIComponent(tipo.value)}`)}
               style={{
                 // Mesma técnica do menu de Roteiros: a cor da fase do processo
-                // vira o tom de fundo, em versão bem clara.
+                // vira o tom de fundo, em versão bem clara. O selo do ícone
+                // leva a cor sólida — mesmo tratamento do MenuHub.
                 ['--tom' as any]: `${tipo.accent}12`,
                 ['--tom-hover' as any]: `${tipo.accent}22`,
-                ['--tom-icone' as any]: `${tipo.accent}29`,
                 ['--tom-borda' as any]: `${tipo.accent}33`,
                 ['--tom-texto' as any]: darkenHex(tipo.accent, 34),
+                ['--sombra-icone' as any]: `${tipo.accent}52`,
               }}
               className="group w-full flex items-center gap-3.5 rounded-xl border border-[var(--tom-borda)] bg-[var(--tom)] px-4 py-3.5 text-left transition-all duration-200 hover:bg-[var(--tom-hover)] hover:shadow-[0_6px_18px_-10px_rgba(38,36,32,0.35)] active:scale-[0.99]"
             >
-              <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0 bg-[var(--tom-icone)] text-[var(--tom-texto)]">
-                <tipo.icon className="h-5 w-5" />
+              <div
+                style={{ backgroundColor: `${tipo.accent}1A`, boxShadow: `0 6px 16px -4px var(--sombra-icone)` }}
+                className="h-11 w-11 rounded-full flex items-center justify-center shrink-0 text-white"
+              >
+                <span className="text-[22px] leading-none" role="img" aria-hidden="true">{tipo.emoji}</span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-serif font-bold text-[17px] leading-snug text-[var(--tom-texto)]">{tipo.label}</p>
+                <p className="font-serif font-bold text-[17px] leading-snug text-[#262420]">{tipo.label}</p>
                 {/* Mesma regra dos outros menus: o nome fica sempre visível e a
                     explicação só aparece ao passar o mouse ou encostar na tela. */}
                 <p className="text-xs text-[#6B6659] leading-snug line-clamp-1 mt-0.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-active:opacity-100 group-focus-visible:opacity-100">

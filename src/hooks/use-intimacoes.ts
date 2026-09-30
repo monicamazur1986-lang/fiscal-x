@@ -360,6 +360,79 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     return { ...docData, id: targetId, cloudSaved, cloudError } as any;
   }, [db, configError, profile]);
 
+  /**
+   * NOVO documento a partir de um já finalizado — nunca edita/apaga o
+   * original.
+   *
+   * 'retificar': mantém o estabelecimento (é o mesmo ato, corrigido — ex.:
+   * faltou uma assinatura na hora de finalizar), referencia o original por
+   * id/número (refDocumentoId/refDocumentoNumero), some com as assinaturas
+   * antigas — é documento novo, pede assinatura própria (mesma doutrina do
+   * termo_retificacao do PAS: vício de forma é sanável por um ato novo ao
+   * lado do original, não reescrevendo o que já foi lavrado).
+   *
+   * 'copiar': mantém o conteúdo (relato dos fatos, fundamentação legal,
+   * texto e prazo em dias, fiscais — sem assinatura), zera os dados do
+   * estabelecimento — pra quando a mesma autuação em série (ex.: uma ação
+   * fiscal notificando vários salões pelo mesmo motivo) não precisa ser
+   * redigitada do zero a cada estabelecimento.
+   */
+  const criarDocumentoAPartirDe = useCallback(async (
+    original: Intimacao,
+    modo: 'retificar' | 'copiar'
+  ): Promise<{ id: string }> => {
+    const novoNumero = await generateNewNumeroProcesso();
+    const autoridadesSemAssinatura = (original.autoridades || []).map((a) => ({ ...a, signature: '' }));
+
+    const base = {
+      ...original,
+      numeroProcesso: novoNumero,
+      status: 'rascunho' as const,
+      dataIntimacao: new Date(),
+      dataRecebimento: undefined,
+      dataRecebimentoTecnico: undefined,
+      signatureResponsavel: '',
+      signatureResponsavelTecnico: '',
+      signatureTestemunha1: '',
+      signatureTestemunha2: '',
+      recusouAssinar: false,
+      autoridades: autoridadesSemAssinatura,
+      pasId: null,
+      agendaLembreteId: undefined,
+      compartilhadoCom: [],
+      compartilhadoComNomes: [],
+    };
+
+    const dados = modo === 'retificar'
+      ? {
+          ...base,
+          teor: `Retificação do ${original.tipoTermo || 'documento'} nº ${original.numeroProcesso}, para fins de correção do quanto nele constou:<br><br>${original.teor || ''}`,
+          refDocumentoId: original.id,
+          refDocumentoNumero: original.numeroProcesso,
+        }
+      : {
+          ...base,
+          autor: '', cnpj: '', endereco: '', bairro: '', telefone: '', cnae: '',
+          reu: '', reuCargo: '', responsavelLegalIdentidade: '', responsavelLegalConselho: '',
+          responsavelTecnico: '', responsavelTecnicoConselho: '', responsavelTecnicoIdentidade: '',
+          itensApreendidos: [],
+          refDocumentoId: '',
+          refDocumentoNumero: '',
+        };
+
+    const salvo = await saveIntimacao(dados as any, undefined);
+    return { id: salvo.id };
+  }, [saveIntimacao, generateNewNumeroProcesso]);
+
+  const criarRetificacao = useCallback(
+    (original: Intimacao) => criarDocumentoAPartirDe(original, 'retificar'),
+    [criarDocumentoAPartirDe]
+  );
+  const criarCopia = useCallback(
+    (original: Intimacao) => criarDocumentoAPartirDe(original, 'copiar'),
+    [criarDocumentoAPartirDe]
+  );
+
   const bulkDelete = useCallback(async (ids: string[], toTrash: boolean) => {
     const now = new Date().toISOString();
     const stringIds = ids.map(id => String(id));
@@ -590,6 +663,8 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     saveIntimacao,
     compartilharIntimacao,
     compartilharComAutoridades,
+    criarRetificacao,
+    criarCopia,
     generateNewNumeroProcesso,
     bulkDelete,
     permanentDelete,

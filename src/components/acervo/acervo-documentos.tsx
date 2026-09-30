@@ -38,7 +38,9 @@ import {
   Save,
   ClipboardList,
   Star,
-  ArrowUpDown
+  ArrowUpDown,
+  FileEdit,
+  Copy
 } from "lucide-react"
 
 import { DocfacilTopbar } from "@/components/docfacil/docfacil-topbar"
@@ -195,7 +197,7 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
   const [municipioPickerOpen, setMunicipioPickerOpen] = useState(false);
   const [municipioSearchTerm, setMunicipioSearchTerm] = useState("");
 
-  const { intimacoes, bulkMoveToFolder, bulkDelete, permanentDelete, saveIntimacao, toggleFavorito: toggleFavoritoIntimacao, loading: loadingInt, isOnline, needsMunicipioSelection } = useIntimacoes(
+  const { intimacoes, bulkMoveToFolder, bulkDelete, permanentDelete, saveIntimacao, criarRetificacao, criarCopia, toggleFavorito: toggleFavoritoIntimacao, loading: loadingInt, isOnline, needsMunicipioSelection } = useIntimacoes(
     isRoot ? { municipioIdOverride: selectedMunicipioForRoot || undefined } : undefined
   );
   // Os dois hooks são carregados sempre (regra dos hooks), mas só o do escopo
@@ -498,6 +500,33 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
     }
   };
 
+  // Retificar/copiar nunca edita o documento finalizado — cria um novo,
+  // pré-preenchido, e já abre pra revisar e assinar (ver criarRetificacao/
+  // criarCopia em use-intimacoes.ts).
+  const handleRetificar = async (id: string) => {
+    const doc = intimacoes.find(i => i.id === id);
+    if (!doc) return;
+    try {
+      const { id: novoId } = await criarRetificacao(doc);
+      toast({ title: "Retificação criada", description: "Revise e assine — o original continua nos autos, intacto." });
+      router.push(`/intimacoes/${novoId}`);
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro ao criar retificação", description: e?.message });
+    }
+  };
+
+  const handleCriarCopia = async (id: string) => {
+    const doc = intimacoes.find(i => i.id === id);
+    if (!doc) return;
+    try {
+      const { id: novoId } = await criarCopia(doc);
+      toast({ title: "Cópia criada", description: "Preencha só os dados do novo estabelecimento." });
+      router.push(`/intimacoes/${novoId}`);
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro ao criar cópia", description: e?.message });
+    }
+  };
+
   const handleOpenAdjustment = (id: string) => {
     const doc = intimacoes.find(i => i.id === id);
     if (!doc) return;
@@ -519,7 +548,7 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
         prazoJustificativa: adjustmentReason.toUpperCase()
       }, adjustingDocId);
       
-      toast({ title: "Prazo Atualizado", description: "O cálculo de vencimento foi recalculado considerando apenas dias úteis." });
+      toast({ title: "Prazo Atualizado", description: "O cálculo de vencimento foi recalculado." });
       setIsAdjustmentDialogOpen(false);
       setAdjustingDocId(null);
     } catch (e) {
@@ -790,7 +819,8 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
               type="button"
               onClick={() => setIsFolderDialogOpen(true)}
               title="Nova pasta"
-              className="h-8 w-8 rounded-md flex items-center justify-center text-[#A39D8C] hover:text-[#0E4A44] hover:bg-white transition-colors"
+              aria-label="Nova pasta"
+              className="h-10 w-10 rounded-md flex items-center justify-center text-[#A39D8C] hover:text-[#0E4A44] hover:bg-white transition-colors"
             >
               <FolderPlus className="h-4 w-4" />
             </button>
@@ -957,63 +987,46 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                             }
                           }}
                           aria-label={item.favorito ? "Remover dos favoritos" : "Marcar como favorito"}
-                          className="h-7 w-7 rounded-md flex items-center justify-center text-[#C9C2AC] hover:bg-[#F5F2EA] hover:text-amber-500 transition-colors shrink-0"
+                          className="h-9 w-9 rounded-md flex items-center justify-center text-[#C9C2AC] hover:bg-[#F5F2EA] hover:text-amber-500 transition-colors shrink-0"
                         >
                           <Star className={cn("h-4 w-4", item.favorito && "fill-amber-400 text-amber-400")} />
                         </button>
-                        <span className={cn(
-                          "h-7 w-7 rounded-full border flex items-center justify-center font-serif text-[13px] shrink-0",
-                          isFinal ? "border-[#1F7A5C] text-[#1F7A5C]" : "border-[#E4DFD1] text-[#A39D8C]"
-                        )}>
-                          {isRelatorio ? <ClipboardList className="h-3.5 w-3.5" /> : (isFinal ? "✓" : "✎")}
-                        </span>
+                        {/* O status (✓/rascunho) só some numa lista mista — na
+                            lixeira e em "Compartilhadas comigo" convivem
+                            documentos de situações diferentes. Nas demais telas
+                            ("Finalizadas", "Em Andamento") o próprio nome da tela
+                            já diz a situação de toda a lista; repetir isso pelo
+                            círculo, pela etiqueta E pela cor da tarja lateral era
+                            o grosso da poluição visual. */}
+                        {(activeFolderId === 'trash' || situacao === 'compartilhadas') && (
+                          <span className={cn(
+                            "h-7 w-7 rounded-full border flex items-center justify-center font-serif text-[13px] shrink-0",
+                            isFinal ? "border-[#1F7A5C] text-[#1F7A5C]" : "border-[#E4DFD1] text-[#A39D8C]"
+                          )}>
+                            {isRelatorio ? <ClipboardList className="h-3.5 w-3.5" /> : (isFinal ? "✓" : "✎")}
+                          </span>
+                        )}
                     </div>
 
                     <div className="flex-1 min-w-0 grid grid-cols-1 lg:grid-cols-12 gap-2 lg:gap-4 items-center w-full">
-                        <div className="lg:col-span-4 min-w-0">
+                        <div className="lg:col-span-5 min-w-0">
                             <div className="flex items-center gap-2">
                                 <span className="font-serif text-[15px] text-[#262420] truncate">{item.numero}</span>
-                                {/* A etiqueta de situação só faz sentido na lixeira,
-                                    onde convivem documentos de estados diferentes. */}
-                                {activeFolderId === 'trash' && (
-                                  <Badge variant="outline" className={cn("text-[10px] font-medium h-4 px-1.5 border-none", isFinal ? "bg-[#E3F1EA] text-[#1F7A5C]" : "bg-amber-50 text-amber-700")}>
-                                      {isRelatorio ? (isFinal ? 'Relatório' : 'Em andamento') : (isFinal ? 'Final' : 'Rascunho')}
-                                  </Badge>
-                                )}
-                                {/* Nas listas gerais as compartilhadas aparecem
-                                    misturadas às próprias. Sem a etiqueta, o fiscal
-                                    não tem como saber que aquele documento é de um
-                                    colega e que outra pessoa pode estar mexendo
-                                    nele agora. Na pasta "Compartilhadas Comigo"
-                                    todas são, então a etiqueta seria ruído. */}
+                                {/* Compartilhado com você: um ícone quieto basta —
+                                    o nome de quem criou já aparece na linha de
+                                    baixo, repeti-lo aqui numa etiqueta colorida
+                                    era informação em dobro. */}
                                 {situacao !== 'compartilhadas' && profile?.uid && intimacao?.createdBy && intimacao.createdBy !== profile.uid && (intimacao.compartilhadoCom || []).includes(profile.uid) && (
-                                  <Badge variant="outline" className="text-[10px] font-medium h-4 px-1.5 border-none bg-[#F0E9F7] text-[#7A4F9C] gap-1">
-                                      <Users className="h-2.5 w-2.5" /> {intimacao.createdByName?.split(' ')[0] || 'Colega'}
-                                  </Badge>
+                                  <Users className="h-3 w-3 text-[#A39D8C] shrink-0" aria-label="Compartilhado com você" />
                                 )}
                             </div>
-                            <p className="text-xs text-[#A39D8C] truncate">
-                                {item.assunto}
+                            <p className="text-xs text-[#6B6659] truncate">{item.assunto}</p>
+                            <p className="text-[11px] text-[#A39D8C] truncate">
+                                {item.createdByName}{item.data ? ` · ${format(new Date(item.data), "dd MMM yyyy", { locale: ptBR })}` : ""}
                             </p>
                         </div>
 
-                        <div className="lg:col-span-3 flex flex-col justify-center gap-0.5">
-                            <div className="flex items-center gap-1.5 text-xs text-[#6B6659]">
-                                <User className="h-3 w-3 text-[#C9C2AC]" />
-                                <span className="truncate max-w-[140px]">{item.createdByName}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs text-[#A39D8C]">
-                                <CalendarDays className="h-3 w-3 text-[#C9C2AC]" />
-                                <span>{item.data ? format(new Date(item.data), "dd MMM yyyy", { locale: ptBR }) : "---"}</span>
-                            </div>
-                        </div>
-
-                        {/* Só o prazo legal aparece aqui. A situação do documento
-                            já é o nome da tela ("Em Andamento", "Finalizadas",
-                            "Relatórios") — repeti-la em cada linha, ainda por
-                            cima duas vezes (etiqueta + texto), era o grosso da
-                            poluição da versão anterior. */}
-                        <div className="lg:col-span-3 flex flex-col justify-center">
+                        <div className="lg:col-span-5 flex justify-start lg:justify-center">
                             {!isRelatorio && isFinal && deadline && (
                                 <div className={cn(
                                     "flex items-center gap-1.5 text-xs font-medium w-fit px-2 py-1 rounded",
@@ -1031,13 +1044,13 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                         </div>
 
                         <div onClick={(e) => e.stopPropagation()} className="lg:col-span-2 flex justify-end items-center gap-1">
-                            <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-md text-[#6B6659] hover:text-[#0E4A44] hover:bg-[#E4EEEC]">
+                            <Button asChild variant="ghost" size="sm" aria-label="Abrir documento" className="h-10 w-10 p-0 rounded-md text-[#6B6659] hover:text-[#0E4A44] hover:bg-[#E4EEEC]">
                                 <Link href={item.href}><ArrowUpRight className="h-4 w-4" /></Link>
                             </Button>
 
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-md text-[#A39D8C] hover:bg-[#F5F2EA]"><MoreVertical className="h-4 w-4" /></Button>
+                                    <Button variant="ghost" size="sm" aria-label="Mais opções" className="h-10 w-10 p-0 rounded-md text-[#A39D8C] hover:bg-[#F5F2EA]"><MoreVertical className="h-4 w-4" /></Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="rounded-md w-56 p-1 shadow-lg">
                                     {!isRelatorio && (
@@ -1045,6 +1058,12 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                                     )}
                                     {!isRelatorio && isFinal && intimacao?.tipoTermo === 'AUTO DE INFRAÇÃO' && !intimacao?.pasId && (
                                       <DropdownMenuItem onClick={() => router.push(`/pas?abrir=${intimacao.id}`)} className="rounded text-xs font-medium h-9 px-3 cursor-pointer gap-2"><Gavel className="h-3.5 w-3.5" /> Abrir PAS</DropdownMenuItem>
+                                    )}
+                                    {!isRelatorio && isFinal && (
+                                      <>
+                                        <DropdownMenuItem onClick={() => handleRetificar(item.id)} className="rounded text-xs font-medium h-9 px-3 cursor-pointer gap-2"><FileEdit className="h-3.5 w-3.5" /> Retificar</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleCriarCopia(item.id)} className="rounded text-xs font-medium h-9 px-3 cursor-pointer gap-2"><Copy className="h-3.5 w-3.5" /> Criar cópia</DropdownMenuItem>
+                                      </>
                                     )}
                                     <DropdownMenuItem
                                       onClick={async () => {

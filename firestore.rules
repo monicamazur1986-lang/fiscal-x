@@ -95,11 +95,14 @@ service cloud.firestore {
           request.auth.uid == userId &&
           // roteiroTextos = padrão pessoal de introdução/conclusão dos
           // relatórios de roteiro; menuPreferences = ordem/favoritos do menu
-          // inicial; roteirosPreferences = idem para o catálogo de Roteiros
-          // (ver UserProfile em src/hooks/use-auth.tsx). Segue valendo
-          // a restrição por lista: é ela que impede o próprio usuário de mexer
-          // em role, isAuthorized, status ou municipioId.
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL', 'fcmTokens', 'roteiroTextos', 'menuPreferences', 'roteirosPreferences', 'betaTermsAcceptedAt'])
+          // inicial; roteirosPreferences = idem para o catálogo de Roteiros;
+          // assinaturaSalva = assinatura eletrônica simples do próprio fiscal,
+          // usada pelo botão "Assinar Eletronicamente" (ver UserProfile em
+          // src/hooks/use-auth.tsx). Segue valendo a restrição por lista: é
+          // ela que impede o próprio usuário de mexer em role, isAuthorized,
+          // status ou municipioId — e impede QUALQUER UM de gravar a
+          // assinatura de outro (só request.auth.uid == userId chega aqui).
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL', 'fcmTokens', 'roteiroTextos', 'menuPreferences', 'roteirosPreferences', 'betaTermsAcceptedAt', 'assinaturaSalva'])
         )
       );
 

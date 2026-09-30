@@ -44,7 +44,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { cn, normalizeId } from "@/lib/utils"
+import { cn, normalizeId, ehMinhaAssinatura } from "@/lib/utils"
 import { useEscalaFolha } from "@/hooks/use-escala-folha"
 import { useDitadoPorVoz } from "@/hooks/use-ditado-por-voz"
 import { baseLegalDoMunicipio } from "@/lib/base-legal-municipal"
@@ -2925,7 +2925,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
       : profile?.municipioId,
   })
   const router = useRouter()
-  const { saveInspecao, deleteInspecao, inspecoes, compartilharInspecao, loading: loadingInspecoes } = useInspecoes()
+  const { saveInspecao, deleteInspecao, inspecoes, compartilharInspecao, compartilharComAutoridadesInspecao, loading: loadingInspecoes } = useInspecoes()
   const reportRef = useRef<HTMLDivElement>(null)
   // Encolhe só a APARÊNCIA da folha A4 pra caber na tela do celular — nunca a
   // largura real (offsetWidth), que é a base de todo o cálculo de paginação
@@ -2999,6 +2999,12 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     () => inspecoes.find(i => i.id === currentInspecaoId),
     [inspecoes, currentInspecaoId]
   );
+  // Vigia de edição simultânea — mesmo mecanismo de intimacao-form.tsx. O
+  // snapshot do Firestore chega sozinho (dentro de `inspecoes`); se o último
+  // salvamento foi de outra pessoa, quem está aqui precisa saber ANTES de
+  // continuar preenchendo, senão os dois textos se alternam a cada
+  // salvamento e ninguém entende o que aconteceu.
+  const carimboDoColega = inspecaoAtual?.updatedBy && inspecaoAtual.updatedBy !== profile?.uid ? String(inspecaoAtual.updatedAt || '') : '';
   // Status da inspeção carregada — null enquanto é uma inspeção nova/em
   // branco, ainda sem nenhum save. Controla, na visualização do relatório, se
   // mostra "Finalizar e Exportar" (rascunho) ou só "Exportar" (já concluída,
@@ -3080,6 +3086,20 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   const [uploadingItem, setUploadingItem] = useState<string | null>(null)
   const [view, setView] = useState<'checklist' | 'report'>('checklist')
 
+  // Vigia de edição simultânea — mesmo mecanismo de intimacao-form.tsx (ver
+  // carimboDoColega, definido mais acima). Fica depois da declaração de
+  // `view` de propósito: o efeito lê esse estado.
+  useEffect(() => {
+    if (!carimboDoColega || view === 'report') return;
+    const quando = (() => {
+      const d = new Date(carimboDoColega);
+      return isNaN(d.getTime()) ? 'agora há pouco' : `às ${format(d, "HH:mm")}`;
+    })();
+    bloqueiaAutosaveRef.current = true;
+    setAlteracaoDoColega({ nome: inspecaoAtual?.updatedByName || 'Um colega', quando });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carimboDoColega, view]);
+
   // Encaixe da folha A4 na tela — ver use-escala-folha.ts. Só liga quando a
   // prévia do relatório está aberta.
   const escalaFolha = useEscalaFolha({ ativo: view === 'report' })
@@ -3155,6 +3175,12 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // Um aviso por sessão de edição: o salvamento automático roda a cada 8
   // segundos, e repetir o alerta a cada tentativa enterraria a tela em toasts.
   const avisoTamanhoMostradoRef = useRef(false);
+  // Vigia de edição simultânea — mesmo mecanismo de intimacao-form.tsx.
+  // Enquanto houver uma alteração de colega não reconhecida, o heartbeat de 8
+  // segundos fica parado: sem isso, ele mandaria o texto antigo por cima do
+  // que o colega acabou de gravar, sem ninguém perceber.
+  const [alteracaoDoColega, setAlteracaoDoColega] = useState<{ nome: string; quando: string } | null>(null);
+  const bloqueiaAutosaveRef = useRef(false);
   // Sempre aponta para a versão mais recente de handleSaveDraft — sem isso, o
   // heartbeat abaixo (que só recria o intervalo quando answers/idData mudam)
   // podia acabar chamando uma versão antiga da função, salvando uma cópia
@@ -3351,7 +3377,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   useEffect(() => {
     if (view === 'report' || !profile) return;
     const timer = setInterval(() => {
-        if (!isDirtyRef.current || salvandoPeloHeartbeatRef.current) return;
+        if (!isDirtyRef.current || salvandoPeloHeartbeatRef.current || bloqueiaAutosaveRef.current) return;
         salvandoPeloHeartbeatRef.current = true;
         // Sem setLastAutoSave aqui: quem carimba a hora é o handleSaveDraft,
         // DEPOIS de saber se a gravação chegou. Carimbar no disparo era o que
@@ -3634,6 +3660,19 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         if (res?.synced) toast({ title: "Sincronizado" });
         else toast({ variant: "destructive", title: "Salvo só neste aparelho", description: "Sem conexão com a nuvem — não abra esta vistoria em outro dispositivo até sincronizar." });
       }
+      // QUEM ESTÁ NA LISTA DE FISCAIS JÁ VÊ O ROTEIRO, SEM PRECISAR QUE
+      // ALGUÉM COMPARTILHE À MÃO — mesmo mecanismo já usado na autuação
+      // (compartilharComAutoridades), casando os nomes com contas do
+      // município. Roda a cada save (não só ao concluir): "se ajudar durante
+      // o preenchimento" só funciona se o colega já enxergar o roteiro
+      // enquanto ele ainda está sendo escrito, não só no final.
+      const idGravado = res?.id || currentInspecaoId;
+      if (idGravado && fiscais.length > 0) {
+        compartilharComAutoridadesInspecao(idGravado, fiscais.map((f) => f.nome)).catch((e) => {
+          console.warn('Falha ao compartilhar automaticamente com os fiscais:', e);
+        });
+      }
+
       // Devolve o id gravado — abrirCompartilharRoteiro precisa dele na hora,
       // sem esperar o próximo render (currentInspecaoId só atualiza depois).
       return res?.id || currentInspecaoId || undefined;
@@ -3643,7 +3682,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     } finally {
       setIsSavingDraft(false);
     }
-  }, [profile, idData, answers, observations, itemPhotos, id, saveInspecao, currentInspecaoId, toast, introducaoHtml, conclusaoHtml, foundCnaes, router]);
+  }, [profile, idData, answers, observations, itemPhotos, id, saveInspecao, currentInspecaoId, toast, introducaoHtml, conclusaoHtml, foundCnaes, router, fiscais, compartilharComAutoridadesInspecao]);
 
   // Compartilhar exige um documento gravado — é o id que vai no
   // compartilhadoCom do colega. Num rascunho que nunca foi salvo, salva
@@ -4445,6 +4484,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                 style={{ fontFamily: "'Times New Roman', Times, serif" }}
               >
                 {config.footerRichText && <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(config.footerRichText) }} />}
+                <p className="text-[6.5pt] italic opacity-60">Assinatura eletrônica simples, admitida para este ato nos termos dos arts. 4º, I, e 5º da Lei nº 14.063/2020 e do art. 10, § 2º, da Medida Provisória nº 2.200-2/2001.</p>
                 <p data-pdf-pagenum className="mt-1">Página 1 de 1</p>
               </div>
           </div>
@@ -5417,29 +5457,47 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
 
                           {fiscais.length > 0 && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-9">
-                                {fiscais.map((f, i) => (
+                                {fiscais.map((f, i) => {
+                                  // Só a pessoa logada com este nome assina esta
+                                  // linha — nunca um colega, mesmo com acesso ao
+                                  // roteiro (ver ehMinhaAssinatura em lib/utils.ts).
+                                  const ehMinhaLinha = ehMinhaAssinatura((f as any).nome, profile?.displayName);
+                                  const aplicarAssinaturaSalva = () => {
+                                    const updated = [...fiscais];
+                                    updated[i] = { ...updated[i], signature: profile!.assinaturaSalva! };
+                                    setFiscais(updated);
+                                    handleSaveDraft(false);
+                                  };
+                                  return (
                                   <Button
                                     key={i}
-                                    onClick={() => setSigningFiscalIndex(i)}
+                                    onClick={() => {
+                                      if (!ehMinhaLinha) return;
+                                      if (!f.signature && profile?.assinaturaSalva) aplicarAssinaturaSalva();
+                                      else setSigningFiscalIndex(i);
+                                    }}
+                                    disabled={!ehMinhaLinha}
                                     variant="outline"
                                     className={cn(
                                       "h-auto min-h-[56px] py-2.5 rounded-xl justify-between px-4 gap-3 text-left normal-case",
                                       f.signature
                                         ? "border-[#1F7A5C]/30 bg-[#E4EEEC]/70 hover:bg-[#E4EEEC]"
-                                        : "border-[#E4DFD1] bg-white hover:bg-[#FAF8F3]"
+                                        : "border-[#E4DFD1] bg-white hover:bg-[#FAF8F3]",
+                                      !ehMinhaLinha && "opacity-50"
                                     )}
                                   >
                                     <span className="min-w-0 flex flex-col items-start">
                                       <span className="text-[14px] font-bold text-[#262420] truncate max-w-full">{(f as any).nome}</span>
                                       <span className={cn("text-[12px] font-medium", f.signature ? "text-[#0E4A44]" : "text-[#9C7A3C]")}>
-                                        {f.signature ? "Assinado" : "Toque para assinar"}
+                                        {f.signature ? "Assinado" : ehMinhaLinha ? "Toque para assinar" : "Aguardando esta pessoa, logada"}
                                       </span>
                                     </span>
                                     {f.signature
                                       ? <CheckCircle2 className="h-5 w-5 text-[#1F7A5C] shrink-0" />
                                       : <PenTool className="h-5 w-5 text-[#9C7A3C] shrink-0" />}
                                   </Button>
-                                ))}
+                                  );
+                                })}
                             </div>
                           )}
                           <div className="pl-9">
@@ -5592,6 +5650,36 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
 
       <SignaturePad isOpen={signingFiscalIndex !== null} onOpenChange={(open) => !open && setSigningFiscalIndex(null)} onSave={(sig) => { if (signingFiscalIndex !== null) { const updated = [...fiscais]; updated[signingFiscalIndex] = { ...updated[signingFiscalIndex], signature: sig }; setFiscais(updated); handleSaveDraft(false); } }} title="Assinatura Fiscal" />
       <SignaturePad isOpen={signingResponsavel} onOpenChange={setSigningResponsavel} onSave={(sig) => { setIdData({...idData, signatureResponsavel: sig}); handleSaveDraft(false); }} title="Ciência Inspecionado" />
+
+      {alteracaoDoColega && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[150] no-print w-[calc(100%-2rem)] max-w-xl">
+          <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 px-5 py-4 shadow-[0_10px_30px_-10px_rgba(38,36,32,0.45)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-serif text-base text-amber-900">{alteracaoDoColega.nome} alterou este roteiro {alteracaoDoColega.quando}</p>
+              <p className="text-xs text-amber-800 mt-1">
+                O salvamento automático está parado para não apagar o que ele escreveu. Recarregue para ver a versão dele — o que você preencheu e ainda não salvou será perdido — ou mantenha a sua e salve por cima.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => { bloqueiaAutosaveRef.current = false; setAlteracaoDoColega(null); }}
+                className="rounded-xl font-black uppercase text-[10px] tracking-widest h-11 px-4 border-amber-300 text-amber-900 hover:bg-amber-100"
+              >
+                Manter a minha
+              </Button>
+              <Button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="rounded-xl font-black uppercase text-[10px] tracking-widest h-11 px-4 bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                Recarregar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AlertDialog open={showExitDialog} onOpenChange={(open) => { if (!isExitSaving && !isExitDeleting) setShowExitDialog(open); }}>
         <AlertDialogContent className="rounded-lg">

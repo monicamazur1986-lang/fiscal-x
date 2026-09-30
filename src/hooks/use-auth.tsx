@@ -64,6 +64,14 @@ interface UserProfile {
    * bloqueia o acesso ao resto do app até o clique em "Concordo".
    */
   betaTermsAcceptedAt?: string;
+  /**
+   * Assinatura eletrônica simples do próprio fiscal (imagem base64), salva
+   * uma vez em "Meu Perfil" — permite o botão "Assinar Eletronicamente" (um
+   * clique) em qualquer documento em vez de desenhar de novo a cada peça.
+   * Só o próprio usuário grava a sua (updateProfileData grava em users/{uid},
+   * documento que as regras do Firestore só deixam o próprio dono escrever).
+   */
+  assinaturaSalva?: string;
 }
 
 interface RegisterInput {

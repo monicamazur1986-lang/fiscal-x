@@ -418,16 +418,16 @@ export default function RoteirosPage() {
     // aplicadas aqui em tonalidade clara: o fundo é a cor com ~7% de opacidade,
     // o ícone com ~16%, e o texto na própria cor, escurecido. Assim cada gaveta
     // tem identidade visual sem a tela virar um mosaico saturado.
-    const definicoes: { id: string; label: string; descricao: string; icone: any; cor: string }[] = [
-      { id: 'favoritos', label: 'Favoritos', descricao: 'Os que você fixou com a estrela', icone: Star, cor: '#9C7A3C' },
-      { id: 'municipal', label: municipioLabel ? `Exclusivos de ${municipioLabel}` : 'Do meu município', descricao: 'Roteiros próprios da vigilância municipal', icone: MapPin, cor: '#A15437' },
-      { id: 'alimentos', label: 'Alimentos', descricao: 'Restaurantes, lanchonetes, mercados e congêneres', icone: UtensilsCrossed, cor: '#1F7A5C' },
-      { id: 'servicos-saude', label: 'Serviços de Saúde', descricao: 'Clínicas, consultórios e odontologia', icone: Stethoscope, cor: '#2F6668' },
-      { id: 'medicamentos', label: 'Medicamentos', descricao: 'Farmácias e drogarias', icone: Pill, cor: '#3D5A73' },
-      { id: 'estetica', label: 'Estética e Beleza', descricao: 'Salão, barbearia, tatuagem e clínica de estética', icone: Syringe, cor: '#8A4B5C' },
-      { id: 'agua', label: 'Água e Saneamento', descricao: 'Sistemas de abastecimento', icone: Building, cor: '#454680' },
-      { id: 'roi', label: 'ROIs — ANVISA', descricao: 'Avaliados por nota de 0 a 5, não por SIM/NÃO', icone: Radiation, cor: '#6B4C80' },
-      { id: 'outros', label: 'Outros', descricao: 'Roteiros ainda sem grupo definido', icone: ClipboardList, cor: '#524E45' },
+    const definicoes: { id: string; label: string; descricao: string; icone: any; emoji: string; cor: string }[] = [
+      { id: 'favoritos', label: 'Favoritos', descricao: 'Os que você fixou com a estrela', icone: Star, emoji: '⭐', cor: '#9C7A3C' },
+      { id: 'municipal', label: municipioLabel ? `Exclusivos de ${municipioLabel}` : 'Do meu município', descricao: 'Roteiros próprios da vigilância municipal', icone: MapPin, emoji: '📍', cor: '#A15437' },
+      { id: 'alimentos', label: 'Alimentos', descricao: 'Restaurantes, lanchonetes, mercados e congêneres', icone: UtensilsCrossed, emoji: '🍽️', cor: '#1F7A5C' },
+      { id: 'servicos-saude', label: 'Serviços de Saúde', descricao: 'Clínicas, consultórios e odontologia', icone: Stethoscope, emoji: '🩺', cor: '#2F6668' },
+      { id: 'medicamentos', label: 'Medicamentos', descricao: 'Farmácias e drogarias', icone: Pill, emoji: '💊', cor: '#3D5A73' },
+      { id: 'estetica', label: 'Estética e Beleza', descricao: 'Salão, barbearia, tatuagem e clínica de estética', icone: Syringe, emoji: '💉', cor: '#8A4B5C' },
+      { id: 'agua', label: 'Água e Saneamento', descricao: 'Sistemas de abastecimento', icone: Building, emoji: '💧', cor: '#454680' },
+      { id: 'roi', label: 'ROIs — ANVISA', descricao: 'Avaliados por nota de 0 a 5, não por SIM/NÃO', icone: Radiation, emoji: '☢️', cor: '#6B4C80' },
+      { id: 'outros', label: 'Outros', descricao: 'Roteiros ainda sem grupo definido', icone: ClipboardList, emoji: '📋', cor: '#524E45' },
     ];
 
     return definicoes
@@ -634,22 +634,28 @@ export default function RoteirosPage() {
                 onClick={() => setGrupoAberto(grupo.id)}
                 style={{
                   // Variáveis CSS em vez de classes fixas: a cor vem do dado, e
-                  // o Tailwind só precisa saber que existe um hover.
+                  // o Tailwind só precisa saber que existe um hover. O selo do
+                  // ícone leva a cor sólida (não o tom pastel) — mesmo
+                  // tratamento do MenuHub, pra padronizar a "cara de app"
+                  // colorido em vez do ícone quase apagado que havia antes.
                   ['--tom' as any]: `${grupo.cor}12`,
                   ['--tom-hover' as any]: `${grupo.cor}22`,
-                  ['--tom-icone' as any]: `${grupo.cor}29`,
                   ['--tom-borda' as any]: `${grupo.cor}33`,
                   ['--tom-texto' as any]: darkenHex(grupo.cor, 34),
+                  ['--sombra-icone' as any]: `${grupo.cor}52`,
                 }}
                 className="group w-full flex items-center gap-4 rounded-xl border border-[var(--tom-borda)] bg-[var(--tom)] px-4 py-4 text-left transition-all duration-200 hover:bg-[var(--tom-hover)] hover:shadow-[0_6px_18px_-10px_rgba(38,36,32,0.35)] active:scale-[0.99]"
               >
-                <div className="h-11 w-11 rounded-xl flex items-center justify-center shrink-0 bg-[var(--tom-icone)] text-[var(--tom-texto)]">
-                  <grupo.icone className="h-5 w-5" />
+                <div
+                  style={{ backgroundColor: `${grupo.cor}1A`, boxShadow: `0 6px 16px -4px var(--sombra-icone)` }}
+                  className="h-12 w-12 rounded-full flex items-center justify-center shrink-0"
+                >
+                  <span className="text-[24px] leading-none" role="img" aria-hidden="true">{grupo.emoji}</span>
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="font-serif font-bold text-[17px] leading-snug text-[var(--tom-texto)]">{grupo.label}</p>
-                    <span className="rounded-full bg-[var(--tom-icone)] px-2 py-[2px] text-[11px] font-bold tabular-nums leading-none text-[var(--tom-texto)]">
+                    <p className="font-serif font-bold text-[17px] leading-snug text-[#262420]">{grupo.label}</p>
+                    <span className="rounded-full px-2 py-[2px] text-[11px] font-bold tabular-nums leading-none text-white" style={{ backgroundColor: 'var(--tom-texto)' }}>
                       {grupo.itens.length}
                     </span>
                   </div>

@@ -27,6 +27,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { calculateDeadline } from "@/lib/prazo"
+import { baseLegalDoMunicipio } from "@/lib/base-legal-municipal"
 import { PAS_FASE_LABEL, PAS_FASE_COR } from "@/lib/pas-textos-padrao"
 import { cn } from "@/lib/utils"
 import type { Folder as FolderType, Pas } from "@/lib/types"
@@ -56,7 +57,7 @@ export type GrupoPas = {
 export function agruparProcessos(processos: Pas[], meuUid?: string): GrupoPas[] {
   const vencido = (p: Pas) => {
     if (p.fase !== 'instrucao' || p.defesa) return false;
-    const d = calculateDeadline({ status: 'finalizado', dataIntimacao: p.dataCienciaAI, prazoDias: 15 });
+    const d = calculateDeadline({ status: 'finalizado', dataIntimacao: p.dataCienciaAI, prazoDias: baseLegalDoMunicipio(p.municipioId).defesa.dias, municipioId: p.municipioId });
     return !!d && d.remaining < 0;
   };
 
@@ -140,7 +141,7 @@ export function CartaoPas({
 
   const prazo = useMemo(() => {
     if (pas.fase !== 'instrucao' || pas.defesa) return null;
-    return calculateDeadline({ status: 'finalizado', dataIntimacao: pas.dataCienciaAI, prazoDias: 15 });
+    return calculateDeadline({ status: 'finalizado', dataIntimacao: pas.dataCienciaAI, prazoDias: baseLegalDoMunicipio(pas.municipioId).defesa.dias, municipioId: pas.municipioId });
   }, [pas]);
 
   const pastaAtual = pastas?.find((f) => f.id === pas.folderId);
@@ -195,7 +196,7 @@ export function CartaoPas({
         <>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-md text-[#A39D8C] hover:bg-[#F5F2EA] shrink-0">
+              <Button variant="ghost" size="sm" aria-label="Mais opções" className="h-10 w-10 p-0 rounded-md text-[#A39D8C] hover:bg-[#F5F2EA] shrink-0">
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>

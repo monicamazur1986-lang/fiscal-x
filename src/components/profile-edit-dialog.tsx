@@ -3,14 +3,16 @@
 import { useState, useEffect } from "react"
 import { useAuth } from "@/hooks/use-auth"
 import { auth } from "@/lib/firebase"
-import { 
-  User, 
-  Camera, 
-  Loader2, 
-  Save, 
+import {
+  User,
+  Camera,
+  Loader2,
+  Save,
   Pencil,
   Sparkles,
-  CheckCircle2
+  CheckCircle2,
+  PenTool,
+  Trash2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -25,6 +27,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useToast } from "@/hooks/use-toast"
+import { SignaturePad } from "@/components/signature-pad"
 interface ProfileEditDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
@@ -36,13 +39,16 @@ export function ProfileEditDialog({ isOpen, onOpenChange }: ProfileEditDialogPro
 
   const [name, setName] = useState("")
   const [photoUrl, setPhotoUrl] = useState("")
+  const [assinatura, setAssinatura] = useState("")
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isSignaturePadOpen, setIsSignaturePadOpen] = useState(false)
 
   useEffect(() => {
     if (isOpen && profile) {
         setName(profile.displayName || "");
         setPhotoUrl(profile.photoURL || "");
+        setAssinatura(profile.assinaturaSalva || "");
     }
   }, [isOpen, profile]);
 
@@ -91,7 +97,8 @@ export function ProfileEditDialog({ isOpen, onOpenChange }: ProfileEditDialogPro
     try {
       await updateProfileData({
         displayName: name.toUpperCase(),
-        photoURL: photoUrl
+        photoURL: photoUrl,
+        assinaturaSalva: assinatura
       })
       toast({
         title: "Perfil Sincronizado",
@@ -153,6 +160,30 @@ export function ProfileEditDialog({ isOpen, onOpenChange }: ProfileEditDialogPro
              </div>
           </div>
 
+          <div className="space-y-1.5">
+             <Label className="text-[10px] font-black uppercase text-zinc-500 ml-1">Minha Assinatura</Label>
+             <p className="text-[10px] text-zinc-400 leading-relaxed ml-1 mb-2">
+               Salve sua assinatura uma vez pra usar o botão "Assinar Eletronicamente" (um clique) em autuações,
+               PAS e roteiros — sem desenhar de novo em cada documento. Só você grava a sua; nenhum colega pode
+               alterá-la.
+             </p>
+             {assinatura ? (
+                <div className="flex items-center gap-3 bg-white rounded-2xl shadow-inner p-4">
+                   <img src={assinatura} alt="Assinatura salva" className="h-14 flex-1 object-contain object-left" />
+                   <Button type="button" variant="outline" size="sm" onClick={() => setIsSignaturePadOpen(true)} className="h-10 rounded-xl text-[9px] font-black uppercase gap-1.5 shrink-0">
+                      <Pencil className="h-3.5 w-3.5" /> Refazer
+                   </Button>
+                   <Button type="button" variant="ghost" size="icon" onClick={() => setAssinatura("")} className="h-10 w-10 rounded-xl text-zinc-400 hover:text-red-500 hover:bg-red-50 shrink-0">
+                      <Trash2 className="h-4 w-4" />
+                   </Button>
+                </div>
+             ) : (
+                <Button type="button" variant="outline" onClick={() => setIsSignaturePadOpen(true)} className="w-full h-14 rounded-2xl border-dashed gap-2 text-zinc-500 font-black uppercase text-[10px] tracking-widest">
+                   <PenTool className="h-4 w-4" /> Desenhar minha assinatura
+                </Button>
+             )}
+          </div>
+
           <div className="bg-blue-50 border border-blue-100 p-4 rounded-2xl flex items-start gap-3">
              <Sparkles className="h-5 w-5 text-blue-500 shrink-0" />
              <p className="text-[10px] font-bold text-blue-700 uppercase leading-relaxed">
@@ -169,6 +200,13 @@ export function ProfileEditDialog({ isOpen, onOpenChange }: ProfileEditDialogPro
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <SignaturePad
+        isOpen={isSignaturePadOpen}
+        onOpenChange={setIsSignaturePadOpen}
+        title="Minha Assinatura"
+        onSave={(sig) => setAssinatura(sig)}
+      />
     </Dialog>
   )
 }

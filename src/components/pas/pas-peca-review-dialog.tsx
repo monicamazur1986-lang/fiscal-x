@@ -13,6 +13,7 @@ import { RichTextEditor } from "@/components/rich-text-editor"
 import { FolhaEscalada } from "@/components/folha-escalada"
 import { SignaturePad } from "@/components/signature-pad"
 import { PasTimbreOficial } from "@/components/pas/pas-timbre-oficial"
+import { useAuth } from "@/hooks/use-auth"
 
 export interface PasPecaConfirmacao {
   assinaturaUrl?: string;
@@ -109,6 +110,7 @@ export function PasPecaReviewDialog({
   secretaria,
   departamento,
 }: PasPecaReviewDialogProps) {
+  const { profile } = useAuth();
   const [conteudo, setConteudo] = useState("");
   const [assinaturaUrl, setAssinaturaUrl] = useState<string | undefined>(undefined);
   const [assinadoForaDoSistema, setAssinadoForaDoSistema] = useState(false);
@@ -229,6 +231,7 @@ export function PasPecaReviewDialog({
               <div className="pt-1 mx-auto w-full max-w-[260pt] border-t border-black">
                 <p className="font-bold uppercase text-[10pt] mt-1">{nomeAssinante}</p>
               </div>
+              <p className="text-[7pt] italic opacity-60">Assinatura eletrônica simples, admitida para este ato nos termos dos arts. 4º, I, e 5º da Lei nº 14.063/2020 e do art. 10, § 2º, da Medida Provisória nº 2.200-2/2001.</p>
             </div>
           </FolhaEscalada>
         </div>
@@ -280,6 +283,26 @@ export function PasPecaReviewDialog({
               <div className="flex items-center gap-3">
                 <span className="text-xs text-[#1F7A5C] font-medium">Assinado digitalmente</span>
                 <Button type="button" variant="outline" size="sm" onClick={() => setIsSignPadOpen(true)} className="rounded-md text-xs">Assinar de novo</Button>
+              </div>
+            ) : profile?.assinaturaSalva ? (
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  disabled={assinadoForaDoSistema}
+                  onClick={() => { setAssinaturaUrl(profile.assinaturaSalva); setAssinadoForaDoSistema(false); }}
+                  className="rounded-md gap-2 bg-[#0E4A44] hover:bg-[#0B3A35]"
+                >
+                  <PenTool className="h-4 w-4" /> Assinar Eletronicamente
+                </Button>
+                <Button type="button" variant="ghost" size="sm" disabled={assinadoForaDoSistema} onClick={() => setIsSignPadOpen(true)} className="rounded-md text-xs text-[#A39D8C]">
+                  Desenhar outra assinatura
+                </Button>
+                <SignaturePad
+                  title={`Assinar — ${revisao.titulo}`}
+                  isOpen={isSignPadOpen}
+                  onOpenChange={setIsSignPadOpen}
+                  onSave={(url) => { setAssinaturaUrl(url); setAssinadoForaDoSistema(false); }}
+                />
               </div>
             ) : (
               <SignaturePad

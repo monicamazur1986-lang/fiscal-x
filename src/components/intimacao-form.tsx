@@ -17,6 +17,9 @@ import {
   Eye,
   Pencil,
   Users,
+  MoreVertical,
+  FileEdit,
+  Copy,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
@@ -26,10 +29,12 @@ import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import { useIntimacoes } from "@/hooks/use-intimacoes"
 import { CompartilharEdicaoDialog, type ColegaCompartilhado } from "@/components/compartilhar-edicao-dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useInspecoes } from "@/hooks/use-inspecoes"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useAuth } from "@/hooks/use-auth"
-import { addBusinessDays } from "@/lib/prazo"
+import { addPrazo } from "@/lib/prazo"
+import { baseLegalDoMunicipio } from "@/lib/base-legal-municipal"
 import { FolhaEscalada } from "@/components/folha-escalada"
 import { estruturaDoTipo } from "@/lib/autuacao-estrutura"
 import { montarEnderecoCnpj } from "@/lib/endereco-cnpj"
@@ -133,7 +138,8 @@ function useLivePagination(containerRef: React.RefObject<HTMLDivElement>, header
 }
 
 function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<Intimacao>, intimacaoId?: string }) {
-    const { generateNewNumeroProcesso, saveIntimacao, updateIntimacaoMeta, compartilharIntimacao, compartilharComAutoridades, intimacoes, loading: loadingIntimacoes } = useIntimacoes();
+    const { generateNewNumeroProcesso, saveIntimacao, updateIntimacaoMeta, compartilharIntimacao, compartilharComAutoridades, criarRetificacao, criarCopia, intimacoes, loading: loadingIntimacoes } = useIntimacoes();
+    const [isCriandoRetificacaoOuCopia, setIsCriandoRetificacaoOuCopia] = useState(false);
     const [compartilharAberto, setCompartilharAberto] = useState(false);
     const [abrindoCompartilhar, setAbrindoCompartilhar] = useState(false);
     // Alteração de um colega chegada pelo snapshot enquanto esta tela está
@@ -276,7 +282,18 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
     // src/lib/autuacao-estrutura.ts. Só preenche o objeto se ainda estiver
     // vazio, pra nunca apagar o que o fiscal escreveu.
     const handleTipoTermoChange = (value: string) => {
-        if (!prazoEditadoManualmenteRef.current) setValue('prazo', prazoTextoDoTipo(value, config.autuacaoTextos, profile?.municipioId));
+        if (!prazoEditadoManualmenteRef.current) {
+            setValue('prazo', prazoTextoDoTipo(value, config.autuacaoTextos, profile?.municipioId));
+            // O número de dias também depende do tipo e do município — sem
+            // isso, prazoDias ficava sempre no default genérico do schema
+            // (15), mesmo pra um Termo de Imposição de Penalidade num
+            // município cujo recurso é de 10 dias (estadual, Art. 73). O
+            // fiscal ainda pode corrigir pra diasMulta (multa) depois, pelo
+            // ajuste manual de prazo em Documentos.
+            const baseLegal = baseLegalDoMunicipio(profile?.municipioId);
+            if (value === 'AUTO DE INFRAÇÃO') setValue('prazoDias', baseLegal.defesa.dias);
+            else if (value === 'TERMO DE IMPOSIÇÃO DE PENALIDADE') setValue('prazoDias', baseLegal.recurso.dias);
+        }
         const textoDoAto = atoTextoDoTipo(value, config.autuacaoTextos, profile?.municipioId);
         const objetoAtual = (getValues('teor') || '').replace(/<br\s*\/?>/gi, '').trim();
         if (textoDoAto && !objetoAtual) setValue('teor', textoDoAto);
@@ -645,7 +662,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
 
             if (mainValues.prazoDias && profile?.municipioId) {
                 try {
-                    const prazoData = addBusinessDays(mainValues.dataIntimacao, mainValues.prazoDias);
+                    const prazoData = addPrazo(mainValues.dataIntimacao, mainValues.prazoDias, baseLegalDoMunicipio(profile.municipioId).contagemPrazo);
                     const lembreteId = await criarLembretePrazo(saveInspecao, {
                         titulo: `Prazo vence em breve — ${mainValues.autor || 'Autuação'} (${mainValues.tipoTermo || ''} nº ${mainValues.numeroProcesso})`,
                         prazoISO: prazoData.toISOString(),
@@ -853,6 +870,39 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
     // Compartilhar exige um documento gravado — é o id que vai no acesso do
     // colega. Num rascunho que nunca foi salvo, salva antes de abrir a caixa
     // em vez de mandar o fiscal fazer isso sozinho.
+    // Nunca edita o documento finalizado — cria um novo, pré-preenchido, e já
+    // abre pra revisar e assinar (ver criarRetificacao/criarCopia em
+    // use-intimacoes.ts).
+    const handleRetificar = async () => {
+        const atual = intimacoes.find(i => String(i.id) === String(mainIdRef.current));
+        if (!atual) return;
+        setIsCriandoRetificacaoOuCopia(true);
+        try {
+            const { id: novoId } = await criarRetificacao(atual);
+            toast({ title: "Retificação criada", description: "Revise e assine — o original continua nos autos, intacto." });
+            router.push(`/intimacoes/${novoId}`);
+        } catch (e: any) {
+            toast({ variant: "destructive", title: "Erro ao criar retificação", description: e?.message });
+        } finally {
+            setIsCriandoRetificacaoOuCopia(false);
+        }
+    };
+
+    const handleCriarCopia = async () => {
+        const atual = intimacoes.find(i => String(i.id) === String(mainIdRef.current));
+        if (!atual) return;
+        setIsCriandoRetificacaoOuCopia(true);
+        try {
+            const { id: novoId } = await criarCopia(atual);
+            toast({ title: "Cópia criada", description: "Preencha só os dados do novo estabelecimento." });
+            router.push(`/intimacoes/${novoId}`);
+        } catch (e: any) {
+            toast({ variant: "destructive", title: "Erro ao criar cópia", description: e?.message });
+        } finally {
+            setIsCriandoRetificacaoOuCopia(false);
+        }
+    };
+
     const abrirCompartilhar = async () => {
         if (mainIdRef.current) { setCompartilharAberto(true); return; }
         setAbrindoCompartilhar(true);
@@ -1129,7 +1179,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                        do modo de edição, para a tela não trocar de desenho ao
                        finalizar. */
                     <div className="fixed bottom-0 left-0 right-0 z-[100] no-print border-t border-[#E4DFD1] bg-white/95 px-3 py-3 backdrop-blur-xl sm:px-6">
-                        <div className="mx-auto grid max-w-4xl grid-cols-2 items-stretch gap-2 sm:gap-3">
+                        <div className="mx-auto grid max-w-4xl grid-cols-[1fr_1fr_auto] items-stretch gap-2 sm:gap-3">
                             <Button
                                 type="button"
                                 onClick={handleDownloadPdf}
@@ -1150,6 +1200,24 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                 {isSharingPdf ? <Loader2 className="animate-spin h-5 w-5" /> : <Share2 className="h-5 w-5" />}
                                 Compartilhar
                             </Button>
+
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        disabled={isCriandoRetificacaoOuCopia}
+                                        aria-label="Mais opções"
+                                        className="h-16 w-16 rounded-2xl border-[#E4DFD1] text-[#6B6659] shadow-md"
+                                    >
+                                        {isCriandoRetificacaoOuCopia ? <Loader2 className="h-5 w-5 animate-spin" /> : <MoreVertical className="h-5 w-5" />}
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="rounded-md w-56 p-1 shadow-lg">
+                                    <DropdownMenuItem onClick={handleRetificar} className="rounded text-xs font-medium h-9 px-3 cursor-pointer gap-2"><FileEdit className="h-3.5 w-3.5" /> Retificar</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={handleCriarCopia} className="rounded text-xs font-medium h-9 px-3 cursor-pointer gap-2"><Copy className="h-3.5 w-3.5" /> Criar cópia</DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </div>
                 )}

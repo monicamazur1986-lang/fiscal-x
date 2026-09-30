@@ -13,6 +13,15 @@ export type CartaoHub = {
    *  quem não é da área, então o rótulo sozinho não basta. */
   descricao: string;
   icon: LucideIcon;
+  /**
+   * Emoji no lugar do ícone de linha do Lucide — emoji já vem colorido e com
+   * volume (é a fonte do próprio sistema operacional: no Android, o mesmo
+   * visual de "pasta amarela" que qualquer app nativo usa), sem precisar de
+   * nenhum arquivo de imagem novo. Quando presente, substitui `icon` — que
+   * continua obrigatório só pra nunca faltar um desenho caso o emoji não
+   * exista naquele card.
+   */
+  emoji?: string;
   color: string;
   /** Quantos itens existem naquele destino. `undefined` esconde o contador
    *  (ex.: "Roteiros", que não é uma lista e sim o catálogo). */
@@ -83,19 +92,22 @@ export function MenuHub({
   );
 }
 
-/** A ação da tela: larga, com cor e com a frase sempre visível. */
+/** A ação da tela: larga, com cor e com a frase sempre visível.
+ *
+ * O ícone leva a cor sólida, não um tom pastel — é o que dá a "cara de
+ * aplicativo" (ícone colorido de verdade, tipo Android), em vez do
+ * ícone quase apagado que havia antes. O corpo do cartão continua claro,
+ * pra não virar um bloco de cor pesado nem prejudicar a leitura do texto. */
 function CartaoPrincipal({ cartao }: { cartao: CartaoHub }) {
   return (
     <Link
       href={cartao.href}
       style={{
-        // A cor entra como tom claro de fundo, não como bloco saturado com
-        // texto branco: o contraste vem do texto escurecido.
         ['--tom' as any]: `${cartao.color}1C`,
         ['--tom-hover' as any]: `${cartao.color}2B`,
-        ['--tom-icone' as any]: `${cartao.color}29`,
         ['--tom-borda' as any]: `${cartao.color}4D`,
         ['--tom-texto' as any]: darkenHex(cartao.color, 34),
+        ['--sombra-icone' as any]: `${cartao.color}59`,
       }}
       className={cn(
         "group relative flex items-center gap-5 rounded-[1.75rem] border border-[var(--tom-borda)] bg-[var(--tom)]",
@@ -104,18 +116,28 @@ function CartaoPrincipal({ cartao }: { cartao: CartaoHub }) {
         "hover:shadow-[0_14px_30px_-16px_rgba(38,36,32,0.45)] active:scale-[0.99] active:duration-75"
       )}
     >
-      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-[var(--tom-icone)] text-[var(--tom-texto)] transition-transform duration-200 group-hover:scale-105">
-        <cartao.icon className="h-8 w-8" />
+      <div
+        style={{
+          backgroundColor: cartao.emoji ? `${cartao.color}1F` : cartao.color,
+          boxShadow: `0 8px 20px -6px var(--sombra-icone)`,
+        }}
+        className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[1.35rem] text-white transition-transform duration-200 group-hover:scale-105"
+      >
+        {cartao.emoji ? (
+          <span className="text-[34px] leading-none" role="img" aria-hidden="true">{cartao.emoji}</span>
+        ) : (
+          <cartao.icon className="h-8 w-8" strokeWidth={2} />
+        )}
       </div>
 
       <div className="min-w-0 flex-1">
-        <p className="font-serif font-bold text-[21px] sm:text-[23px] leading-tight text-[var(--tom-texto)]">
+        <p className="font-serif font-bold text-[21px] sm:text-[23px] leading-tight text-[#262420]">
           {cartao.label}
         </p>
         <p className="mt-1 text-[13px] leading-snug text-[#6B6659]">{cartao.descricao}</p>
       </div>
 
-      <ChevronRight className="h-6 w-6 shrink-0 text-[var(--tom-texto)] opacity-40 transition-all group-hover:translate-x-1 group-hover:opacity-100" />
+      <ChevronRight className="h-6 w-6 shrink-0 text-[#262420] opacity-40 transition-all group-hover:translate-x-1 group-hover:opacity-100" />
     </Link>
   );
 }
@@ -139,6 +161,7 @@ function LadrilhoArquivo({ cartao }: { cartao: CartaoHub }) {
         ['--tom-hover' as any]: `${cartao.color}24`,
         ['--tom-borda' as any]: `${cartao.color}40`,
         ['--tom-texto' as any]: darkenHex(cartao.color, 32),
+        ['--sombra-icone' as any]: `${cartao.color}52`,
       }}
       className={cn(
         "group flex flex-col items-center justify-center gap-2.5 rounded-2xl border border-[#E4DFD1] bg-white",
@@ -148,8 +171,18 @@ function LadrilhoArquivo({ cartao }: { cartao: CartaoHub }) {
       )}
     >
       <div className="relative">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--tom)] text-[var(--tom-texto)] transition-all duration-200 group-hover:bg-white group-hover:scale-105">
-          <cartao.icon className="h-7 w-7" strokeWidth={1.6} />
+        <div
+          style={{
+            backgroundColor: cartao.emoji ? `${cartao.color}1A` : cartao.color,
+            boxShadow: `0 6px 16px -4px var(--sombra-icone)`,
+          }}
+          className="flex h-14 w-14 items-center justify-center rounded-2xl text-white transition-all duration-200 group-hover:scale-105"
+        >
+          {cartao.emoji ? (
+            <span className="text-[28px] leading-none" role="img" aria-hidden="true">{cartao.emoji}</span>
+          ) : (
+            <cartao.icon className="h-7 w-7" strokeWidth={2} />
+          )}
         </div>
         {cartao.contagem !== undefined && (
           <span

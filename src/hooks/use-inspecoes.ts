@@ -15,6 +15,7 @@ import {
   Timestamp,
   query,
   where,
+  getDocs,
   type Query,
   type DocumentData,
 } from 'firebase/firestore';
@@ -370,6 +371,10 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
       municipioId: mid,
       data: inspectionDate.toISOString(),
       updatedAt: new Date().toISOString(),
+      // Quem gravou AGORA — base do aviso de edição simultânea (mesmo
+      // mecanismo de Intimacao, ver alteracaoDoColega em intimacao-form.tsx).
+      updatedBy: user.uid,
+      updatedByName: profile?.displayName || 'Fiscal',
       fiscalId: data.fiscalId || user.uid,
       fiscalNome: data.fiscalNome || profile?.displayName || 'Fiscal',
     };
@@ -600,6 +605,61 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
    * mostrar "compartilhado com Fulano" sem consultar `users` de novo,
    * inclusive offline.
    */
+  /**
+   * QUEM ESTAVA NO ROTEIRO JÁ VÊ O DOCUMENTO, SEM PRECISAR QUE ALGUÉM
+   * COMPARTILHE À MÃO — mesmo mecanismo de compartilharComAutoridades em
+   * use-intimacoes.ts, casando por NOME normalizado (o fiscal listado no
+   * roteiro não tem uid próprio ali, só nome/cargo/RG).
+   *
+   * Chamado assim que um fiscal é adicionado à lista de quem fez a vistoria
+   * (não só ao concluir): "se ajudar durante o preenchimento" só funciona se
+   * o colega já enxergar o roteiro enquanto ele ainda está sendo escrito.
+   */
+  const compartilharComAutoridadesInspecao = useCallback(async (id: string, nomesAutoridades: string[]) => {
+    if (!db || configError || !profile?.municipioId) return;
+    const nomesNormalizados = Array.from(new Set(
+      nomesAutoridades.map((n) => normalizeId(n || '')).filter(Boolean)
+    ));
+    if (nomesNormalizados.length === 0) return;
+
+    const mid = normalizeId(profile.municipioId);
+    let usersSnap;
+    try {
+      usersSnap = await getDocs(query(collection(db, 'users'), where('municipioId', '==', mid)));
+    } catch (e) {
+      // Sem permissão pra listar usuários não pode travar o salvamento do
+      // roteiro — só não compartilha automaticamente desta vez.
+      console.warn('Não foi possível casar fiscais com contas de usuário:', e);
+      return;
+    }
+
+    const porNomeNormalizado = new Map<string, { uid: string; nome: string }>();
+    usersSnap.docs.forEach((d) => {
+      const data: any = d.data();
+      if (!data.isAuthorized || (data.role !== 'admin' && data.role !== 'fiscal')) return;
+      const nome = data.displayName || data.email || '';
+      const normalizado = normalizeId(nome);
+      if (normalizado) porNomeNormalizado.set(normalizado, { uid: d.id, nome });
+    });
+
+    const documento = inspecoes.find((i) => String(i.id) === String(id));
+    const combinados = new Map<string, { uid: string; nome: string }>();
+    (documento?.compartilhadoComNomes || []).forEach((c) => combinados.set(c.uid, c));
+
+    let encontrouAlguem = false;
+    nomesNormalizados.forEach((nomeNormalizado) => {
+      const achado = porNomeNormalizado.get(nomeNormalizado);
+      if (achado && achado.uid !== profile?.uid && !combinados.has(achado.uid)) {
+        combinados.set(achado.uid, achado);
+        encontrouAlguem = true;
+      }
+    });
+
+    // Nada novo pra somar — não regrava o que já está lá.
+    if (!encontrouAlguem) return;
+    await compartilharInspecao(id, Array.from(combinados.values()));
+  }, [db, configError, profile?.municipioId, profile?.uid, inspecoes]);
+
   const compartilharInspecao = useCallback(async (
     id: string,
     colegas: { uid: string; nome: string }[],
@@ -629,6 +689,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
     permanentDelete,
     toggleFavorito,
     compartilharInspecao,
+    compartilharComAutoridadesInspecao,
     loading,
     isOnline,
     needsMunicipioSelection,

@@ -10,22 +10,15 @@ import {
   Building2,
   Upload,
   Loader2,
-  ImageIcon,
   Trash2,
   Save,
-  Type,
   ShieldCheck,
   RotateCcw,
-  Scale,
   Landmark,
-  FileText,
-  ClipboardList,
-  Gavel,
-  Hash
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion"
 import { RecalibrarNumeracao } from "@/components/admin/recalibrar-numeracao"
 import { LimparFilaFirestore } from "@/components/admin/limpar-fila-firestore"
 import { Label } from "@/components/ui/label"
@@ -37,6 +30,27 @@ import { normalizeId } from "@/lib/utils"
 import municipiosPR from "@/lib/municipios-pr.json"
 import { ROTEIRO_TEXTO_OPTIONS, getDefaultIntroHtml, getDefaultConclusaoHtml } from "@/lib/roteiro-textos-padrao"
 
+
+/**
+ * Cabeçalho de cada seção da lista — mesmo conceito já usado em Roteiros de
+ * Inspeção e na Biblioteca Jurídica: emoji em vez de ícone de linha (já vem
+ * colorido, sem precisar de nenhum arquivo de imagem novo) num selo
+ * circular, título em cinza-escuro fixo (nunca na cor do selo, pra nunca
+ * ficar difícil de ler) e a descrição abaixo, discreta.
+ */
+function SecaoTrigger({ emoji, cor, titulo, descricao }: { emoji: string; cor: string; titulo: string; descricao: string }) {
+  return (
+    <div className="flex items-center gap-4 text-left min-w-0">
+      <div className="h-11 w-11 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: `${cor}1A` }}>
+        <span className="text-[22px] leading-none" role="img" aria-hidden="true">{emoji}</span>
+      </div>
+      <div className="min-w-0">
+        <p className="font-serif text-[16px] text-[#262420] leading-snug">{titulo}</p>
+        <p className="text-[11px] text-[#A39D8C] font-medium leading-snug">{descricao}</p>
+      </div>
+    </div>
+  );
+}
 
 export default function IdentidadeMunicipalPage() {
   const { profile, loading: authLoading } = useAuth()
@@ -284,25 +298,13 @@ export default function IdentidadeMunicipalPage() {
           <p className="text-sm font-black uppercase text-[#A39D8C]">Selecione um município para editar a identidade</p>
         </div>
       ) : (
-      <Tabs defaultValue="brasao" className="w-full">
-        <TabsList className="w-full sm:w-auto h-auto flex-wrap justify-start bg-white border border-[#E4DFD1] rounded-2xl p-1.5 gap-1 shadow-sm">
-          <TabsTrigger value="brasao" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><ImageIcon className="h-3.5 w-3.5" /> Brasão</TabsTrigger>
-          <TabsTrigger value="cabecalho" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><Type className="h-3.5 w-3.5" /> Cabeçalho</TabsTrigger>
-          <TabsTrigger value="rodape" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><Type className="h-3.5 w-3.5" /> Rodapé</TabsTrigger>
-          <TabsTrigger value="prazos" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><Scale className="h-3.5 w-3.5" /> Prazos</TabsTrigger>
-          <TabsTrigger value="roteiros" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><ClipboardList className="h-3.5 w-3.5" /> Roteiros</TabsTrigger>
-          <TabsTrigger value="termos" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><Gavel className="h-3.5 w-3.5" /> Termos</TabsTrigger>
-          <TabsTrigger value="numeracao" className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 px-4 py-2.5 data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-none"><Hash className="h-3.5 w-3.5" /> Numeração</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="brasao" className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <Accordion type="single" collapsible className="w-full bg-white border border-[#E4DFD1] rounded-2xl shadow-sm px-4 sm:px-6">
+        <AccordionItem value="brasao" className="border-[#F1EEE4]">
+          <AccordionTrigger className="hover:no-underline py-4">
+            <SecaoTrigger emoji="🛡️" cor="#0E4A44" titulo="Brasão Oficial" descricao="Utilizado apenas em cabeçalhos A4" />
+          </AccordionTrigger>
+          <AccordionContent className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <Card className="lg:col-span-7 bg-white border-2 border-[#E4DFD1] rounded-lg overflow-hidden shadow-sm">
-                <CardHeader className="bg-[#FAF8F3] border-b border-[#E4DFD1]">
-                    <CardTitle className="font-serif text-lg text-[#262420] flex items-center gap-2">
-                        <ImageIcon className="h-4 w-4 text-[#00a99d]" /> Brasão Oficial
-                    </CardTitle>
-                    <CardDescription className="text-[#A39D8C] font-bold uppercase text-[8px] tracking-widest">Utilizado apenas em cabeçalhos A4</CardDescription>
-                </CardHeader>
                 <CardContent className="p-8 space-y-6">
                     <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-[#E4DFD1] rounded-lg bg-[#FAF8F3] gap-6">
                         <div className="relative w-full max-w-[160px] aspect-square group shadow-inner bg-white rounded-[2rem] p-4 flex items-center justify-center">
@@ -333,17 +335,16 @@ export default function IdentidadeMunicipalPage() {
                     As imagens aqui configuradas pertencem exclusivamente ao órgão fiscalizador do seu município. A marca do software (Sentinela) é gerenciada pelo Auditor Master do sistema.
                 </p>
             </div>
-        </TabsContent>
+          </AccordionContent>
+        </AccordionItem>
 
-        <TabsContent value="cabecalho" className="mt-6">
+        <AccordionItem value="cabecalho" className="border-[#F1EEE4]">
+          <AccordionTrigger className="hover:no-underline py-4">
+            <SecaoTrigger emoji="🏷️" cor="#3D5A73" titulo="Cabeçalho de Documentos" descricao="Identificação da Prefeitura e Secretaria" />
+          </AccordionTrigger>
+          <AccordionContent>
             <Card className="bg-white border-[#E4DFD1] rounded-lg overflow-hidden shadow-sm">
-                <CardHeader className="flex flex-row items-center justify-between pb-4">
-                    <div>
-                        <CardTitle className="font-serif text-lg text-[#262420] flex items-center gap-2">
-                            <Type className="h-4 w-4 text-primary" /> Cabeçalho de Documentos
-                        </CardTitle>
-                        <CardDescription className="text-[#A39D8C] font-bold uppercase text-[9px] tracking-widest">Identificação da Prefeitura e Secretaria</CardDescription>
-                    </div>
+                <CardHeader className="flex flex-row items-center justify-end pb-4">
                     <Button onClick={resetToDefaultHeader} variant="ghost" className="h-9 px-4 rounded-xl text-[9px] font-black uppercase tracking-widest text-[#6B6659] hover:text-primary">
                         <RotateCcw className="h-3 w-3 mr-2" /> Restaurar Padrão
                     </Button>
@@ -364,17 +365,16 @@ export default function IdentidadeMunicipalPage() {
                     </Button>
                 </CardContent>
             </Card>
-        </TabsContent>
+          </AccordionContent>
+        </AccordionItem>
 
-        <TabsContent value="rodape" className="mt-6">
+        <AccordionItem value="rodape" className="border-[#F1EEE4]">
+          <AccordionTrigger className="hover:no-underline py-4">
+            <SecaoTrigger emoji="📄" cor="#6B4C80" titulo="Rodapé de Documentos" descricao="Repetido no rodapé de cada página (opcional)" />
+          </AccordionTrigger>
+          <AccordionContent>
             <Card className="bg-white border-[#E4DFD1] rounded-lg overflow-hidden shadow-sm">
-                <CardHeader className="flex flex-row items-center justify-between pb-4">
-                    <div>
-                        <CardTitle className="font-serif text-lg text-[#262420] flex items-center gap-2">
-                            <Type className="h-4 w-4 text-primary" /> Rodapé de Documentos
-                        </CardTitle>
-                        <CardDescription className="text-[#A39D8C] font-bold uppercase text-[9px] tracking-widest">Repetido no rodapé de cada página (opcional)</CardDescription>
-                    </div>
+                <CardHeader className="flex flex-row items-center justify-end pb-4">
                     {footerHtml && (
                         <Button onClick={() => setFooterHtml("")} variant="ghost" className="h-9 px-4 rounded-xl text-[9px] font-black uppercase tracking-widest text-[#6B6659] hover:text-rose-500">
                             <RotateCcw className="h-3 w-3 mr-2" /> Limpar
@@ -397,12 +397,17 @@ export default function IdentidadeMunicipalPage() {
                     </Button>
                 </CardContent>
             </Card>
-        </TabsContent>
+          </AccordionContent>
+        </AccordionItem>
 
-        {/* Numeração do livro de autos. Fica atrás de uma aba própria, e não
+        {/* Numeração do livro de autos. Fica atrás de uma seção própria, e não
             junto dos textos, porque não é um padrão que se ajusta e se
             reajusta: é o contador de um registro público. */}
-        <TabsContent value="numeracao" className="mt-6">
+        <AccordionItem value="numeracao" className="border-[#F1EEE4]">
+          <AccordionTrigger className="hover:no-underline py-4">
+            <SecaoTrigger emoji="🔢" cor="#454680" titulo="Numeração" descricao="Contador do livro de autos e fila de gravações" />
+          </AccordionTrigger>
+          <AccordionContent>
             <div className="space-y-8">
               {effectiveMunicipioId ? (
                 <RecalibrarNumeracao municipioId={effectiveMunicipioId} municipioNome={effectiveMunicipioNome} />
@@ -414,16 +419,15 @@ export default function IdentidadeMunicipalPage() {
                   encanamento do sistema, e não de conteúdo de documento. */}
               <LimparFilaFirestore />
             </div>
-        </TabsContent>
+          </AccordionContent>
+        </AccordionItem>
 
-        <TabsContent value="prazos" className="mt-6">
+        <AccordionItem value="prazos" className="border-[#F1EEE4]">
+          <AccordionTrigger className="hover:no-underline py-4">
+            <SecaoTrigger emoji="⚖️" cor="#1F7A5C" titulo="Texto de Notificação Padrão" descricao="Prazos e orientações legais de defesa" />
+          </AccordionTrigger>
+          <AccordionContent>
             <Card className="bg-white border-[#E4DFD1] rounded-lg overflow-hidden shadow-sm flex flex-col">
-                <CardHeader className="pb-4">
-                    <CardTitle className="font-serif text-lg text-[#262420] flex items-center gap-2">
-                        <Scale className="h-4 w-4 text-emerald-600" /> Texto de Notificação Padrão
-                    </CardTitle>
-                    <CardDescription className="text-[#A39D8C] font-bold uppercase text-[9px] tracking-widest">Prazos e orientações legais de defesa</CardDescription>
-                </CardHeader>
                 <CardContent className="p-6 border-t">
                     <div className="p-6 border border-[#E4DFD1] rounded-lg bg-[#FAF8F3] min-h-[180px]">
                         <RichTextEditor value={prazoHtml} onChange={setPrazoHtml} fontSize="10pt" minHeight="120px" />
@@ -440,17 +444,16 @@ export default function IdentidadeMunicipalPage() {
                     </Button>
                 </CardContent>
             </Card>
-        </TabsContent>
+          </AccordionContent>
+        </AccordionItem>
 
-        <TabsContent value="roteiros" className="mt-6">
+        <AccordionItem value="roteiros" className="border-[#F1EEE4]">
+          <AccordionTrigger className="hover:no-underline py-4">
+            <SecaoTrigger emoji="📋" cor="#9C7A3C" titulo="Textos Padrão dos Roteiros" descricao="Considerações Gerais e Conclusão de cada roteiro" />
+          </AccordionTrigger>
+          <AccordionContent>
           <Card className="bg-white border-[#E4DFD1] rounded-lg overflow-hidden shadow-sm">
-              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4">
-                  <div>
-                      <CardTitle className="font-serif text-lg text-[#262420] flex items-center gap-2">
-                          <ClipboardList className="h-4 w-4 text-primary" /> Textos Padrão dos Roteiros de Inspeção
-                      </CardTitle>
-                      <CardDescription className="text-[#A39D8C] font-bold uppercase text-[9px] tracking-widest">Considerações Gerais e Conclusão de cada roteiro, por padrão</CardDescription>
-                  </div>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-end gap-4 pb-4">
                   <select
                       value={selectedRoteiroId}
                       onChange={(e) => setSelectedRoteiroId(e.target.value)}
@@ -497,17 +500,16 @@ export default function IdentidadeMunicipalPage() {
                   </Button>
               </CardContent>
           </Card>
-        </TabsContent>
+          </AccordionContent>
+        </AccordionItem>
 
-        <TabsContent value="termos" className="mt-6">
+        <AccordionItem value="termos" className="border-[#F1EEE4]">
+          <AccordionTrigger className="hover:no-underline py-4">
+            <SecaoTrigger emoji="🧾" cor="#A15437" titulo="Fundamento Legal dos Termos" descricao="Base legal citada em cada tipo de autuação" />
+          </AccordionTrigger>
+          <AccordionContent>
           <Card className="bg-white border-[#E4DFD1] rounded-lg overflow-hidden shadow-sm">
-              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4">
-                  <div>
-                      <CardTitle className="font-serif text-lg text-[#262420] flex items-center gap-2">
-                          <Gavel className="h-4 w-4 text-primary" /> Fundamento Legal dos Termos
-                      </CardTitle>
-                      <CardDescription className="text-[#A39D8C] font-bold uppercase text-[9px] tracking-widest">Base legal citada em cada tipo de autuação</CardDescription>
-                  </div>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-end gap-4 pb-4">
                   <select
                       value={selectedTipoTermo}
                       onChange={(e) => setSelectedTipoTermo(e.target.value)}
@@ -559,8 +561,9 @@ export default function IdentidadeMunicipalPage() {
                   </Button>
               </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
       )}
     </div>
   )

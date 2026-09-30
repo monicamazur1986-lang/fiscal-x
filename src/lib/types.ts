@@ -73,6 +73,9 @@ export type Intimacao = {
    * autuação — guardado pra poder cancelar o lembrete se o documento for
    * excluído antes do vencimento (ver src/lib/prazo-lembrete.ts). */
   agendaLembreteId?: string;
+  /** Documento que este retifica — ver schema.ts. */
+  refDocumentoId?: string;
+  refDocumentoNumero?: string;
 };
 
 export type Folder = {
@@ -108,6 +111,10 @@ export type Inspecao = {
   status: 'pendente' | 'prazo' | 'concluido' | 'cancelada' | 'arquivado' | 'rascunho';
   createdAt: string;
   updatedAt?: string;
+  /** Quem gravou por último — base do aviso de edição simultânea (mesmo
+   *  mecanismo já usado em Intimacao, ver use-intimacoes.ts). */
+  updatedBy?: string;
+  updatedByName?: string;
   alertaMinutosAntes?: number;
   alertaEnviadoEm?: string;
   /** Link de volta pro processo/documento que gerou este lembrete de prazo

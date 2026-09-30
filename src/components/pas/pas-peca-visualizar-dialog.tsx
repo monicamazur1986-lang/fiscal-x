@@ -135,6 +135,7 @@ export function PasPecaVisualizarDialog({
               {peca.assinadoForaDoSistema && !peca.assinaturaUrl && (
                 <p className="text-[8pt] text-zinc-400 italic">Assinada fora do sistema.</p>
               )}
+              <p className="text-[7pt] italic opacity-60">Assinatura eletrônica simples, admitida para este ato nos termos dos arts. 4º, I, e 5º da Lei nº 14.063/2020 e do art. 10, § 2º, da Medida Provisória nº 2.200-2/2001.</p>
             </div>
           </FolhaEscalada>
         </div>

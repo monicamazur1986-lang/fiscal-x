@@ -315,4 +315,13 @@ export const intimacaoSchema = z.object({
    * estabelecimento a partir do Auto de Infração.
    */
   inspecaoId: z.string().optional().default(''),
+  /**
+   * Documento que este retifica, quando esta autuação nasceu do botão
+   * "Retificar" de um documento já finalizado — nunca edita/apaga o
+   * original, só referencia por id/número (mesma doutrina já usada em
+   * termo_retificacao do PAS: vício de forma é sanável por um ato novo ao
+   * lado do original, não por reescrever o que já foi lavrado).
+   */
+  refDocumentoId: z.string().optional().default(''),
+  refDocumentoNumero: z.string().optional().default(''),
 });

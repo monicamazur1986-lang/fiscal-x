@@ -16,25 +16,6 @@ import {
   Highlighter,
   Building2,
   ChevronsUpDown,
-  Landmark,
-  ShieldCheck,
-  Stethoscope,
-  FileText,
-  Scale,
-  UtensilsCrossed,
-  Pill,
-  FlaskConical,
-  Sparkles,
-  Wrench,
-  Scissors,
-  Baby,
-  Hotel,
-  Flower2,
-  Recycle,
-  Wheat,
-  Bug,
-  Radiation,
-  Folder,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Input } from "@/components/ui/input"
@@ -175,23 +156,27 @@ function BibliotecaJuridicaConteudo() {
       .map((t) => ({ nome: t, docs: groups[t] }));
   }, [filteredResults, isSearching, selectedTema])
 
-  const temaIcon = (tema: Tema) => ({
-    'Normas Gerais e Institucionais': Landmark,
-    'Alimentos e Bebidas': UtensilsCrossed,
-    'Farmácias e Medicamentos': Pill,
-    'Laboratórios e Serviços de Diagnóstico': FlaskConical,
-    'Serviços de Saúde (Assistência)': Stethoscope,
-    'Cosméticos, Perfumaria, Higiene e Saneantes': Sparkles,
-    'Produtos e Equipamentos para Saúde': Wrench,
-    'Estética, Beleza e Bem-estar': Scissors,
-    'Educação Infantil': Baby,
-    'Hospedagem e Turismo': Hotel,
-    'Serviços Funerários': Flower2,
-    'Saneamento, Resíduos e Meio Ambiente': Recycle,
-    'Produtos Agropecuários e Veterinária': Wheat,
-    'Controle de Pragas e Desinfestação': Bug,
-    'Radiação Ionizante e Produtos Químicos de Uso em Saúde': Radiation,
-  } as Record<Tema, typeof BookOpen>)[tema];
+  // Emoji no lugar do ícone de linha — mesmo conceito já aplicado em
+  // Roteiros de Inspeção e nos menus de Autuação: o emoji já vem colorido e
+  // com volume (fonte do próprio sistema operacional), sem precisar de
+  // nenhum arquivo de imagem novo.
+  const temaEmoji: Record<Tema, string> = {
+    'Normas Gerais e Institucionais': '🏛️',
+    'Alimentos e Bebidas': '🍽️',
+    'Farmácias e Medicamentos': '💊',
+    'Laboratórios e Serviços de Diagnóstico': '🧪',
+    'Serviços de Saúde (Assistência)': '🩺',
+    'Cosméticos, Perfumaria, Higiene e Saneantes': '🧴',
+    'Produtos e Equipamentos para Saúde': '🧰',
+    'Estética, Beleza e Bem-estar': '💅',
+    'Educação Infantil': '👶',
+    'Hospedagem e Turismo': '🏨',
+    'Serviços Funerários': '🕊️',
+    'Saneamento, Resíduos e Meio Ambiente': '♻️',
+    'Produtos Agropecuários e Veterinária': '🌾',
+    'Controle de Pragas e Desinfestação': '🐛',
+    'Radiação Ionizante e Produtos Químicos de Uso em Saúde': '☢️',
+  };
 
   const paletteByGroup: Record<string, { icon: string; badge: string; chip: string; glow: string }> = {
     'Normas Gerais e Institucionais': {
@@ -286,31 +271,31 @@ function BibliotecaJuridicaConteudo() {
     },
   };
 
-  const getSubjectIcon = (doc: LegislacaoDocumento) => {
+  const getSubjectEmoji = (doc: LegislacaoDocumento): string => {
     const haystack = `${doc.titulo} ${doc.descricao} ${doc.categoria} ${doc.keywords || ""}`.toLowerCase();
 
     if (/(saude|sanidade|higiene|cl ednica|clinica|hospital|farmacia|medica|m e9dica|laborat|veterin|veterinaria)/i.test(haystack)) {
-      return Stethoscope;
+      return '🩺';
     }
     if (/(alimenta|restaurante|supermerc|mercado|padaria|laticinio|bebida|cozinha|comercio)/i.test(haystack)) {
-      return UtensilsCrossed;
+      return '🍽️';
     }
     if (/(resolu|portaria|norma|decreto|ato|instru|manual|orienta)/i.test(haystack)) {
-      return FileText;
+      return '📄';
     }
     if (/(municipal|prefeit|lei municipal|c e2mara|edital|municipio)/i.test(haystack)) {
-      return Building2;
+      return '🏢';
     }
     if (/(estadual|estado|lei estadual|secretaria estadual|governo)/i.test(haystack)) {
-      return Scale;
+      return '⚖️';
     }
     if (/(federal|uni e3o|federa|lei federal|ministerio|ag eancia|anvisa)/i.test(haystack)) {
-      return Landmark;
+      return '🏛️';
     }
     if (/(seguran|controle|sanitaria|licen|inspec|vigilancia|patologia)/i.test(haystack)) {
-      return ShieldCheck;
+      return '🛡️';
     }
-    return BookOpen;
+    return '📖';
   };
 
   // --- INÍCIO: Lógica para segmentar (capítulo/seção/artigo/parágrafo/inciso)
@@ -726,7 +711,6 @@ function BibliotecaJuridicaConteudo() {
             {TEMA_ORDER.map((tema) => {
                 const count = docsByTema[tema]?.length || 0;
                 const palette = paletteByGroup[tema];
-                const TemaIcon = temaIcon(tema) || Folder;
                 const vazio = count === 0;
                 return (
                   <button
@@ -740,8 +724,8 @@ function BibliotecaJuridicaConteudo() {
                     )}
                   >
                     <div className="min-w-0 flex-1 flex items-center gap-4">
-                      <div className={cn("h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 transition-all duration-200", !vazio && "group-hover:scale-[1.02]", vazio ? "bg-[#EDE9DB] text-[#A39D8C]" : palette.icon)}>
-                        <TemaIcon className="h-5 w-5" />
+                      <div className={cn("h-11 w-11 rounded-full flex items-center justify-center shrink-0 transition-all duration-200", !vazio && "group-hover:scale-[1.02]", vazio ? "bg-[#EDE9DB]" : palette.icon)}>
+                        <span className={cn("text-[22px] leading-none", vazio && "opacity-40")} role="img" aria-hidden="true">{temaEmoji[tema]}</span>
                       </div>
                       <div className="min-w-0">
                         <p className="font-serif text-[15px] text-[#262420] leading-snug">{tema}</p>
@@ -764,7 +748,7 @@ function BibliotecaJuridicaConteudo() {
                     <h2 className={cn("flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide", palette.badge)}>{group.nome}</h2>
                     <div className="bg-white border border-[#E4DFD1] rounded-lg divide-y divide-[#F1EEE4] overflow-hidden shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
                         {group.docs.map((doc) => {
-                            const SubjectIcon = getSubjectIcon(doc);
+                            const subjectEmoji = getSubjectEmoji(doc);
                             return (
                               <button
                                   key={doc.id}
@@ -776,8 +760,8 @@ function BibliotecaJuridicaConteudo() {
                                   )}
                               >
                                   <div className="min-w-0 flex-1 flex items-center gap-4">
-                                      <div className={cn("h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-[1.02]", palette.icon)}>
-                                          <SubjectIcon className="h-5 w-5" />
+                                      <div className={cn("h-11 w-11 rounded-full flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-[1.02]", palette.icon)}>
+                                          <span className="text-[22px] leading-none" role="img" aria-hidden="true">{subjectEmoji}</span>
                                       </div>
                                       <div className="min-w-0 flex-1">
                                           <p className="font-serif text-[15px] text-[#262420] leading-snug line-clamp-2">{doc.titulo}</p>

@@ -310,7 +310,8 @@ function PasPageInner() {
                 type="button"
                 onClick={() => setIsPastaDialogOpen(true)}
                 title="Nova pasta"
-                className="h-8 w-8 rounded-md flex items-center justify-center text-[#A39D8C] hover:text-[#0E4A44] hover:bg-white transition-colors"
+                aria-label="Nova pasta"
+                className="h-10 w-10 rounded-md flex items-center justify-center text-[#A39D8C] hover:text-[#0E4A44] hover:bg-white transition-colors"
               >
                 <FolderPlus className="h-4 w-4" />
               </button>
