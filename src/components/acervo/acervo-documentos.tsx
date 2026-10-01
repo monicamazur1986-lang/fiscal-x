@@ -134,7 +134,7 @@ function FichaFiltro({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium transition-colors",
+        "inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-medium transition-colors",
         ativa
           ? (tom === 'lixeira' ? "bg-rose-50 text-rose-700" : "bg-[#E4EEEC] text-[#0E4A44]")
           : "text-[#6B6659] hover:bg-white"
@@ -776,11 +776,11 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                 placeholder="Pesquisar..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-10 rounded-md border-[#E4DFD1] bg-white text-sm"
+                className="pl-9 h-10 rounded-xl border-[#E4DFD1] bg-white text-sm"
               />
             </div>
             {novo && (
-              <Button asChild size="sm" className="h-10 rounded-md gap-1.5 text-xs font-medium bg-[#0E4A44] hover:bg-[#0B3A35] shrink-0">
+              <Button asChild size="sm" className="h-10 rounded-xl gap-1.5 text-xs font-medium bg-[#0E4A44] hover:bg-[#0B3A35] shrink-0">
                 <Link href={novo.href}><Plus className="h-4 w-4" /> {novo.label}</Link>
               </Button>
             )}
@@ -820,14 +820,39 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
               onClick={() => setIsFolderDialogOpen(true)}
               title="Nova pasta"
               aria-label="Nova pasta"
-              className="h-10 w-10 rounded-md flex items-center justify-center text-[#A39D8C] hover:text-[#0E4A44] hover:bg-white transition-colors"
+              className="h-10 w-10 rounded-xl flex items-center justify-center text-[#A39D8C] hover:text-[#0E4A44] hover:bg-white transition-colors"
             >
               <FolderPlus className="h-4 w-4" />
             </button>
 
+            {/* "Selecionar tudo" e "Relatório Municipal" não são ações do dia
+                a dia — junto com os filtros, não numa linha própria só pra
+                elas (era mais uma fileira na tela, por só dois links de
+                texto). */}
+            <button
+              type="button"
+              onClick={toggleSelectAll}
+              className="inline-flex items-center gap-1.5 h-10 px-2 text-xs font-medium text-[#6B6659] hover:text-[#0E4A44] transition-colors"
+            >
+              {selectedIds.length > 0 && selectedIds.length === filteredDocumentos.length ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+              {selectedIds.length > 0 ? `${selectedIds.length} selecionados` : "Selecionar tudo"}
+            </button>
+            {/* O Relatorio Municipal consolida o que foi EMITIDO no ano.
+                Em rascunho nao ha documento lavrado para consolidar — o
+                botao abria um relatorio que ignorava a lista da tela. */}
+            {escopo === 'autuacoes' && situacao === 'finalizado' && (
+              <button
+                type="button"
+                onClick={handleOpenReport}
+                className="inline-flex items-center gap-1.5 h-10 px-2 text-xs font-medium text-[#6B6659] hover:text-[#0E4A44] transition-colors"
+              >
+                <BarChart3 className="h-3.5 w-3.5" /> Relatório Municipal
+              </button>
+            )}
+
             <div className="w-full sm:w-auto sm:ml-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
               <Select value={ordenacao} onValueChange={(v) => setOrdenacao(v as OrdenacaoAcervo)}>
-                <SelectTrigger className="h-9 w-full sm:w-[170px] rounded-md border-[#E4DFD1] bg-white text-xs">
+                <SelectTrigger className="h-9 w-full sm:w-[170px] rounded-xl border-[#E4DFD1] bg-white text-xs">
                   <ArrowUpDown className="h-3.5 w-3.5 text-[#A39D8C] shrink-0" />
                   <SelectValue />
                 </SelectTrigger>
@@ -849,7 +874,7 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                   value={filterByFiscal ?? 'todos'}
                   onValueChange={(v) => { setFilterByFiscal(v === 'todos' ? null : v); setActiveFolderId('all'); setSelectedIds([]); }}
                 >
-                  <SelectTrigger className="h-9 w-full sm:w-[170px] rounded-md border-[#E4DFD1] bg-white text-xs">
+                  <SelectTrigger className="h-9 w-full sm:w-[170px] rounded-xl border-[#E4DFD1] bg-white text-xs">
                     <User className="h-3.5 w-3.5 text-[#A39D8C] shrink-0" />
                     <SelectValue placeholder="Todos os fiscais" />
                   </SelectTrigger>
@@ -865,7 +890,7 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
           </div>
 
           {escopo === 'autuacoes' && minhasIntimacoes.length >= AVISO_A_PARTIR_DE && !dismissedZipBanner && (
-            <div className="bg-amber-50 border border-amber-200 p-3 rounded-md flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <Archive className="h-4 w-4 shrink-0 text-amber-600" />
                 <p className="text-xs text-amber-800">
@@ -876,80 +901,55 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                 <Button
                   size="sm"
                   onClick={() => setSelectedIds(minhasIntimacoes.map(i => `intimacao:${i.id}`))}
-                  className="h-8 rounded-md bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium gap-1.5"
+                  className="h-8 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium gap-1.5"
                 >
                   <CheckSquare className="h-3.5 w-3.5" /> Selecionar meus documentos
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setDismissedZipBanner(true)} className="h-8 rounded-md text-amber-700 text-xs font-medium">
+                <Button size="sm" variant="ghost" onClick={() => setDismissedZipBanner(true)} className="h-8 rounded-xl text-amber-700 text-xs font-medium">
                   Dispensar
                 </Button>
               </div>
             </div>
           )}
 
-          {/* Ações que não são do dia a dia ficam discretas, em texto: antes
-              "Selecionar tudo" tinha o mesmo peso visual do botão de criar. */}
-          <div className="flex flex-wrap items-center gap-4 px-1">
-            <button
-              type="button"
-              onClick={toggleSelectAll}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-[#6B6659] hover:text-[#0E4A44] transition-colors"
-            >
-              {selectedIds.length > 0 && selectedIds.length === filteredDocumentos.length ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-              {selectedIds.length > 0 ? `${selectedIds.length} selecionados` : "Selecionar tudo"}
-            </button>
-            {/* O Relatorio Municipal consolida o que foi EMITIDO no ano.
-                Em rascunho nao ha documento lavrado para consolidar — o
-                botao abria um relatorio que ignorava a lista da tela. */}
-            {escopo === 'autuacoes' && situacao === 'finalizado' && (
-              <button
-                type="button"
-                onClick={handleOpenReport}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-[#6B6659] hover:text-[#0E4A44] transition-colors"
-              >
-                <BarChart3 className="h-3.5 w-3.5" /> Relatório Municipal
-              </button>
-            )}
-          </div>
-
           {selectedIds.length > 0 && (
-            <div className="bg-[#0E4A44] text-white p-3 rounded-md flex items-center justify-between animate-in slide-in-from-top-2">
+            <div className="bg-[#0E4A44] text-white p-3 rounded-xl flex items-center justify-between animate-in slide-in-from-top-2">
               <div className="flex items-center gap-3 ml-1">
                 <button onClick={() => setSelectedIds([])} className="text-white/60 hover:text-white"><X className="h-4 w-4" /></button>
                 <span className="text-xs font-medium">{selectedIds.length} itens selecionados</span>
               </div>
               <div className="flex items-center gap-1">
-                <Button onClick={handleTriggerAutomation} disabled={isTriggeringAutomation} size="sm" variant="ghost" className="h-8 rounded-md text-xs font-medium gap-1.5 text-amber-400 hover:text-amber-300 hover:bg-white/10">
+                <Button onClick={handleTriggerAutomation} disabled={isTriggeringAutomation} size="sm" variant="ghost" className="h-8 rounded-xl text-xs font-medium gap-1.5 text-amber-400 hover:text-amber-300 hover:bg-white/10">
                   {isTriggeringAutomation ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
                   {isTriggeringAutomation ? "Automação n8n..." : "n8n Automatizar"}
                 </Button>
                 {activeFolderId === 'trash' ? (
-                    <Button size="sm" variant="ghost" onClick={handleBulkRestore} className="h-8 rounded-md text-xs font-medium gap-1.5 text-emerald-400 hover:text-emerald-300 hover:bg-white/10">
+                    <Button size="sm" variant="ghost" onClick={handleBulkRestore} className="h-8 rounded-xl text-xs font-medium gap-1.5 text-emerald-400 hover:text-emerald-300 hover:bg-white/10">
                         <RotateCcw className="h-4 w-4" /> Restaurar
                     </Button>
                 ) : (
                     <>
-                        <Button size="sm" variant="ghost" onClick={() => setIsMoveDialogOpen(true)} className="h-8 rounded-md text-xs font-medium gap-1.5 hover:bg-white/10">
+                        <Button size="sm" variant="ghost" onClick={() => setIsMoveDialogOpen(true)} className="h-8 rounded-xl text-xs font-medium gap-1.5 hover:bg-white/10">
                             <MoveHorizontal className="h-4 w-4" /> Mover pasta
                         </Button>
                         {/* Baixa em lote só gera PDF de autuação; numa tela de
                             relatório o botão só teria como avisar que não dá. */}
                         {escopo === 'autuacoes' && (
-                          <Button size="sm" variant="ghost" onClick={handleBulkDownloadZip} disabled={isZipping} className="h-8 rounded-md text-xs font-medium gap-1.5 text-cyan-400 hover:text-cyan-300 hover:bg-white/10">
+                          <Button size="sm" variant="ghost" onClick={handleBulkDownloadZip} disabled={isZipping} className="h-8 rounded-xl text-xs font-medium gap-1.5 text-cyan-400 hover:text-cyan-300 hover:bg-white/10">
                               {isZipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
                               {isZipping ? `Gerando ${zipProgress.current}/${zipProgress.total}...` : "Baixar ZIP"}
                           </Button>
                         )}
                     </>
                 )}
-                <Button size="sm" variant="ghost" onClick={handleBulkDelete} className="h-8 rounded-md text-xs font-medium gap-1.5 text-rose-400 hover:text-rose-300 hover:bg-white/10">
+                <Button size="sm" variant="ghost" onClick={handleBulkDelete} className="h-8 rounded-xl text-xs font-medium gap-1.5 text-rose-400 hover:text-rose-300 hover:bg-white/10">
                   <Trash2 className="h-4 w-4" /> {activeFolderId === 'trash' ? 'Excluir definitivo' : 'Lixeira'}
                 </Button>
               </div>
             </div>
           )}
 
-          <div className="bg-white border border-[#E4DFD1] rounded-lg divide-y divide-[#F1EEE4] overflow-hidden shadow-[0_1px_2px_rgba(38,36,32,0.04),0_8px_24px_-12px_rgba(38,36,32,0.12)]">
+          <div className="bg-white border border-[#E4DFD1] rounded-2xl divide-y divide-[#F1EEE4] overflow-hidden shadow-sm">
             {filteredDocumentos.length > 0 ? (
               filteredDocumentos.map(item => {
                 const isRelatorio = item.kind === 'relatorio';
@@ -960,17 +960,26 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                 // status (mistura rascunho e concluído), diferente dos
                 // demais filtros, onde a lista inteira já é homogênea.
                 const isFinal = isRelatorio ? item.inspecao?.status === 'concluido' : intimacao?.status === 'finalizado';
+                // A tarja colorida e o círculo ✓/✎ só dizem algo numa lista
+                // MISTA (lixeira, compartilhadas) — nas demais telas
+                // ("Finalizadas", "Em Andamento") todo item já tem a mesma
+                // situação, então os dois eram só decoração repetindo o que
+                // o próprio título da tela já diz. Era o grosso da poluição
+                // visual da lista.
+                const listaMista = activeFolderId === 'trash' || situacao === 'compartilhadas';
 
                 return (
                   <div
                     key={item.itemId}
                     onClick={() => router.push(item.href)}
                     className={cn(
-                    "relative flex flex-col sm:flex-row sm:items-center gap-3 pl-5 pr-4 py-3 transition-colors cursor-pointer",
+                    "relative flex items-center gap-3 pl-5 pr-3 py-3 transition-colors cursor-pointer",
                     selectedIds.includes(item.itemId) ? "bg-[#F5F2EA]" : "hover:bg-[#FAF8F3]"
                   )}>
-                    <span className={cn("absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-sm", isFinal ? "bg-[#1F7A5C]" : "bg-amber-500")} />
-                    <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-3 w-full sm:w-auto shrink-0">
+                    {listaMista && (
+                      <span className={cn("absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-sm", isFinal ? "bg-[#1F7A5C]" : "bg-amber-500")} />
+                    )}
+                    <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1.5 shrink-0">
                         <Checkbox
                         checked={selectedIds.includes(item.itemId)}
                         onCheckedChange={() => toggleSelect(item.itemId)}
@@ -987,18 +996,11 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                             }
                           }}
                           aria-label={item.favorito ? "Remover dos favoritos" : "Marcar como favorito"}
-                          className="h-9 w-9 rounded-md flex items-center justify-center text-[#C9C2AC] hover:bg-[#F5F2EA] hover:text-amber-500 transition-colors shrink-0"
+                          className="h-9 w-9 rounded-xl flex items-center justify-center text-[#C9C2AC] hover:bg-[#F5F2EA] hover:text-amber-500 transition-colors shrink-0"
                         >
                           <Star className={cn("h-4 w-4", item.favorito && "fill-amber-400 text-amber-400")} />
                         </button>
-                        {/* O status (✓/rascunho) só some numa lista mista — na
-                            lixeira e em "Compartilhadas comigo" convivem
-                            documentos de situações diferentes. Nas demais telas
-                            ("Finalizadas", "Em Andamento") o próprio nome da tela
-                            já diz a situação de toda a lista; repetir isso pelo
-                            círculo, pela etiqueta E pela cor da tarja lateral era
-                            o grosso da poluição visual. */}
-                        {(activeFolderId === 'trash' || situacao === 'compartilhadas') && (
+                        {listaMista && (
                           <span className={cn(
                             "h-7 w-7 rounded-full border flex items-center justify-center font-serif text-[13px] shrink-0",
                             isFinal ? "border-[#1F7A5C] text-[#1F7A5C]" : "border-[#E4DFD1] text-[#A39D8C]"
@@ -1008,51 +1010,48 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                         )}
                     </div>
 
-                    <div className="flex-1 min-w-0 grid grid-cols-1 lg:grid-cols-12 gap-2 lg:gap-4 items-center w-full">
-                        <div className="lg:col-span-5 min-w-0">
-                            <div className="flex items-center gap-2">
-                                <span className="font-serif text-[15px] text-[#262420] truncate">{item.numero}</span>
-                                {/* Compartilhado com você: um ícone quieto basta —
-                                    o nome de quem criou já aparece na linha de
-                                    baixo, repeti-lo aqui numa etiqueta colorida
-                                    era informação em dobro. */}
-                                {situacao !== 'compartilhadas' && profile?.uid && intimacao?.createdBy && intimacao.createdBy !== profile.uid && (intimacao.compartilhadoCom || []).includes(profile.uid) && (
-                                  <Users className="h-3 w-3 text-[#A39D8C] shrink-0" aria-label="Compartilhado com você" />
-                                )}
-                            </div>
-                            <p className="text-xs text-[#6B6659] truncate">{item.assunto}</p>
-                            <p className="text-[11px] text-[#A39D8C] truncate">
-                                {item.createdByName}{item.data ? ` · ${format(new Date(item.data), "dd MMM yyyy", { locale: ptBR })}` : ""}
-                            </p>
-                        </div>
-
-                        <div className="lg:col-span-5 flex justify-start lg:justify-center">
+                    {/* Duas linhas só: identificação+prazo, depois o resto —
+                        era número, assunto e fiscal/data em três linhas
+                        separadas mais o prazo numa coluna própria. Clicar em
+                        qualquer parte da linha já abre o documento (onClick
+                        acima), então o botão de "abrir" ao lado do menu era
+                        a mesma ação duas vezes. */}
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-serif text-[15px] text-[#262420] truncate">{item.numero}</span>
+                            {/* Compartilhado com você: um ícone quieto basta —
+                                o nome de quem criou já aparece na linha de
+                                baixo, repeti-lo aqui numa etiqueta colorida
+                                era informação em dobro. */}
+                            {situacao !== 'compartilhadas' && profile?.uid && intimacao?.createdBy && intimacao.createdBy !== profile.uid && (intimacao.compartilhadoCom || []).includes(profile.uid) && (
+                              <Users className="h-3 w-3 text-[#A39D8C] shrink-0" aria-label="Compartilhado com você" />
+                            )}
                             {!isRelatorio && isFinal && deadline && (
-                                <div className={cn(
-                                    "flex items-center gap-1.5 text-xs font-medium w-fit px-2 py-1 rounded",
+                                <span className={cn(
+                                    "inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0",
                                     deadline.status === 'vencido' ? "bg-rose-50 text-rose-700" :
                                     deadline.status === 'alerta' ? "bg-amber-50 text-amber-700" :
                                     "bg-[#E4EEEC] text-[#0E4A44]"
                                 )}>
                                     <Timer className="h-3 w-3" />
                                     {deadline.remaining < 0
-                                        ? `Expirado há ${Math.abs(deadline.remaining)} dias`
-                                        : `Resta(m) ${deadline.remaining} dias`
+                                        ? `Vencido há ${Math.abs(deadline.remaining)}d`
+                                        : `${deadline.remaining}d restantes`
                                     }
-                                </div>
+                                </span>
                             )}
                         </div>
+                        <p className="text-xs text-[#A39D8C] truncate">
+                            {item.assunto} · {item.createdByName}{item.data ? ` · ${format(new Date(item.data), "dd MMM yyyy", { locale: ptBR })}` : ""}
+                        </p>
+                    </div>
 
-                        <div onClick={(e) => e.stopPropagation()} className="lg:col-span-2 flex justify-end items-center gap-1">
-                            <Button asChild variant="ghost" size="sm" aria-label="Abrir documento" className="h-10 w-10 p-0 rounded-md text-[#6B6659] hover:text-[#0E4A44] hover:bg-[#E4EEEC]">
-                                <Link href={item.href}><ArrowUpRight className="h-4 w-4" /></Link>
-                            </Button>
-
+                    <div onClick={(e) => e.stopPropagation()} className="shrink-0">
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="sm" aria-label="Mais opções" className="h-10 w-10 p-0 rounded-md text-[#A39D8C] hover:bg-[#F5F2EA]"><MoreVertical className="h-4 w-4" /></Button>
+                                    <Button variant="ghost" size="sm" aria-label="Mais opções" className="h-10 w-10 p-0 rounded-xl text-[#A39D8C] hover:bg-[#F5F2EA]"><MoreVertical className="h-4 w-4" /></Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="rounded-md w-56 p-1 shadow-lg">
+                                <DropdownMenuContent align="end" className="rounded-xl w-56 p-1 shadow-lg">
                                     {!isRelatorio && (
                                       <DropdownMenuItem onClick={() => handleOpenAdjustment(item.id)} className="rounded text-xs font-medium h-9 px-3 cursor-pointer gap-2"><Scale className="h-3.5 w-3.5" /> Ajustar prazo</DropdownMenuItem>
                                     )}
@@ -1085,7 +1084,6 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
-                    </div>
                   </div>
                 )
               })
@@ -1109,11 +1107,11 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
             <div className="py-4 space-y-3">
                 <div className="space-y-1.5">
                     <Label className="text-xs font-medium text-[#6B6659]">Nome da Pasta</Label>
-                    <Input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Ex: Vistorias 2024" className="h-10 rounded-md border-[#E4DFD1] bg-white text-sm" />
+                    <Input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Ex: Vistorias 2024" className="h-10 rounded-xl border-[#E4DFD1] bg-white text-sm" />
                 </div>
             </div>
             <DialogFooter>
-                <Button onClick={handleCreateFolder} size="sm" className="w-full h-9 rounded-md text-xs font-medium bg-[#0E4A44] hover:bg-[#0B3A35]">Criar Pasta</Button>
+                <Button onClick={handleCreateFolder} size="sm" className="w-full h-9 rounded-xl text-xs font-medium bg-[#0E4A44] hover:bg-[#0B3A35]">Criar Pasta</Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1125,9 +1123,9 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                 <DialogDescription className="text-xs text-[#A39D8C]">Selecione o destino para {selectedIds.length} itens</DialogDescription>
             </DialogHeader>
             <div className="py-4 space-y-1">
-                <button onClick={() => handleMoveToFolder(null)} className="w-full text-left px-3 py-2.5 rounded-md hover:bg-[#E4EEEC] text-sm font-medium text-[#6B6659] border border-[#E4DFD1] bg-white transition-colors">Visão geral (raiz)</button>
+                <button onClick={() => handleMoveToFolder(null)} className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#E4EEEC] text-sm font-medium text-[#6B6659] border border-[#E4DFD1] bg-white transition-colors">Visão geral (raiz)</button>
                 {folders.map(f => (
-                    <button key={f.id} onClick={() => handleMoveToFolder(f.id)} className="w-full text-left px-3 py-2.5 rounded-md hover:bg-[#F1E9D6] hover:border-[#9C7A3C] text-sm font-medium text-[#9C7A3C] border border-[#E4DFD1] bg-white transition-colors flex items-center gap-2.5">
+                    <button key={f.id} onClick={() => handleMoveToFolder(f.id)} className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#F1E9D6] hover:border-[#9C7A3C] text-sm font-medium text-[#9C7A3C] border border-[#E4DFD1] bg-white transition-colors flex items-center gap-2.5">
                         <Folder className="h-4 w-4" /> {f.name}
                     </button>
                 ))}
@@ -1144,15 +1142,15 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
             <div className="py-4 space-y-4">
                 <div className="space-y-1.5">
                     <Label className="text-xs font-medium text-[#6B6659]">Dias Úteis para Defesa</Label>
-                    <Input type="number" value={customDays} onChange={e => setCustomDays(e.target.value)} className="h-10 rounded-md border-[#E4DFD1] bg-white text-sm" />
+                    <Input type="number" value={customDays} onChange={e => setCustomDays(e.target.value)} className="h-10 rounded-xl border-[#E4DFD1] bg-white text-sm" />
                 </div>
                 <div className="space-y-1.5">
                     <Label className="text-xs font-medium text-[#6B6659]">Justificativa do Ajuste</Label>
-                    <Textarea value={adjustmentReason} onChange={e => setAdjustmentJustification(e.target.value)} placeholder="Opcional: motivo da alteração do prazo padrão..." className="min-h-[100px] rounded-md border-[#E4DFD1] bg-white text-sm" />
+                    <Textarea value={adjustmentReason} onChange={e => setAdjustmentJustification(e.target.value)} placeholder="Opcional: motivo da alteração do prazo padrão..." className="min-h-[100px] rounded-xl border-[#E4DFD1] bg-white text-sm" />
                 </div>
             </div>
             <DialogFooter>
-                <Button onClick={handleApplyAdjustment} size="sm" className="w-full h-9 rounded-md text-xs font-medium bg-[#0E4A44] hover:bg-[#0B3A35]">Recalcular Prazo</Button>
+                <Button onClick={handleApplyAdjustment} size="sm" className="w-full h-9 rounded-xl text-xs font-medium bg-[#0E4A44] hover:bg-[#0B3A35]">Recalcular Prazo</Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1166,7 +1164,7 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
 
           <div className="flex items-center justify-between gap-3 py-2">
             <Select value={String(reportYear)} onValueChange={(v) => handleChangeReportYear(Number(v))}>
-              <SelectTrigger className="w-32 h-9 rounded-md border-[#E4DFD1] bg-white text-sm">
+              <SelectTrigger className="w-32 h-9 rounded-xl border-[#E4DFD1] bg-white text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1175,7 +1173,7 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                 ))}
               </SelectContent>
             </Select>
-            <Button onClick={handleExportReportCsv} disabled={!reportData} variant="outline" size="sm" className="h-9 rounded-md gap-1.5 text-xs font-medium border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC]">
+            <Button onClick={handleExportReportCsv} disabled={!reportData} variant="outline" size="sm" className="h-9 rounded-xl gap-1.5 text-xs font-medium border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC]">
               <ArrowUpRight className="h-3.5 w-3.5" /> Exportar CSV
             </Button>
           </div>
@@ -1207,7 +1205,7 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                 <p className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C] mb-2">Por Tipo de Documento</p>
                 <div className="space-y-1">
                   {Object.entries(reportData.porTipo).map(([tipo, total]) => (
-                    <div key={tipo} className="flex items-center justify-between border border-[#F1EEE4] bg-white px-3 py-2 rounded-md text-sm">
+                    <div key={tipo} className="flex items-center justify-between border border-[#F1EEE4] bg-white px-3 py-2 rounded-xl text-sm">
                       <span className="text-[#6B6659]">{tipo}</span>
                       <span className="font-medium text-[#262420]">{total}</span>
                     </div>
@@ -1219,7 +1217,7 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
                 <p className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C] mb-2">Por Fiscal</p>
                 <div className="space-y-1">
                   {reportData.porFiscal.map(f => (
-                    <div key={f.nome} className="flex items-center justify-between border border-[#F1EEE4] bg-white px-3 py-2 rounded-md text-sm">
+                    <div key={f.nome} className="flex items-center justify-between border border-[#F1EEE4] bg-white px-3 py-2 rounded-xl text-sm">
                       <span className="text-[#6B6659]">{f.nome}</span>
                       <span className="font-medium text-[#262420]">{f.total}</span>
                     </div>
@@ -1230,23 +1228,23 @@ export function AcervoDocumentos({ titulo, subtitulo, escopo, situacao, novo, vo
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C] mb-2">Conferência de Numeração</p>
                 {reportData.numeracao.duplicados.length === 0 && reportData.numeracao.gapsInternos.length === 0 && !reportData.numeracao.acimaDoContador ? (
-                  <div className="flex items-center gap-2.5 bg-emerald-50 text-emerald-700 p-3 rounded-md text-sm">
+                  <div className="flex items-center gap-2.5 bg-emerald-50 text-emerald-700 p-3 rounded-xl text-sm">
                     <CheckCircle2 className="h-4 w-4 shrink-0" /> Nenhuma inconsistência encontrada na numeração deste ano.
                   </div>
                 ) : (
                   <div className="space-y-2">
                     {reportData.numeracao.duplicados.length > 0 && (
-                      <div className="bg-rose-50 text-rose-700 p-3 rounded-md text-sm">
+                      <div className="bg-rose-50 text-rose-700 p-3 rounded-xl text-sm">
                         Números duplicados: {reportData.numeracao.duplicados.join(', ')}
                       </div>
                     )}
                     {reportData.numeracao.gapsInternos.length > 0 && (
-                      <div className="bg-amber-50 text-amber-700 p-3 rounded-md text-sm">
+                      <div className="bg-amber-50 text-amber-700 p-3 rounded-xl text-sm">
                         Números pulados na sequência: {reportData.numeracao.gapsInternos.join(', ')}
                       </div>
                     )}
                     {reportData.numeracao.acimaDoContador && (
-                      <div className="bg-rose-50 text-rose-700 p-3 rounded-md text-sm">
+                      <div className="bg-rose-50 text-rose-700 p-3 rounded-xl text-sm">
                         Existe documento com número ({reportData.numeracao.maiorSequencialUsado}) maior que o contador oficial ({reportData.numeracao.valorContador}) — possível edição manual indevida do campo Nº.
                       </div>
                     )}

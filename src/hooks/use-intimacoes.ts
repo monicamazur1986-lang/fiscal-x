@@ -361,6 +361,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
         delete fbData.compartilhadoComNomes;
         delete fbData.createdBy;
         delete fbData.createdByName;
+        delete fbData.modoCompartilhamento;
       }
 
       try {
@@ -589,6 +590,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
   const compartilharIntimacao = useCallback(async (
     id: string,
     colegas: { uid: string; nome: string }[],
+    modo: 'editar' | 'assinar' = 'editar',
   ) => {
     const uids = colegas.map(c => c.uid);
 
@@ -610,7 +612,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
 
     setIntimacoes(prev => {
       const atualizada = prev.map(i => alvos.includes(String(i.id))
-        ? { ...i, compartilhadoCom: uids, compartilhadoComNomes: colegas }
+        ? { ...i, compartilhadoCom: uids, compartilhadoComNomes: colegas, modoCompartilhamento: modo }
         : i);
       salvarCacheColecao(LOCAL_STORAGE_KEY, atualizada);
       return atualizada;
@@ -627,12 +629,49 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
         setDoc(doc(db, "intimacoes", alvo), {
           compartilhadoCom: uids,
           compartilhadoComNomes: colegas,
+          modoCompartilhamento: modo,
         }, { merge: true })
       );
       if (!r.synced) synced = false;
     }
     return { synced };
   }, [db, configError]);
+
+  /**
+   * ASSINAR SEM ABRIR O DOCUMENTO PARA EDIÇÃO.
+   *
+   * Usado quando o compartilhamento está em modo 'assinar' (ver
+   * modoCompartilhamento, lib/types.ts): o colega vê o documento travado
+   * para leitura e só a própria linha de assinatura fica ativa. Em vez de
+   * carregar o documento inteiro num formulário local e regravar tudo (o
+   * mesmo "quem salvar por último leva tudo" que já afetava a edição
+   * compartilhada comum, ver handleSaveDraft/saveIntimacao), esta função lê
+   * a versão mais recente DENTRO de uma transação, troca só a assinatura
+   * daquela autoridade (por nome — o mesmo critério de ehMinhaAssinatura em
+   * lib/utils.ts) e grava de volta. Nunca pode apagar uma resposta, foto ou
+   * texto que outra pessoa tenha salvado nesse meio-tempo, porque nunca lê
+   * nem escreve nenhum outro campo do documento.
+   */
+  const assinarAutoridadeCompartilhada = useCallback(async (id: string, nomeAutoridade: string, signature: string) => {
+    if (!user) throw new Error('Não autenticado.');
+    if (!db || configError) throw new Error('Sem conexão com o banco de dados.');
+    const ref = doc(db, 'intimacoes', id);
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) throw new Error('Documento não encontrado.');
+      const data = snap.data() as any;
+      const autoridades: any[] = Array.isArray(data.autoridades) ? [...data.autoridades] : [];
+      const idx = autoridades.findIndex((a) => normalizeId(a?.nome || '') === normalizeId(nomeAutoridade));
+      if (idx === -1) throw new Error('Sua linha de assinatura não foi encontrada neste documento.');
+      autoridades[idx] = { ...autoridades[idx], signature };
+      tx.update(ref, {
+        autoridades,
+        updatedAt: new Date().toISOString(),
+        updatedBy: user.uid,
+        updatedByName: profile?.displayName || 'Fiscal',
+      });
+    });
+  }, [db, configError, user, profile?.displayName]);
 
   /**
    * AUTOMÁTICO PARA QUEM ESTAVA NA INSPEÇÃO.
@@ -702,6 +741,7 @@ export function useIntimacoes(options?: { municipioIdOverride?: string }) {
     intimacoes,
     saveIntimacao,
     compartilharIntimacao,
+    assinarAutoridadeCompartilhada,
     compartilharComAutoridades,
     criarRetificacao,
     criarCopia,

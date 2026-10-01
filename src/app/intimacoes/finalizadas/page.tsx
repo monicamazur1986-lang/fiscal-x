@@ -8,7 +8,6 @@ export default function AutuacoesFinalizadasPage() {
       subtitulo="Documentos já lavrados, com o prazo de defesa em contagem."
       escopo="autuacoes"
       situacao="finalizado"
-      novo={{ href: "/intimacoes/nova", label: "Nova autuação" }}
     />
   );
 }

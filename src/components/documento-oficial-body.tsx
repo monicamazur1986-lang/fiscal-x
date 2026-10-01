@@ -338,6 +338,22 @@ interface DocumentoOficialBodyProps {
   // pelo PDF real (computePageGroups). `beforeIndex` se refere à posição no
   // array `sectionBlocks` (ver abaixo), não a filhos do DOM.
   livePageBreaks?: { beforeIndex: number; pageNumber: number; totalPages: number }[];
+  // Quem está logado — só pra saber "esta linha de assinatura é sua?" e
+  // oferecer a assinatura salva no perfil com um clique. Prop, não
+  // `useAuth()` direto aqui dentro: este componente também é montado pelo
+  // gerador de PDF em segundo plano (generate-intimacao-pdf.tsx), numa raiz
+  // React separada, SEM os provedores do app (AuthProvider incluso) — um
+  // `useAuth()` ali lançava "missing Provider" e quebrava todo PDF gerado
+  // (download em lote, anexar Auto de Infração ao PAS). Ausente (como nesse
+  // caminho) é seguro: as linhas de assinatura ficam sem o atalho, que de
+  // qualquer forma só aparece fora do modo de geração (`!isGeneratingPdf`).
+  currentUser?: { displayName?: string | null; assinaturaSalva?: string | null } | null;
+  /** Documento travado para leitura (como isFinalized), MAS a própria linha
+   *  de assinatura (a que bate com currentUser.displayName) continua ativa —
+   *  usado no compartilhamento em modo "somente assinar" (ver
+   *  CompartilharEdicaoDialog/modoCompartilhamento). Quem chama já passa
+   *  isFinalized=true junto; este prop só reabre a exceção da própria linha. */
+  permitirApenasMinhaAssinatura?: boolean;
 }
 
 // Brasão + identificação institucional, compacto — usado tanto no cabeçalho
@@ -412,9 +428,9 @@ export function DocumentoOficialBody({
   isFinalized, isGeneratingPdf, config,
   formRef, headerRef, onRequestSignature, onTipoTermoChange, onPrazoChange,
   showCnpjLookup = true, onCnpjLookup, isSearchingCnpj = false,
-  onSubmit, livePageBreaks,
+  onSubmit, livePageBreaks, currentUser, permitirApenasMinhaAssinatura = false,
 }: DocumentoOficialBodyProps) {
-  const { profile } = useAuth();
+  const profile = currentUser;
   // Nome curto: os 3 campos (nome, cargo/conselho, documento) cabem numa linha
   // só, já que RG/CPF e conselho são sempre curtos. Nome muito longo: cargo e
   // documento descem para a linha seguinte, para não espremer o nome.
@@ -799,9 +815,14 @@ export function DocumentoOficialBody({
                       ehMinhaAssinatura em lib/utils.ts). Com assinatura salva
                       no perfil, um clique já resolve; sem ela, abre o quadro
                       pra desenhar, como sempre. */}
-                  {!isFinalized && !isGeneratingPdf && !(f as any).signature && (
+                  {/* Travado (isFinalized) normalmente esconde este bloco
+                      inteiro — mas no compartilhamento "somente assinar"
+                      (permitirApenasMinhaAssinatura) a trava continua valendo
+                      para o resto do documento, só a PRÓPRIA linha reabre
+                      aqui. */}
+                  {!isGeneratingPdf && !(f as any).signature && (!isFinalized || (permitirApenasMinhaAssinatura && ehMinhaLinha)) && (
                     ehMinhaLinha ? (
-                      profile?.assinaturaSalva ? (
+                      (!permitirApenasMinhaAssinatura && profile?.assinaturaSalva) ? (
                         <button
                           type="button"
                           onClick={() => {

@@ -29,6 +29,14 @@ export type Intimacao = {
   /** uids dos colegas que podem editar junto — ver schema.ts. */
   compartilhadoCom?: string[];
   compartilhadoComNomes?: { uid: string; nome: string }[];
+  /** 'assinar' trava o documento para leitura, pro colega marcado em
+   *  compartilhadoCom — ele só pode assinar a própria linha (via transação
+   *  isolada, ver assinarAutoridadeCompartilhada em use-intimacoes.ts), não
+   *  editar o resto. Ausente/'editar' é o modo de sempre (edição completa
+   *  compartilhada). Pensado para quando só falta UMA assinatura: dar acesso
+   *  de edição inteiro por isso arriscava o colega (ou o autosave de quem já
+   *  estava editando) sobrescrever o documento por engano. */
+  modoCompartilhamento?: 'editar' | 'assinar';
   updatedBy?: string;
   updatedByName?: string;
   cnpj?: string;
@@ -136,6 +144,8 @@ export type Inspecao = {
    * começa em campo e o outro termina no escritório. */
   compartilhadoCom?: string[];
   compartilhadoComNomes?: { uid: string; nome: string }[];
+  /** Mesmo significado de Intimacao.modoCompartilhamento — ver lá. */
+  modoCompartilhamento?: 'editar' | 'assinar';
   checklistData?: {
     /** SIM/NÃO/ND nos roteiros comuns; '0'..'5' nos roteiros ROI da ANVISA, que são avaliados por nota (ver src/lib/roteiro-roi-radiologia.ts). */
     answers: Record<string, 'SIM' | 'NAO' | 'ND' | '0' | '1' | '2' | '3' | '4' | '5'>;
@@ -144,6 +154,11 @@ export type Inspecao = {
     /** Não conformidades incluídas manualmente pelo fiscal, fora do roteiro oficial. */
     customItems?: { id: string; text: string; crit: 'I' | 'N' | 'R' }[];
     idData: any;
+    /** Equipe de fiscalização que participou da vistoria (nome, cargo,
+     *  assinatura) — faltava aqui e no save/load da tela (roteiros/[id]),
+     *  então a lista e as assinaturas feitas nunca sobreviviam a um reload
+     *  ou a uma reabertura por outro fiscal: existiam só na aba aberta. */
+    fiscais?: Autoridade[];
     /**
      * Todas as atividades econômicas (CNAE) que a consulta de CNPJ trouxe da
      * BrasilAPI — principal e secundárias. Guardado junto da inspeção porque

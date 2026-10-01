@@ -16,6 +16,7 @@ import {
   query,
   where,
   getDocs,
+  runTransaction,
   type Query,
   type DocumentData,
 } from 'firebase/firestore';
@@ -657,28 +658,65 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
 
     // Nada novo pra somar — não regrava o que já está lá.
     if (!encontrouAlguem) return;
-    await compartilharInspecao(id, Array.from(combinados.values()));
+    // Preserva o modo vigente (ver modoCompartilhamento, lib/types.ts) — este
+    // disparo automático roda em TODO salvamento com fiscais na equipe;
+    // sem reaproveitar o modo atual, ele reescreveria 'assinar' de volta
+    // para 'editar' no próximo autosave, destravando a edição completa que
+    // o autor tinha fechado de propósito ao pedir só uma assinatura.
+    await compartilharInspecao(id, Array.from(combinados.values()), documento?.modoCompartilhamento || 'editar');
   }, [db, configError, profile?.municipioId, profile?.uid, inspecoes]);
 
   const compartilharInspecao = useCallback(async (
     id: string,
     colegas: { uid: string; nome: string }[],
+    modo: 'editar' | 'assinar' = 'editar',
   ) => {
     const stringId = String(id);
     const uids = colegas.map(c => c.uid);
 
     setInspecoes(prev => {
-      const updated = prev.map(i => String(i.id) === stringId ? { ...i, compartilhadoCom: uids, compartilhadoComNomes: colegas } : i);
+      const updated = prev.map(i => String(i.id) === stringId ? { ...i, compartilhadoCom: uids, compartilhadoComNomes: colegas, modoCompartilhamento: modo } : i);
       salvarCacheColecao(LOCAL_STORAGE_KEY, updated, 'ultimos');
       return updated;
     });
 
     if (!db || configError) return { synced: false };
     const r = await attemptFirestoreWrite(
-      setDoc(doc(db, "inspecoes", stringId), { compartilhadoCom: uids, compartilhadoComNomes: colegas }, { merge: true })
+      setDoc(doc(db, "inspecoes", stringId), { compartilhadoCom: uids, compartilhadoComNomes: colegas, modoCompartilhamento: modo }, { merge: true })
     );
     return { synced: r.synced };
   }, [db, configError]);
+
+  /**
+   * ASSINAR SEM ABRIR A VISTORIA PARA EDIÇÃO — mesmo mecanismo e mesmo
+   * motivo de assinarAutoridadeCompartilhada (use-intimacoes.ts): lê a
+   * versão mais recente dentro de uma transação, troca só a assinatura
+   * daquele fiscal dentro de checklistData.fiscais (por nome) e grava de
+   * volta — nunca a partir de um `fiscais` local, que pode estar
+   * desatualizado, e nunca tocando em nenhum outro campo (respostas, fotos,
+   * identificação do estabelecimento).
+   */
+  const assinarAutoridadeInspecaoCompartilhada = useCallback(async (id: string, nomeAutoridade: string, signature: string) => {
+    if (!user) throw new Error('Não autenticado.');
+    if (!db || configError) throw new Error('Sem conexão com o banco de dados.');
+    const ref = doc(db, 'inspecoes', id);
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) throw new Error('Vistoria não encontrada.');
+      const data = snap.data() as any;
+      const checklistData = data.checklistData || {};
+      const fiscaisAtuais: any[] = Array.isArray(checklistData.fiscais) ? [...checklistData.fiscais] : [];
+      const idx = fiscaisAtuais.findIndex((f) => normalizeId(f?.nome || '') === normalizeId(nomeAutoridade));
+      if (idx === -1) throw new Error('Sua linha de assinatura não foi encontrada nesta vistoria.');
+      fiscaisAtuais[idx] = { ...fiscaisAtuais[idx], signature };
+      tx.update(ref, {
+        checklistData: { ...checklistData, fiscais: fiscaisAtuais },
+        updatedAt: new Date().toISOString(),
+        updatedBy: user.uid,
+        updatedByName: profile?.displayName || 'Fiscal',
+      });
+    });
+  }, [db, configError, user, profile?.displayName]);
 
   return {
     inspecoes,
@@ -689,6 +727,7 @@ export function useInspecoes(options?: { municipioIdOverride?: string }) {
     permanentDelete,
     toggleFavorito,
     compartilharInspecao,
+    assinarAutoridadeInspecaoCompartilhada,
     compartilharComAutoridadesInspecao,
     loading,
     isOnline,

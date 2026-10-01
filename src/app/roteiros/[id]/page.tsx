@@ -2922,7 +2922,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
       : profile?.municipioId,
   })
   const router = useRouter()
-  const { saveInspecao, deleteInspecao, inspecoes, compartilharInspecao, compartilharComAutoridadesInspecao, loading: loadingInspecoes } = useInspecoes()
+  const { saveInspecao, deleteInspecao, inspecoes, compartilharInspecao, assinarAutoridadeInspecaoCompartilhada, compartilharComAutoridadesInspecao, loading: loadingInspecoes } = useInspecoes()
   const reportRef = useRef<HTMLDivElement>(null)
   // Encolhe só a APARÊNCIA da folha A4 pra caber na tela do celular — nunca a
   // largura real (offsetWidth), que é a base de todo o cálculo de paginação
@@ -3007,6 +3007,13 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // mostra "Finalizar e Exportar" (rascunho) ou só "Exportar" (já concluída,
   // reaberta pra conferir ou reenviar).
   const [inspecaoStatus, setInspecaoStatus] = useState<'rascunho' | 'concluido' | null>(null);
+  // Mesma ideia de souOAutor/souAssinanteApenas em intimacao-form.tsx:
+  // compartilhamento em modo 'assinar' trava a vistoria pra leitura, pro
+  // colega marcado — só a própria linha de assinatura fica ativa, por uma
+  // transação isolada (assinarAutoridadeInspecaoCompartilhada), nunca pelo
+  // salvamento normal do formulário inteiro.
+  const souOAutorInspecao = !inspecaoAtual?.fiscalId || inspecaoAtual.fiscalId === profile?.uid;
+  const souAssinanteApenasInspecao = !souOAutorInspecao && inspecaoAtual?.modoCompartilhamento === 'assinar' && inspecaoStatus !== 'concluido';
   // Nos roteiros ROI a resposta é a nota da escala, guardada como string
   // ('0'..'5') no mesmo mapa — evita um segundo estado só pra isso e faz o
   // rascunho/relatório continuarem lendo de um lugar só.
@@ -3082,6 +3089,14 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   const conclusaoTravadaRef = useRef(false)
   const [uploadingItem, setUploadingItem] = useState<string | null>(null)
   const [view, setView] = useState<'checklist' | 'report'>('checklist')
+
+  // Compartilhado em modo "somente assinar": trava na visualização de
+  // relatório (read-only) em vez do checklist editável — o botão "Editar"
+  // do cabeçalho do relatório fica escondido nesse modo (ver mais abaixo),
+  // então não dá pra sair dali de volta pro formulário.
+  useEffect(() => {
+    if (souAssinanteApenasInspecao) setView('report');
+  }, [souAssinanteApenasInspecao]);
 
   // Vigia de edição simultânea — mesmo mecanismo de intimacao-form.tsx (ver
   // carimboDoColega, definido mais acima). Fica depois da declaração de
@@ -3438,6 +3453,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
     setCustomItems(cd.customItems || []);
     setFoundCnaes(cd.cnaesDisponiveis || []);
     setIdData(carregadaIdData);
+    setFiscais(cd.fiscais || []);
     // "Trava" antes de setar — sem isso, os efeitos de sincronização (que
     // rodam a cada mudança de idData) recalculariam por cima do texto
     // carregado assim que setIdData disparasse o próximo render.
@@ -3471,7 +3487,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
   // várias inspeções do mesmo roteiro coexistem, então "começar nova" nunca
   // deveria apagar outra).
   const resetToBlank = useCallback(() => {
-    setAnswers({}); setObservations({}); setItemPhotos({}); setCustomItems([]); setFoundCnaes([]);
+    setAnswers({}); setObservations({}); setItemPhotos({}); setCustomItems([]); setFoundCnaes([]); setFiscais([]);
     setIdData(buildInitialIdData());
     introTravadaRef.current = false;
     conclusaoTravadaRef.current = false;
@@ -3612,7 +3628,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         data: new Date(),
         fiscalId: profile.uid,
         fiscalNome: profile.displayName || "Fiscal",
-        checklistData: { answers: respostasAgora ?? answers, observations, itemPhotos, customItems, idData, cnaesDisponiveis: foundCnaes, roteiroId: id, introducaoHtml, conclusaoHtml }
+        checklistData: { answers: respostasAgora ?? answers, observations, itemPhotos, customItems, idData, cnaesDisponiveis: foundCnaes, roteiroId: id, introducaoHtml, conclusaoHtml, fiscais }
       };
       const res = await saveInspecao(data, currentInspecaoId || undefined);
       if (res?.id) {
@@ -3869,7 +3885,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
             // acima só vale no próximo render, então `foundCnaes` aqui ainda
             // seria o valor anterior (vazio na primeira consulta) e o rascunho
             // era gravado sem nenhum CNAE.
-            checklistData: { answers, observations, itemPhotos, customItems, idData: updated, cnaesDisponiveis: cnaesDaConsulta, roteiroId: id, introducaoHtml, conclusaoHtml }
+            checklistData: { answers, observations, itemPhotos, customItems, idData: updated, cnaesDisponiveis: cnaesDaConsulta, roteiroId: id, introducaoHtml, conclusaoHtml, fiscais }
         }, currentInspecaoId || undefined);
         if (resSave?.id) {
           setCurrentInspecaoId(resSave.id);
@@ -4045,7 +4061,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         data: new Date(),
         fiscalId: profile.uid,
         fiscalNome: profile.displayName || "Fiscal",
-        checklistData: { answers, observations, itemPhotos, customItems, idData, cnaesDisponiveis: foundCnaes, roteiroId: id, introducaoHtml, conclusaoHtml }
+        checklistData: { answers, observations, itemPhotos, customItems, idData, cnaesDisponiveis: foundCnaes, roteiroId: id, introducaoHtml, conclusaoHtml, fiscais }
       };
       const res = await saveInspecao(data, currentInspecaoId || undefined);
       if (res?.id) setCurrentInspecaoId(res.id);
@@ -4216,9 +4232,16 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                 "Finalizar e Baixar PDF") baixavam o mesmo arquivo, mudando so
                 o efeito colateral — a diferenca entre eles nao estava no rotulo,
                 e a barra so era legivel para quem ja sabia o que cada um fazia. */}
-            <Button onClick={() => setView('checklist')} variant="outline" className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-white shadow-sm"><Pencil className="h-4 w-4 mr-2" /> Editar</Button>
+            {/* Compartilhado em modo "somente assinar": sem "Editar" (volta
+                pro checklist, editável) nem "Revisar com IA" — quem só vai
+                assinar não deveria conseguir alterar nada do conteúdo. */}
+            {!souAssinanteApenasInspecao ? (
+              <Button onClick={() => setView('checklist')} variant="outline" className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-white shadow-sm"><Pencil className="h-4 w-4 mr-2" /> Editar</Button>
+            ) : (
+              <Badge variant="outline" className="text-xs font-medium h-9 px-3 border-[#7A4F9C]/30 bg-[#F6F1FB] text-[#7A4F9C] gap-1.5"><PenTool className="h-3.5 w-3.5" /> Travado para leitura — só sua assinatura liberada</Badge>
+            )}
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              {inspecaoStatus !== 'concluido' && (
+              {inspecaoStatus !== 'concluido' && !souAssinanteApenasInspecao && (
                 <Button onClick={handlePolishAllObservations} disabled={isPolishingBatch || !hasUnreviewedObservations} variant="outline" className="rounded-xl h-11 px-6 font-black uppercase text-[10px] bg-violet-50 text-violet-600 border-violet-100 shadow-sm hover:bg-violet-100">{isPolishingBatch ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />} Revisar com IA</Button>
               )}
               {/* Autuação a partir das não conformidades — só depois de
@@ -4236,7 +4259,7 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
                   <ScrollText className="h-4 w-4 mr-2" /> Gerar Autuação
                 </Button>
               )}
-              {inspecaoStatus === 'concluido' ? (
+              {souAssinanteApenasInspecao ? null : inspecaoStatus === 'concluido' ? (
                 /* Um so "Exportar": no celular abre a folha do sistema (WhatsApp,
                    e-mail, salvar no aparelho); no computador, que nao tem Web Share,
                    baixa o PDF direto. Sao dois comportamentos de uma unica intencao,
@@ -4272,6 +4295,34 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
               )}
             </div>
         </header>
+
+        {/* Banner de assinatura isolada — fora do document-paper de propósito
+            (não pode entrar na captura do PDF, ver data-pdf-block abaixo). A
+            imagem assinada, uma vez salva, aparece normalmente no bloco de
+            assinaturas do relatório (mais abaixo); aqui é só o CONVITE/botão
+            pra assinar. */}
+        {souAssinanteApenasInspecao && (() => {
+          const meuIndice = fiscais.findIndex((f) => ehMinhaAssinatura((f as any).nome, profile?.displayName));
+          if (meuIndice === -1) return null;
+          const jaAssinei = !!(fiscais[meuIndice] as any).signature;
+          return (
+            <div className="no-print max-w-[210mm] mx-auto mb-6 px-5 py-4 rounded-2xl border-2 border-[#7A4F9C]/40 bg-[#F6F1FB] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-serif text-base text-[#262420]">{jaAssinei ? 'Você já assinou este relatório' : 'Falta a sua assinatura'}</p>
+                <p className="text-xs text-[#6B6659] mt-1">
+                  {jaAssinei
+                    ? 'Os demais campos continuam travados — só o autor pode editar ou finalizar.'
+                    : 'Travado para leitura: você só consegue assinar a própria linha; o resto do relatório não é editável por aqui.'}
+                </p>
+              </div>
+              {!jaAssinei && (
+                <Button type="button" onClick={() => setSigningFiscalIndex(meuIndice)} className="rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 h-12 px-6 shrink-0 bg-[#7A4F9C] text-white shadow-md hover:bg-[#693F8A]">
+                  <PenTool className="h-4 w-4" /> Assinar
+                </Button>
+              )}
+            </div>
+          );
+        })()}
 
         <div ref={escalaFolha.wrapperRef} className="document-paper-wrapper custom-scrollbar" style={escalaFolha.estiloWrapper}>
           <div ref={definirFolhaDoRelatorio} className="document-paper h-auto bg-white" style={escalaFolha.estiloFolha}>
@@ -5645,11 +5696,47 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
           </div>
       </div>
 
-      <SignaturePad isOpen={signingFiscalIndex !== null} onOpenChange={(open) => !open && setSigningFiscalIndex(null)} onSave={(sig) => { if (signingFiscalIndex !== null) { const updated = [...fiscais]; updated[signingFiscalIndex] = { ...updated[signingFiscalIndex], signature: sig }; setFiscais(updated); handleSaveDraft(false); } }} title="Assinatura Fiscal" />
+      <SignaturePad
+        isOpen={signingFiscalIndex !== null}
+        onOpenChange={(open) => !open && setSigningFiscalIndex(null)}
+        onSave={async (sig) => {
+          if (signingFiscalIndex === null) return;
+          // Compartilhado em modo "somente assinar": grava por uma transação
+          // isolada (só o campo da assinatura, lendo o servidor fresco na
+          // hora) em vez de handleSaveDraft, que regravaria a vistoria
+          // inteira a partir do estado local — que aqui nem tem o resto do
+          // conteúdo carregado de verdade, pois a tela está travada pra
+          // leitura (ver assinarAutoridadeInspecaoCompartilhada).
+          if (souAssinanteApenasInspecao && currentInspecaoId) {
+            const nomeFiscal = fiscais[signingFiscalIndex]?.nome;
+            try {
+              await assinarAutoridadeInspecaoCompartilhada(currentInspecaoId, nomeFiscal, sig);
+              const updated = [...fiscais];
+              updated[signingFiscalIndex] = { ...updated[signingFiscalIndex], signature: sig };
+              setFiscais(updated);
+              toast({ title: "Assinatura registrada" });
+            } catch (e: any) {
+              toast({ variant: "destructive", title: "Erro ao assinar", description: e?.message });
+            }
+            setSigningFiscalIndex(null);
+            return;
+          }
+          const updated = [...fiscais];
+          updated[signingFiscalIndex] = { ...updated[signingFiscalIndex], signature: sig };
+          setFiscais(updated);
+          handleSaveDraft(false);
+        }}
+        title="Assinatura Fiscal"
+      />
       <SignaturePad isOpen={signingResponsavel} onOpenChange={setSigningResponsavel} onSave={(sig) => { setIdData({...idData, signatureResponsavel: sig}); handleSaveDraft(false); }} title="Ciência Inspecionado" />
 
       {alteracaoDoColega && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[150] no-print w-[calc(100%-2rem)] max-w-xl">
+        // bottom-36 (144px) — acima da barra de ações fixa no rodapé
+        // (Visualizar/Apagar/Salvar/Finalizar, ~113px de altura): antes esta
+        // caixa ficava em bottom-4, bem na mesma faixa da barra, cobrindo os
+        // botões e impedindo o fiscal de continuar (inclusive assinar, que
+        // depende de abrir o relatório/finalizar por ali).
+        <div className="fixed bottom-36 left-1/2 -translate-x-1/2 z-[150] no-print w-[calc(100%-2rem)] max-w-xl">
           <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 px-5 py-4 shadow-[0_10px_30px_-10px_rgba(38,36,32,0.45)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="font-serif text-base text-amber-900">{alteracaoDoColega.nome} alterou este roteiro {alteracaoDoColega.quando}</p>
@@ -5700,15 +5787,18 @@ export default function DynamicChecklistPage({ params }: { params: Promise<{ id:
         open={compartilharAberto}
         onOpenChange={setCompartilharAberto}
         compartilhadoCom={inspecaoAtual?.compartilhadoComNomes || []}
-        onConfirmar={async (colegas) => {
+        modo={inspecaoAtual?.modoCompartilhamento || 'editar'}
+        onConfirmar={async (colegas, modo) => {
           if (!currentInspecaoId) return;
-          const { synced } = await compartilharInspecao(currentInspecaoId, colegas);
+          const { synced } = await compartilharInspecao(currentInspecaoId, colegas, modo);
           toast(
             !synced
               ? { title: "Compartilhamento salvo localmente", description: "Vai valer pra quem foi marcado assim que a conexão voltar." }
               : colegas.length === 0
               ? { title: "Compartilhamento removido" }
-              : { title: "Vistoria compartilhada" }
+              : modo === 'assinar'
+                ? { title: "Compartilhado só para assinatura", description: "Travado para leitura — só a assinatura da pessoa marcada fica liberada." }
+                : { title: "Vistoria compartilhada" }
           );
         }}
       />

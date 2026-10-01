@@ -40,13 +40,16 @@ export function CompartilharEdicaoDialog({
   open,
   onOpenChange,
   compartilhadoCom,
+  modo = 'editar',
   onConfirmar,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Quem já tem acesso hoje — marca os nomes ao abrir. */
   compartilhadoCom: ColegaCompartilhado[];
-  onConfirmar: (colegas: ColegaCompartilhado[]) => Promise<void>;
+  /** Modo vigente hoje no documento — marca a opção certa ao abrir. */
+  modo?: 'editar' | 'assinar';
+  onConfirmar: (colegas: ColegaCompartilhado[], modo: 'editar' | 'assinar') => Promise<void>;
 }) {
   const { profile } = useAuth();
   const [colegas, setColegas] = useState<Colega[]>([]);
@@ -57,12 +60,13 @@ export function CompartilharEdicaoDialog({
   // colega, a outra é publicar as regras do Firestore.
   const [erroDeAcesso, setErroDeAcesso] = useState(false);
   const [selecionados, setSelecionados] = useState<string[]>([]);
+  const [modoSelecionado, setModoSelecionado] = useState<'editar' | 'assinar'>(modo);
 
   // Ao abrir, parte do que está gravado. Depois disso o estado é da caixa —
   // reagir a `compartilhadoCom` durante a edição desfaria o que a pessoa
   // acabou de marcar quando o snapshot do Firestore chegasse.
   useEffect(() => {
-    if (open) setSelecionados(compartilhadoCom.map((c) => c.uid));
+    if (open) { setSelecionados(compartilhadoCom.map((c) => c.uid)); setModoSelecionado(modo); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -94,8 +98,8 @@ export function CompartilharEdicaoDialog({
   const mudou = useMemo(() => {
     const antes = [...compartilhadoCom.map((c) => c.uid)].sort().join('|');
     const agora = [...selecionados].sort().join('|');
-    return antes !== agora;
-  }, [compartilhadoCom, selecionados]);
+    return antes !== agora || modoSelecionado !== modo;
+  }, [compartilhadoCom, selecionados, modoSelecionado, modo]);
 
   const confirmar = async () => {
     setSalvando(true);
@@ -107,7 +111,8 @@ export function CompartilharEdicaoDialog({
           const daLista = colegas.find((c) => c.uid === uid);
           const jaGravado = compartilhadoCom.find((c) => c.uid === uid);
           return { uid, nome: daLista?.nome || jaGravado?.nome || 'Fiscal' };
-        })
+        }),
+        modoSelecionado
       );
       onOpenChange(false);
     } finally {
@@ -119,11 +124,33 @@ export function CompartilharEdicaoDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-serif">Compartilhar edição</DialogTitle>
+          <DialogTitle className="font-serif">Compartilhar</DialogTitle>
           <DialogDescription>
-            Quem você marcar passa a ver esta autuação na lista dele e pode editar e finalizar junto com você. A autuação continua sendo sua — só você ou o gestor podem apagá-la.
+            {modoSelecionado === 'assinar'
+              ? 'Quem você marcar vê este documento travado para leitura, só com a própria linha de assinatura liberada — não edita o resto. Bom para quando só falta uma assinatura.'
+              : 'Quem você marcar passa a ver este documento na lista dele e pode editar e finalizar junto com você. O documento continua sendo seu — só você ou o gestor podem apagá-lo.'}
           </DialogDescription>
         </DialogHeader>
+
+        {/* Mesma escolha do modo "Redigir no sistema / Já pronto" usada em
+            outras telas: dois jeitos de compartilhar que se excluem, não dois
+            campos competindo pela mesma leitura. */}
+        <div className="inline-flex items-center gap-1 bg-[#F5F2EA] rounded-xl p-1">
+          <button
+            type="button"
+            onClick={() => setModoSelecionado('editar')}
+            className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-colors", modoSelecionado === 'editar' ? "bg-white text-[#0E4A44] shadow-sm" : "text-[#A39D8C] hover:text-[#6B6659]")}
+          >
+            Editar junto
+          </button>
+          <button
+            type="button"
+            onClick={() => setModoSelecionado('assinar')}
+            className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-colors", modoSelecionado === 'assinar' ? "bg-white text-[#0E4A44] shadow-sm" : "text-[#A39D8C] hover:text-[#6B6659]")}
+          >
+            Somente assinar
+          </button>
+        </div>
 
         <div className="max-h-[50vh] overflow-y-auto space-y-1.5 py-2">
           {loading ? (

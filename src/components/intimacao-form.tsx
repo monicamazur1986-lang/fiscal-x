@@ -138,7 +138,7 @@ function useLivePagination(containerRef: React.RefObject<HTMLDivElement>, header
 }
 
 function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<Intimacao>, intimacaoId?: string }) {
-    const { generateNewNumeroProcesso, saveIntimacao, updateIntimacaoMeta, compartilharIntimacao, compartilharComAutoridades, criarRetificacao, criarCopia, permanentDelete, intimacoes, loading: loadingIntimacoes } = useIntimacoes();
+    const { generateNewNumeroProcesso, saveIntimacao, updateIntimacaoMeta, compartilharIntimacao, assinarAutoridadeCompartilhada, compartilharComAutoridades, criarRetificacao, criarCopia, permanentDelete, intimacoes, loading: loadingIntimacoes } = useIntimacoes();
     const [isCriandoRetificacaoOuCopia, setIsCriandoRetificacaoOuCopia] = useState(false);
     const [compartilharAberto, setCompartilharAberto] = useState(false);
     const [abrindoCompartilhar, setAbrindoCompartilhar] = useState(false);
@@ -248,6 +248,45 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
     const recusouAssinar = watch("recusouAssinar");
     const signatureResponsavel = watch("signatureResponsavel");
     const dataRecebimento = watch("dataRecebimento");
+
+    // O documento como está gravado, não o que o formulário tem em mãos: o
+    // compartilhamento não passa pelo formulário (ver saveIntimacao), então é
+    // da lista que vem a resposta de "com quem isto está compartilhado".
+    // Precisa estar ANTES do efeito de autosave (mais abaixo), que já lê
+    // travaEdicaoCompleta na primeira execução.
+    const gravada = intimacoes.find(i => String(i.id) === String(mainIdRef.current));
+    const compartilhadoCom: ColegaCompartilhado[] = gravada?.compartilhadoComNomes
+      ?? (gravada?.compartilhadoCom || []).map(uid => ({ uid, nome: 'Fiscal' }));
+    const souOAutor = !gravada?.createdBy || gravada.createdBy === profile?.uid;
+    // Compartilhado em modo "somente assinar" (ver CompartilharEdicaoDialog):
+    // trava a edição pra quem não é o autor, como se já estivesse finalizado
+    // — mas a própria linha de assinatura continua ativa (ver
+    // DocumentoOficialBody, prop permitirApenasMinhaAssinatura) e grava por
+    // uma transação isolada (assinarAutoridadeCompartilhada), nunca pelo
+    // autosave normal. Documento já finalizado não precisa disso: a trava
+    // de "finalizado" já cobre todo mundo igual.
+    const souAssinanteApenas = !souOAutor && gravada?.modoCompartilhamento === 'assinar' && !isFinalized;
+    // Usado em todo lugar que hoje só verifica "está finalizado" para travar
+    // edição/autosave — o assinante-apenas precisa da mesma trava, sem virar
+    // de fato `isFinalized` (que também controla o rótulo "Documento
+    // Finalizado" e outros textos que não se aplicam aqui).
+    const travaEdicaoCompleta = isFinalized || souAssinanteApenas;
+
+    // Vigia de edição simultânea. O snapshot do Firestore chega sozinho; se o
+    // último salvamento foi de outra pessoa, quem está aqui precisa saber
+    // ANTES de continuar digitando — do contrário os dois textos se alternam
+    // a cada salvamento e ninguém entende o que aconteceu.
+    const carimboDoColega = gravada?.updatedBy && gravada.updatedBy !== profile?.uid ? String(gravada.updatedAt || '') : '';
+    useEffect(() => {
+        if (!carimboDoColega || travaEdicaoCompleta) return;
+        const quando = (() => {
+            const d = new Date(carimboDoColega);
+            return isNaN(d.getTime()) ? 'agora há pouco' : `às ${format(d, "HH:mm")}`;
+        })();
+        bloqueiaAutosaveRef.current = true;
+        setAlteracaoDoColega({ nome: gravada?.updatedByName || 'Um colega', quando });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [carimboDoColega, travaEdicaoCompleta]);
 
     useEffect(() => {
         const handleResize = () => setWindowWidth(window.innerWidth);
@@ -411,11 +450,31 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
         anexoIdRef.current = undefined;
     };
 
-    const handleSignatureSave = (base64: string) => {
+    const handleSignatureSave = async (base64: string) => {
         if (!signatureTarget) return;
         const m = signatureTarget.doc === 'main' ? methods : anexoMethods;
         if (signatureTarget.type === 'fiscal' && signatureTarget.index !== undefined) {
             const current = m.getValues('autoridades');
+            // Compartilhado em modo "somente assinar": não editamos o
+            // formulário local e regravamos tudo (o autosave normal, que
+            // aqui está desarmado de propósito — ver travaEdicaoCompleta) —
+            // a assinatura vai direto pro servidor por uma transação isolada,
+            // que nunca pode apagar nada que outra pessoa tenha salvo nesse
+            // meio-tempo. Só depois disso espelha na tela, pra quem assinou
+            // ver a própria assinatura sem precisar recarregar.
+            if (signatureTarget.doc === 'main' && souAssinanteApenas && mainIdRef.current) {
+                const nomeAutoridade = current[signatureTarget.index]?.nome;
+                try {
+                    await assinarAutoridadeCompartilhada(mainIdRef.current, nomeAutoridade, base64);
+                    current[signatureTarget.index].signature = base64;
+                    m.setValue('autoridades', [...current]);
+                    toast({ title: "Assinatura registrada" });
+                } catch (e: any) {
+                    toast({ variant: "destructive", title: "Erro ao assinar", description: e?.message });
+                }
+                setSignatureTarget(null);
+                return;
+            }
             current[signatureTarget.index].signature = base64;
             m.setValue('autoridades', [...current]);
         } else if (signatureTarget.type === 'responsavel') {
@@ -466,7 +525,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
     // sem querer, etc.) e para o rascunho já existir na nuvem antes mesmo de
     // um clique manual em "Salvar", garantindo o resgate por login.
     useEffect(() => {
-        if (isFinalized) return;
+        if (travaEdicaoCompleta) return;
 
         const subscription = methods.watch(() => {
             isDirtyRef.current = true;
@@ -502,21 +561,21 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
             if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isFinalized]);
+    }, [travaEdicaoCompleta]);
 
     // Avisa o navegador para confirmar antes de fechar/recarregar a aba se
     // houver alteração ainda não salva (rede da autosave nem sempre alcança
     // os últimos segundos de digitação antes de um fechamento repentino).
     useEffect(() => {
         const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            if (isDirtyRef.current && !isFinalized) {
+            if (isDirtyRef.current && !travaEdicaoCompleta) {
                 e.preventDefault();
                 e.returnValue = '';
             }
         };
         window.addEventListener('beforeunload', handleBeforeUnload);
         return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, [isFinalized]);
+    }, [travaEdicaoCompleta]);
 
     const handleSaveDraft = async () => {
         if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
@@ -854,30 +913,6 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
     const mostraCardAutoInfracao = !isReadOnlyRender && (hasAnexo || TIPOS_QUE_GERAM_AUTO_INFRACAO.includes(tipoTermoAtual) || tipoTermoAtual === TIPO_QUE_GERA_INTERDICAO_OU_APREENSAO);
     const tipoAnexoAtual = anexoMethods.watch('tipoTermo');
 
-    // O documento como está gravado, não o que o formulário tem em mãos: o
-    // compartilhamento não passa pelo formulário (ver saveIntimacao), então é
-    // da lista que vem a resposta de "com quem isto está compartilhado".
-    const gravada = intimacoes.find(i => String(i.id) === String(mainIdRef.current));
-    const compartilhadoCom: ColegaCompartilhado[] = gravada?.compartilhadoComNomes
-      ?? (gravada?.compartilhadoCom || []).map(uid => ({ uid, nome: 'Fiscal' }));
-    const souOAutor = !gravada?.createdBy || gravada.createdBy === profile?.uid;
-
-    // Vigia de edição simultânea. O snapshot do Firestore chega sozinho; se o
-    // último salvamento foi de outra pessoa, quem está aqui precisa saber
-    // ANTES de continuar digitando — do contrário os dois textos se alternam
-    // a cada salvamento e ninguém entende o que aconteceu.
-    const carimboDoColega = gravada?.updatedBy && gravada.updatedBy !== profile?.uid ? String(gravada.updatedAt || '') : '';
-    useEffect(() => {
-        if (!carimboDoColega || isFinalized) return;
-        const quando = (() => {
-            const d = new Date(carimboDoColega);
-            return isNaN(d.getTime()) ? 'agora há pouco' : `às ${format(d, "HH:mm")}`;
-        })();
-        bloqueiaAutosaveRef.current = true;
-        setAlteracaoDoColega({ nome: gravada?.updatedByName || 'Um colega', quando });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [carimboDoColega, isFinalized]);
-
     // Compartilhar exige um documento gravado — é o id que vai no acesso do
     // colega. Num rascunho que nunca foi salvo, salva antes de abrir a caixa
     // em vez de mandar o fiscal fazer isso sozinho.
@@ -950,7 +985,8 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                             }}
                             onRemoveAutoridade={(i) => remove(i)}
                             onEditAutoridade={(i, data) => setEditingFiscal({ doc: 'main', index: i, data })}
-                            isFinalized={isFinalized}
+                            isFinalized={travaEdicaoCompleta}
+                            permitirApenasMinhaAssinatura={souAssinanteApenas}
                             isGeneratingPdf={isReadOnlyRender}
                             config={config}
                             formRef={mainFormRef}
@@ -961,6 +997,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                             onCnpjLookup={handleCnpjLookup}
                             isSearchingCnpj={isSearchingCnpj}
                             livePageBreaks={livePageBreaksMain}
+                            currentUser={profile}
                         />
                     </FolhaEscalada>
 
@@ -1017,10 +1054,17 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                     <p className="font-serif text-base text-[#262420]">Edição compartilhada</p>
                                     <p className="text-xs text-[#6B6659] mt-1">
                                         {compartilhadoCom.length === 0
-                                            ? 'Só você edita esta autuação. Compartilhe para um colega fiscal preencher e finalizar junto.'
-                                            : `Editando com ${compartilhadoCom.map(c => c.nome).join(', ')}.`}
+                                            ? 'Só você edita esta autuação. Compartilhe para um colega fiscal preencher e finalizar junto, ou só assinar.'
+                                            : gravada?.modoCompartilhamento === 'assinar'
+                                                ? `Travada para leitura, só a assinatura liberada para ${compartilhadoCom.map(c => c.nome).join(', ')}.`
+                                                : `Editando com ${compartilhadoCom.map(c => c.nome).join(', ')}.`}
                                     </p>
-                                    {!souOAutor && (
+                                    {!souOAutor && souAssinanteApenas && (
+                                        <p className="text-[11px] text-[#9C7A3C] mt-1 font-medium">
+                                            Compartilhada com você por {gravada?.createdByName || 'um colega'} só para você assinar — os demais campos estão travados.
+                                        </p>
+                                    )}
+                                    {!souOAutor && !souAssinanteApenas && (
                                         <p className="text-[11px] text-[#9C7A3C] mt-1 font-medium">
                                             Compartilhada com você por {gravada?.createdByName || 'um colega'} — você edita e finaliza, mas quem apaga é o autor.
                                         </p>
@@ -1056,10 +1100,10 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                             </div>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2 shrink-0">
-                                            <Button type="button" onClick={() => handleGerarAnexo('TERMO DE INTERDIÇÃO')} disabled={isFinalized} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-12 px-5 bg-primary text-white">
+                                            <Button type="button" onClick={() => handleGerarAnexo('TERMO DE INTERDIÇÃO')} disabled={travaEdicaoCompleta} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-12 px-5 bg-primary text-white">
                                                 <Lock className="h-4 w-4" /> Gerar Interdição
                                             </Button>
-                                            <Button type="button" onClick={() => handleGerarAnexo('TERMO DE APREENSÃO')} disabled={isFinalized} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-12 px-5 bg-primary text-white">
+                                            <Button type="button" onClick={() => handleGerarAnexo('TERMO DE APREENSÃO')} disabled={travaEdicaoCompleta} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-12 px-5 bg-primary text-white">
                                                 <PackageX className="h-4 w-4" /> Gerar Apreensão
                                             </Button>
                                         </div>
@@ -1075,7 +1119,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                                 <p className="text-xs text-[#6B6659] mt-1">Gera um Auto de Infração com os mesmos dados do estabelecimento, autoridades e fundamentação, para assinatura própria e exportação em um único PDF.</p>
                                             </div>
                                         </div>
-                                        <Button type="button" onClick={() => handleGerarAnexo('AUTO DE INFRAÇÃO')} disabled={isFinalized} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-12 px-6 bg-primary text-white shrink-0">
+                                        <Button type="button" onClick={() => handleGerarAnexo('AUTO DE INFRAÇÃO')} disabled={travaEdicaoCompleta} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-12 px-6 bg-primary text-white shrink-0">
                                             <FileText className="h-4 w-4" /> Gerar Auto de Infração Vinculado
                                         </Button>
                                     </>
@@ -1088,7 +1132,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                         </div>
                                         <p className="font-serif text-base text-[#262420] pt-2.5">{tipoAnexoAtual} Vinculado <span className="whitespace-nowrap">Nº {anexoMethods.watch('numeroProcesso')}</span></p>
                                     </div>
-                                    {!anexoIsFinalized && !isFinalized && (
+                                    {!anexoIsFinalized && !travaEdicaoCompleta && (
                                         <Button type="button" variant="outline" onClick={handleRemoverAnexo} className="rounded-xl font-black uppercase text-xs tracking-widest gap-2 h-10 px-4 text-rose-600 border-rose-300 shrink-0">
                                             <Trash2 className="h-4 w-4" /> Remover
                                         </Button>
@@ -1120,7 +1164,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                     }}
                                     onRemoveAutoridade={(i) => anexoRemove(i)}
                                     onEditAutoridade={(i, data) => setEditingFiscal({ doc: 'anexo', index: i, data })}
-                                    isFinalized={anexoIsFinalized}
+                                    isFinalized={anexoIsFinalized || souAssinanteApenas}
                                     isGeneratingPdf={isReadOnlyRender}
                                     config={config}
                                     formRef={anexoFormRef}
@@ -1128,13 +1172,14 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                     onRequestSignature={(target) => setSignatureTarget({ doc: 'anexo', ...target })}
                                     showCnpjLookup={false}
                                     livePageBreaks={livePageBreaksAnexo}
+                                    currentUser={profile}
                                 />
                             </FolhaEscalada>
                         </FormProvider>
                     )}
                 </div>
 
-                {!isFinalized ? (
+                {!travaEdicaoCompleta ? (
                     /* QUATRO AÇÕES, MESMA LARGURA — mesmo desenho da barra do
                        roteiro. Antes era uma pílula flutuante no canto, com
                        "Apagar Rascunho" e "Salvar Rascunho" por extenso e a
@@ -1254,9 +1299,10 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                 open={compartilharAberto}
                 onOpenChange={setCompartilharAberto}
                 compartilhadoCom={compartilhadoCom}
-                onConfirmar={async (colegas) => {
+                modo={gravada?.modoCompartilhamento || 'editar'}
+                onConfirmar={async (colegas, modo) => {
                     if (!mainIdRef.current) return;
-                    const { synced } = await compartilharIntimacao(mainIdRef.current, colegas);
+                    const { synced } = await compartilharIntimacao(mainIdRef.current, colegas, modo);
                     // Offline o acesso fica na fila do Firestore e só vale quando
                     // a conexão voltar — dizer "compartilhado" agora faria o fiscal
                     // contar com um colega que ainda não recebeu nada.
@@ -1265,7 +1311,9 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                             ? { title: "Compartilhamento na fila", description: "Sem conexão agora — o colega recebe o acesso assim que o aparelho sincronizar." }
                             : colegas.length === 0
                                 ? { title: "Acesso removido", description: "Esta autuação voltou a ser só sua." }
-                                : { title: "Autuação compartilhada", description: `${colegas.map(c => c.nome).join(', ')} já pode editar e finalizar com você.` }
+                                : modo === 'assinar'
+                                    ? { title: "Compartilhado só para assinatura", description: `${colegas.map(c => c.nome).join(', ')} vê o documento travado, com a própria assinatura liberada.` }
+                                    : { title: "Autuação compartilhada", description: `${colegas.map(c => c.nome).join(', ')} já pode editar e finalizar com você.` }
                     );
                 }}
             />
