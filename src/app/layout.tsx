@@ -25,18 +25,21 @@ export const metadata: Metadata = {
     title: 'Fiscal-X',
   },
   icons: {
-    // Mascote colorido original (fundo branco), com moldura arredondada em
-    // verde institucional padrão (#0E4A44) — testamos versões em traço/preto
-    // e em fundo neon/verde escuro antes desta (ver histórico de conversa),
-    // mas a colorida com moldura clara foi a aprovada. Tamanho real por
-    // resolução; script de geração não versionado. Query ?v= força os
-    // navegadores/PWA a descartar qualquer cópia em cache do ícone antigo.
+    // Logo oficial (public/logo-fiscalx-oficial.jpeg — selo redondo com o
+    // mascote e o texto "Fiscal-X"), redimensionada com ~20% de margem
+    // branca em volta e centralizada em cada resolução — sem essa margem a
+    // máscara circular/arredondada que Android e iOS aplicam por cima do
+    // ícone cortava o anel externo do selo. Query ?v= força os
+    // navegadores/PWA a descartar qualquer cópia em cache do ícone antigo
+    // (um app já instalado no Android só pega o ícone novo se a pessoa
+    // remover e reinstalar o atalho — o sistema grava esse ícone
+    // localmente na instalação).
     icon: [
-      { url: '/app-icon-192.png?v=20260906c', sizes: '192x192', type: 'image/png' },
-      { url: '/app-icon-512.png?v=20260906c', sizes: '512x512', type: 'image/png' },
+      { url: '/app-icon-192.png?v=20261001b', sizes: '192x192', type: 'image/png' },
+      { url: '/app-icon-512.png?v=20261001b', sizes: '512x512', type: 'image/png' },
     ],
-    shortcut: '/favicon.ico?v=20260906c',
-    apple: '/app-icon-180.png?v=20260906c',
+    shortcut: '/favicon.ico?v=20261001b',
+    apple: '/app-icon-180.png?v=20261001b',
   },
 };
 

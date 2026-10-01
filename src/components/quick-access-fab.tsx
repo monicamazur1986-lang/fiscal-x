@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react"
-import { LifeBuoy, X, type LucideIcon } from "lucide-react"
+import { X, Minus, Plus, LifeBuoy, type LucideIcon } from "lucide-react"
 
 import { DASHBOARD_MENU_ITEMS, type DashboardMenuItem } from "@/lib/dashboard-menu-items"
 
@@ -11,11 +11,21 @@ import { DASHBOARD_MENU_ITEMS, type DashboardMenuItem } from "@/lib/dashboard-me
 // ficavam de fora do acesso rápido mesmo já existindo no menu principal.
 const ATALHOS: DashboardMenuItem[] = DASHBOARD_MENU_ITEMS;
 
-const BUTTON_SIZE = 44;
-const RING_GAP = 5;
+// Tamanhos que o fiscal pode escolher pro botão — do mais discreto ao mais
+// fácil de acertar com o dedo em campo. 44 (o antigo tamanho fixo) continua
+// o padrão pra quem nunca ajustou nada. Bolinha redonda — largura e altura
+// são sempre o mesmo valor, sem conta de proporção (já tentamos um formato
+// seguindo a silhueta de um robô; não colou, ver histórico da conversa).
+const SIZE_OPTIONS = [32, 38, 44, 52, 60] as const;
+const DEFAULT_SIZE = 44;
+// Autuação, roteiro, PAS etc. têm uma barra de ações fixa no rodapé — o
+// botão não pode nascer em cima dela. Essa margem mantém a posição inicial
+// (só a inicial; depois de arrastado, a pessoa decide) longe dali.
+const BOTTOM_SAFE_MARGIN = 130;
 const PANEL_W = 248;
 const PANEL_MAX_H = 420;
 const POS_STORAGE_KEY = 'fiscal_x_quick_access_pos';
+const SIZE_STORAGE_KEY = 'fiscal_x_quick_access_size';
 
 interface Janela {
   href: string;
@@ -26,21 +36,21 @@ interface Janela {
 
 type Pos = { x: number; y: number };
 
-function clampPos(x: number, y: number): Pos {
-  const maxX = window.innerWidth - BUTTON_SIZE - 4;
-  const maxY = window.innerHeight - BUTTON_SIZE - 4;
+function clampPos(x: number, y: number, buttonSize: number): Pos {
+  const maxX = window.innerWidth - buttonSize - 4;
+  const maxY = window.innerHeight - buttonSize - 4;
   return { x: Math.min(Math.max(4, x), Math.max(4, maxX)), y: Math.min(Math.max(4, y), Math.max(4, maxY)) };
 }
 
 /** Painel de atalhos ancorado perto do botão, virando de lado quando não cabe. */
-function getPanelStyle(pos: Pos): CSSProperties {
-  const abrirPraEsquerda = pos.x + BUTTON_SIZE + 8 + PANEL_W > window.innerWidth - 8;
+function getPanelStyle(pos: Pos, buttonSize: number): CSSProperties {
+  const abrirPraEsquerda = pos.x + buttonSize + 8 + PANEL_W > window.innerWidth - 8;
   const left = abrirPraEsquerda
     ? Math.max(8, pos.x - PANEL_W - 8)
-    : Math.min(pos.x + BUTTON_SIZE + 8, window.innerWidth - PANEL_W - 8);
+    : Math.min(pos.x + buttonSize + 8, window.innerWidth - PANEL_W - 8);
   const abrirPraCima = pos.y + PANEL_MAX_H > window.innerHeight - 8;
   const top = abrirPraCima
-    ? Math.max(8, pos.y + BUTTON_SIZE - PANEL_MAX_H)
+    ? Math.max(8, pos.y + buttonSize - PANEL_MAX_H)
     : Math.min(pos.y, window.innerHeight - PANEL_MAX_H - 8);
   return { left, top, width: PANEL_W, maxHeight: PANEL_MAX_H };
 }
@@ -65,6 +75,7 @@ function getPanelStyle(pos: Pos): CSSProperties {
  */
 export function QuickAccessFab() {
   const [pos, setPos] = useState<Pos | null>(null);
+  const [size, setSize] = useState(DEFAULT_SIZE);
   const [open, setOpen] = useState(false);
   const [janelas, setJanelas] = useState<Janela[]>([]);
   const offsetCounter = useRef(0);
@@ -77,8 +88,40 @@ export function QuickAccessFab() {
       const saved = localStorage.getItem(POS_STORAGE_KEY);
       if (saved) initial = JSON.parse(saved);
     } catch {}
-    setPos(initial || clampPos(window.innerWidth - 56, window.innerHeight / 2 - BUTTON_SIZE / 2));
+    let savedSize = DEFAULT_SIZE;
+    try {
+      const saved = Number(localStorage.getItem(SIZE_STORAGE_KEY));
+      if (SIZE_OPTIONS.includes(saved as typeof SIZE_OPTIONS[number])) savedSize = saved;
+    } catch {}
+    setSize(savedSize);
+    // Nasce um pouco acima do meio da tela, perto da borda direita, mas
+    // nunca em cima de onde uma barra de ações fixa do sistema costuma
+    // ficar (ver BOTTOM_SAFE_MARGIN) — só vale pra primeira vez; depois que
+    // a pessoa arrasta, a posição salva manda.
+    const yDesejado = window.innerHeight * 0.42 - savedSize / 2;
+    const yMaximo = window.innerHeight - savedSize - BOTTOM_SAFE_MARGIN;
+    setPos(initial || clampPos(window.innerWidth - savedSize - 16, Math.min(yDesejado, yMaximo), savedSize));
   }, []);
+
+  // Ajusta o tamanho do botão por um degrau (pra maior ou pra menor) e
+  // lembra a escolha — mesmo mecanismo de persistência já usado pra posição.
+  // Reencaixa a posição atual na tela com o novo tamanho, pra nunca deixar
+  // o botão maior passando pra fora da borda.
+  const ajustarTamanho = (direcao: 1 | -1) => {
+    setSize((atual) => {
+      const idx = SIZE_OPTIONS.indexOf(atual as typeof SIZE_OPTIONS[number]);
+      const proximoIdx = Math.min(SIZE_OPTIONS.length - 1, Math.max(0, (idx === -1 ? 2 : idx) + direcao));
+      const novoTamanho = SIZE_OPTIONS[proximoIdx];
+      try { localStorage.setItem(SIZE_STORAGE_KEY, String(novoTamanho)); } catch {}
+      setPos((p) => {
+        if (!p) return p;
+        const ajustado = clampPos(p.x, p.y, novoTamanho);
+        try { localStorage.setItem(POS_STORAGE_KEY, JSON.stringify(ajustado)); } catch {}
+        return ajustado;
+      });
+      return novoTamanho;
+    });
+  };
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLButtonElement>) => {
     const rect = buttonRef.current!.getBoundingClientRect();
@@ -91,9 +134,9 @@ export function QuickAccessFab() {
     if (!info) return;
     const dx = e.clientX - info.startX;
     const dy = e.clientY - info.startY;
-    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) info.moved = true;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) info.moved = true;
     if (info.moved) {
-      const next = clampPos(info.origX + dx, info.origY + dy);
+      const next = clampPos(info.origX + dx, info.origY + dy, size);
       info.lastPos = next;
       setPos(next);
     }
@@ -142,13 +185,17 @@ export function QuickAccessFab() {
 
   return (
     <>
-      {/* Anel pontilhado decorativo, girando devagar em torno do botão —
-          pointer-events-none pra não atrapalhar o arraste/clique, que
-          continuam calculados só a partir do próprio botão (pos.x/pos.y). */}
+      {/* Anel pontilhado giratório + brilho pulsante atrás da bolinha —
+          convida a pessoa a tocar e deixa claro que é arrastável. */}
       <div
         aria-hidden
-        style={{ left: pos.x - RING_GAP, top: pos.y - RING_GAP, width: BUTTON_SIZE + RING_GAP * 2, height: BUTTON_SIZE + RING_GAP * 2 }}
-        className="no-print fixed z-[110] pointer-events-none rounded-full border-2 border-dashed border-[#0E4A44]/30 animate-[spin_9s_linear_infinite]"
+        style={{ left: pos.x - 6, top: pos.y - 6, width: size + 12, height: size + 12 }}
+        className="no-print fixed z-[108] pointer-events-none rounded-full border-2 border-dashed border-[#1F7A5C]/40 animate-[spin_12s_linear_infinite]"
+      />
+      <div
+        aria-hidden
+        style={{ left: pos.x - 4, top: pos.y - 4, width: size + 8, height: size + 8 }}
+        className="no-print fixed z-[109] pointer-events-none rounded-full bg-[#1F7A5C]/35 blur-lg animate-pulse"
       />
       <button
         ref={buttonRef}
@@ -160,28 +207,61 @@ export function QuickAccessFab() {
         style={{
           left: pos.x,
           top: pos.y,
-          width: BUTTON_SIZE,
-          height: BUTTON_SIZE,
-          backgroundImage: `linear-gradient(135deg, #16645C, #0B3A35)`,
+          width: size,
+          height: size,
+          background: 'radial-gradient(circle at 30% 28%, #2BA784, #0E4A44 65%, #0B3A35)',
         }}
-        className="no-print fixed z-[111] touch-none select-none rounded-full text-white shadow-lg shadow-black/30 flex items-center justify-center active:scale-95 transition-transform cursor-grab active:cursor-grabbing"
+        className="no-print fixed z-[111] touch-none select-none rounded-full shadow-xl flex items-center justify-center text-white hover:scale-110 active:scale-95 transition-transform cursor-grab active:cursor-grabbing"
       >
-        <LifeBuoy className={`h-5 w-5 absolute transition-all duration-300 ${open ? 'rotate-90 scale-0 opacity-0' : 'rotate-0 scale-100 opacity-100'}`} />
-        <X className={`h-5 w-5 absolute transition-all duration-300 ${open ? 'rotate-0 scale-100 opacity-100' : '-rotate-90 scale-0 opacity-0'}`} />
+        <LifeBuoy
+          className={`absolute transition-all duration-300 ${open ? 'rotate-90 scale-0 opacity-0' : 'rotate-0 scale-100 opacity-100'}`}
+          style={{ width: size * 0.52, height: size * 0.52 }}
+        />
+        <X
+          className={`absolute transition-all duration-300 ${open ? 'rotate-0 scale-100 opacity-100' : '-rotate-90 scale-0 opacity-0'}`}
+          style={{ width: size * 0.46, height: size * 0.46 }}
+        />
       </button>
 
       {open && (
         <>
           <div className="fixed inset-0 z-[109] bg-[#262420]/10 backdrop-blur-[1px]" onClick={() => setOpen(false)} />
           <div
-            style={getPanelStyle(pos)}
+            style={getPanelStyle(pos, size)}
             className="no-print fixed z-[110] flex flex-col bg-[#FCFAF5] border border-[#E4DFD1] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150"
           >
             <div className="flex items-center justify-between gap-2 px-3.5 h-10 shrink-0 border-b border-[#E4DFD1] bg-white/60">
               <span className="text-[10px] font-black uppercase tracking-widest text-[#9C7A3C]">Acesso Rápido</span>
-              <button type="button" onClick={() => setOpen(false)} aria-label="Fechar" className="h-6 w-6 rounded-full flex items-center justify-center text-[#A39D8C] hover:bg-rose-50 hover:text-rose-500 transition-colors">
-                <X className="h-3.5 w-3.5" />
-              </button>
+              <div className="flex items-center gap-1">
+                {/* Ajuste de tamanho do botão — fica junto do painel, não no
+                    próprio botão, porque ali embaixo ele compete com o
+                    arrastar (mesmo gesto de toque) e é fácil de achar sem
+                    querer; aqui é um clique deliberado. */}
+                <button
+                  type="button"
+                  onClick={() => ajustarTamanho(-1)}
+                  disabled={size === SIZE_OPTIONS[0]}
+                  aria-label="Diminuir o botão de atalho"
+                  title="Diminuir"
+                  className="h-6 w-6 rounded-full flex items-center justify-center text-[#6B6659] hover:bg-[#F1EEE4] disabled:opacity-30 transition-colors"
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => ajustarTamanho(1)}
+                  disabled={size === SIZE_OPTIONS[SIZE_OPTIONS.length - 1]}
+                  aria-label="Aumentar o botão de atalho"
+                  title="Aumentar"
+                  className="h-6 w-6 rounded-full flex items-center justify-center text-[#6B6659] hover:bg-[#F1EEE4] disabled:opacity-30 transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+                <span className="w-px h-4 bg-[#E4DFD1] mx-0.5" />
+                <button type="button" onClick={() => setOpen(false)} aria-label="Fechar" className="h-6 w-6 rounded-full flex items-center justify-center text-[#A39D8C] hover:bg-rose-50 hover:text-rose-500 transition-colors">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
             <div className="overflow-y-auto p-2 grid grid-cols-2 gap-1.5">
               {ATALHOS.map((a) => (

@@ -1046,7 +1046,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                             {!hasAnexo ? (
                                 tipoTermoAtual === TIPO_QUE_GERA_INTERDICAO_OU_APREENSAO ? (
                                     <>
-                                        <div className="min-w-0 flex items-start gap-3">
+                                        <div className="w-full min-w-0 flex items-start gap-3">
                                             <div className="h-11 w-11 shrink-0 rounded-full bg-[#E4EEEC] flex items-center justify-center">
                                                 <span className="text-[22px] leading-none" role="img" aria-hidden="true">🔗</span>
                                             </div>
@@ -1066,7 +1066,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                     </>
                                 ) : (
                                     <>
-                                        <div className="min-w-0 flex items-start gap-3">
+                                        <div className="w-full min-w-0 flex items-start gap-3">
                                             <div className="h-11 w-11 shrink-0 rounded-full bg-[#E4EEEC] flex items-center justify-center">
                                                 <span className="text-[22px] leading-none" role="img" aria-hidden="true">🔗</span>
                                             </div>
@@ -1082,7 +1082,7 @@ function FormContent({ defaultValues, intimacaoId }: { defaultValues?: Partial<I
                                 )
                             ) : (
                                 <>
-                                    <div className="min-w-0 flex items-start gap-3">
+                                    <div className="w-full min-w-0 flex items-start gap-3">
                                         <div className="h-11 w-11 shrink-0 rounded-full bg-[#E4EEEC] flex items-center justify-center">
                                             <span className="text-[22px] leading-none" role="img" aria-hidden="true">🔗</span>
                                         </div>

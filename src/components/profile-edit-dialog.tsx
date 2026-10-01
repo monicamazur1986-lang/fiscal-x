@@ -61,7 +61,23 @@ export function ProfileEditDialog({ isOpen, onOpenChange }: ProfileEditDialogPro
 
     setIsUploading(true)
     try {
-      const idToken = await auth.currentUser?.getIdToken();
+      // auth.currentUser pode estar momentaneamente nulo logo após a
+      // navegação (o Firebase ainda restaurando a sessão persistida) —
+      // sem essa espera curta, abrir o perfil direto do Dashboard (atalho
+      // novo na foto) e tentar enviar uma imagem rápido demais caía aqui
+      // achando que a sessão tinha expirado, quando só faltava um instante
+      // pra restaurar. Tenta de novo por até 2s antes de desistir de vez.
+      let user = auth.currentUser;
+      for (let tentativa = 0; !user && tentativa < 4; tentativa++) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        user = auth.currentUser;
+      }
+      if (!user) throw new Error("Sessão expirada. Faça login novamente.");
+
+      // Token em cache pode ter acabado de expirar sem o SDK ainda ter
+      // renovado sozinho — força a renovação se a 1ª tentativa vier vazia,
+      // em vez de desistir na primeira falha.
+      const idToken = await user.getIdToken().catch(() => null) || await user.getIdToken(true).catch(() => null);
       if (!idToken) throw new Error("Sessão expirada. Faça login novamente.");
 
       const formData = new FormData();

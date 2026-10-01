@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, MessageCircleQuestion, Bot } from "lucide-react";
 import { GerarRascunho } from "@/components/gerar-rascunho";
 import { FiscalXChat } from "@/components/fiscal-x-chat";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -23,8 +22,8 @@ export default function RascunhoPage() {
     return (
         <div className="max-w-5xl mx-auto w-full px-4 pt-5 space-y-5">
             <header className="flex items-center gap-3 no-print">
-                <div className="p-2.5 rounded-xl bg-[#0E4A44] text-white shadow-sm shrink-0">
-                    <Bot className="h-5 w-5" />
+                <div className="h-12 w-12 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#0E4A441A' }}>
+                    <span className="text-[26px] leading-none" role="img" aria-hidden="true">🤖</span>
                 </div>
                 <div className="min-w-0">
                     <h1 className="font-serif text-2xl sm:text-3xl text-[#262420] leading-tight">Fiscal AI</h1>
@@ -42,13 +41,13 @@ export default function RascunhoPage() {
                         value="gerar"
                         className="gap-2 rounded-xl px-3 py-2.5 text-[12px] font-black uppercase tracking-wide text-[#6B6659] transition-colors hover:bg-[#F1EEE4] data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-sm"
                     >
-                        <Sparkles className="h-4 w-4" /> Gerar Rascunho
+                        <span role="img" aria-hidden="true">✨</span> Gerar Rascunho
                     </TabsTrigger>
                     <TabsTrigger
                         value="perguntar"
                         className="gap-2 rounded-xl px-3 py-2.5 text-[12px] font-black uppercase tracking-wide text-[#6B6659] transition-colors hover:bg-[#F1EEE4] data-[state=active]:bg-[#0E4A44] data-[state=active]:text-white data-[state=active]:shadow-sm"
                     >
-                        <MessageCircleQuestion className="h-4 w-4" /> Perguntar
+                        <span role="img" aria-hidden="true">❓</span> Perguntar
                     </TabsTrigger>
                 </TabsList>
                 <TabsContent value="gerar">

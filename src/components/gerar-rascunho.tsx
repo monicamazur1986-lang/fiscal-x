@@ -4,18 +4,11 @@ import { useState, useRef, useEffect, useMemo, type Dispatch, type SetStateActio
 import {
   Loader2,
   Check,
-  FileText,
-  Ban,
-  PackageSearch,
-  AlertOctagon,
   Scale,
   BookOpen,
-  Mic,
-  MicOff,
   X,
   FileCheck,
   Wand2,
-  Gavel,
   Copy,
   Trash2,
   Info,
@@ -48,13 +41,13 @@ import type { MatchedArticle } from "@/ai/flows/generate-intimacao-draft"
 
 type ReportType = 'intimação' | 'infração' | 'apreensão' | 'interdição';
 
-// Ícone de cada opção "Geral" — as opções em si (inclusive se "Código
+// Emoji de cada opção "Geral" — as opções em si (inclusive se "Código
 // Municipal" aparece) vêm de getBaseLawOptions, que já sabe que só
 // Prudentópolis tem código municipal cadastrado.
-const lawOptionIcons: Record<string, typeof BookOpen> = {
-  estadual: BookOpen,
-  municipal: Gavel,
-  todas: Scale,
+const lawOptionEmoji: Record<string, string> = {
+  estadual: "📖",
+  municipal: "🏛️",
+  todas: "⚖️",
 };
 
 interface GerarRascunhoProps {
@@ -63,10 +56,10 @@ interface GerarRascunhoProps {
 }
 
 const docTypes = [
-  { id: 'intimação', label: 'Intimação', icon: FileText },
-  { id: 'infração', label: 'Auto de Infração', icon: AlertOctagon },
-  { id: 'apreensão', label: 'Termo de Apreensão', icon: PackageSearch },
-  { id: 'interdição', label: 'Termo de Interdição', icon: Ban },
+  { id: 'intimação', label: 'Intimação', emoji: "🧾" },
+  { id: 'infração', label: 'Auto de Infração', emoji: "⚠️" },
+  { id: 'apreensão', label: 'Termo de Apreensão', emoji: "📦" },
+  { id: 'interdição', label: 'Termo de Interdição', emoji: "🔒" },
 ] as const;
 
 export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRascunhoProps) {
@@ -302,38 +295,20 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
   // abas, porque nomeia as duas — aqui embaixo ele parecia título só desta.
   return (
     <div className="space-y-5 font-sans pb-40 pt-5">
-      <Card className="border border-zinc-100 bg-white shadow-sm rounded-[2rem] overflow-hidden">
+      <Card className="border border-[#F1EEE4] bg-white shadow-sm rounded-[2rem] overflow-hidden">
         <CardContent className="p-5 sm:p-8 space-y-6">
 
-          {/* Documento em destaque: o campo principal da tela */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-semibold text-slate-700">Relato da ocorrência</Label>
-              <div className="flex items-center gap-1.5">
-                <Button type="button" onClick={handleClearRelato} variant="ghost" size="sm" className="h-8 w-8 rounded-lg text-zinc-300 hover:text-rose-500 transition-colors">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-                <Button type="button" onClick={toggleRecording} variant="ghost" size="sm" className={cn("h-8 gap-1.5 px-3 rounded-lg text-xs font-medium transition-all", isRecording ? "bg-red-500 text-white animate-pulse" : "bg-zinc-50 text-zinc-500")}>
-                  {isRecording ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />} {isRecording ? "Parar" : "Ditar por voz"}
-                </Button>
-              </div>
-            </div>
-            <Textarea
-              placeholder="Descreva o que foi encontrado no local..."
-              value={caseDescription}
-              onChange={(e) => {
-                setCaseDescription(e.target.value.toUpperCase());
-                if (error) setError(null);
-              }}
-              className="bg-zinc-50 border border-zinc-200 focus:border-primary/40 focus:bg-white rounded-2xl min-h-[200px] p-5 text-base font-normal leading-relaxed transition-all resize-none focus-visible:ring-0"
-              disabled={isLoading}
-            />
-          </div>
-
-          {/* Tipo de documento + base legal: mesmo formato, lado a lado, exigidos antes de gerar */}
+          {/* Tipo de documento + base legal PRIMEIRO: escolher o contexto antes
+              de escrever o relato, não depois — evita descrever tudo e só
+              então descobrir que falta selecionar algo antes de gerar. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-zinc-500">Finalidade do documento</Label>
+              <Label className="flex items-center gap-2 text-xs font-bold text-[#262420]">
+                <span className="h-6 w-6 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#0E4A441A' }}>
+                  <span className="text-[13px] leading-none" role="img" aria-hidden="true">📝</span>
+                </span>
+                Finalidade do documento
+              </Label>
               <Select value={reportType} onValueChange={(v) => setReportType(v as ReportType)}>
                 <SelectTrigger className="h-11 rounded-xl bg-primary/5 border-primary/30 text-sm font-medium">
                   <SelectValue placeholder="Selecionar tipo..." />
@@ -341,7 +316,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                 <SelectContent>
                   {docTypes.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
-                      <span className="flex items-center gap-2"><t.icon className="h-3.5 w-3.5 text-zinc-500" /> {t.label}</span>
+                      <span className="flex items-center gap-2"><span role="img" aria-hidden="true">{t.emoji}</span> {t.label}</span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -349,7 +324,12 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-zinc-500">Base legal</Label>
+              <Label className="flex items-center gap-2 text-xs font-bold text-[#262420]">
+                <span className="h-6 w-6 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#9C7A3C1A' }}>
+                  <span className="text-[13px] leading-none" role="img" aria-hidden="true">⚖️</span>
+                </span>
+                Base legal
+              </Label>
               {/* Popover em vez de uma div "absolute" solta: o Card ao redor
                   tem overflow-hidden (pros cantos arredondados do rodapé), o
                   que cortava o menu antes de mostrar as últimas opções — o
@@ -359,7 +339,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="flex h-11 w-full items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-3 text-left text-sm font-medium text-zinc-700 transition-colors hover:border-primary/50"
+                    className="flex h-11 w-full items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-3 text-left text-sm font-medium text-[#262420] transition-colors hover:border-primary/50"
                   >
                     <span className="truncate">{legalSelectionSummary}</span>
                     <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', isLegalMenuOpen && 'rotate-180')} />
@@ -367,13 +347,13 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                 </PopoverTrigger>
                 <PopoverContent
                   align="start"
-                  className="w-[var(--radix-popover-trigger-width)] p-2 rounded-xl border-zinc-200 shadow-[0_20px_50px_rgba(0,0,0,0.18)] max-h-[55vh] overflow-y-auto custom-scrollbar overscroll-contain"
+                  className="w-[var(--radix-popover-trigger-width)] p-2 rounded-xl border-[#E4DFD1] shadow-[0_20px_50px_rgba(0,0,0,0.18)] max-h-[55vh] overflow-y-auto custom-scrollbar overscroll-contain"
                 >
                   <div className="space-y-2">
-                    <div className="px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Geral</div>
+                    <div className="px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#6B6659]">Geral</div>
                     {lawOptions.map((opt) => {
                       const selected = lawPreferences.includes(opt.id as LawPreference);
-                      const OptIcon = lawOptionIcons[opt.id] || Scale;
+                      const optEmoji = lawOptionEmoji[opt.id] || "⚖️";
                       return (
                         <button
                           key={opt.id}
@@ -383,11 +363,11 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                           }}
                           className={cn(
                             'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors',
-                            selected ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
+                            selected ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-[#6B6659] hover:border-[#E4DFD1] hover:bg-[#FAF8F3]'
                           )}
                         >
                           <span className="flex items-center gap-2">
-                            <OptIcon className="h-3.5 w-3.5" />
+                            <span role="img" aria-hidden="true">{optEmoji}</span>
                             {opt.label}
                           </span>
                           {selected ? <Check className="h-3.5 w-3.5" /> : null}
@@ -395,9 +375,9 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                       );
                     })}
 
-                    <div className="my-1 h-px bg-zinc-200" />
+                    <div className="my-1 h-px bg-[#E4DFD1]" />
 
-                    <div className="px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Legislação opcional (biblioteca)</div>
+                    <div className="px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#6B6659]">Legislação opcional (biblioteca)</div>
                     <div className="space-y-2 pr-1">
                       {individualLawOptions.map((opt) => {
                         const selected = lawPreferences.includes(opt.id);
@@ -410,12 +390,12 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                             }}
                             className={cn(
                               'flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium transition-colors',
-                              selected ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-zinc-600 hover:border-zinc-200 hover:bg-zinc-50'
+                              selected ? 'border-primary bg-primary/5 text-primary' : 'border-transparent text-[#6B6659] hover:border-[#E4DFD1] hover:bg-[#FAF8F3]'
                             )}
                           >
                             <div className="flex flex-col">
                               <span>{opt.label}</span>
-                              <span className="text-[9px] uppercase text-zinc-500">{opt.group}</span>
+                              <span className="text-[9px] uppercase text-[#6B6659]">{opt.group}</span>
                             </div>
                             {selected ? <Check className="h-3.5 w-3.5" /> : null}
                           </button>
@@ -424,7 +404,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                     </div>
                   </div>
 
-                  <div className="mt-2 pt-2 border-t border-zinc-200 sticky bottom-0 bg-white">
+                  <div className="mt-2 pt-2 border-t border-[#E4DFD1] sticky bottom-0 bg-white">
                     <Button
                       type="button"
                       size="sm"
@@ -437,6 +417,53 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                 </PopoverContent>
               </Popover>
             </div>
+          </div>
+
+          {/* Relato da ocorrência, depois de já saber pra que tipo de
+              documento e com qual base legal ele vai servir. */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-2 text-sm font-bold text-[#262420]">
+                <span className="h-6 w-6 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#1F7A5C1A' }}>
+                  <span className="text-[13px] leading-none" role="img" aria-hidden="true">📋</span>
+                </span>
+                Relato da ocorrência
+              </Label>
+              <Button type="button" onClick={handleClearRelato} variant="ghost" size="sm" aria-label="Apagar relato" className="h-8 w-8 rounded-lg text-[#C9C2AC] hover:text-rose-500 transition-colors">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Botão de ditar bem grande e chamativo de propósito — era
+                pequeno demais antes e passava batido, mesmo sendo um recurso
+                importante em campo (fiscal com as mãos ocupadas). */}
+            <Button
+              type="button"
+              onClick={toggleRecording}
+              className={cn(
+                "w-full h-14 gap-2.5 rounded-2xl text-sm font-bold transition-all border-2",
+                isRecording
+                  ? "bg-rose-500 border-rose-500 text-white shadow-[0_6px_16px_rgba(225,29,72,0.35)]"
+                  : "bg-[#E4EEEC] border-[#1F7A5C]/30 text-[#0E4A44] hover:bg-[#D9E9E4]"
+              )}
+            >
+              <span className="relative flex h-7 w-7 items-center justify-center shrink-0">
+                {isRecording && <span className="absolute inset-0 rounded-full bg-white/50 animate-ping" />}
+                <span className="relative text-[22px] leading-none" role="img" aria-hidden="true">{isRecording ? "⏹️" : "🎙️"}</span>
+              </span>
+              {isRecording ? "Gravando... toque para parar" : "Toque para ditar por voz"}
+            </Button>
+
+            <Textarea
+              placeholder="Descreva o que foi encontrado no local..."
+              value={caseDescription}
+              onChange={(e) => {
+                setCaseDescription(e.target.value.toUpperCase());
+                if (error) setError(null);
+              }}
+              className="bg-[#FAF8F3] border border-[#E4DFD1] focus:border-primary/40 focus:bg-white rounded-2xl min-h-[200px] p-5 text-base font-normal leading-relaxed transition-all resize-none focus-visible:ring-0"
+              disabled={isLoading}
+            />
           </div>
 
           {(reportType === 'apreensão' || reportType === 'interdição') && (
@@ -465,12 +492,12 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
 
           {(draft || isLoading) && (
               <div className="pt-6 space-y-6 animate-in fade-in slide-in-from-bottom-6">
-                  <div className="h-px bg-slate-100 w-full" />
+                  <div className="h-px bg-[#F1EEE4] w-full" />
 
                   {isLoading ? (
-                      <div className="flex flex-col items-center justify-center py-16 gap-3 bg-zinc-50/50 rounded-2xl border border-dashed border-zinc-200">
+                      <div className="flex flex-col items-center justify-center py-16 gap-3 bg-[#FAF8F3]/50 rounded-2xl border border-dashed border-[#E4DFD1]">
                           <Loader2 className="h-8 w-8 animate-spin text-primary/40" />
-                          <p className="text-xs font-medium text-zinc-400 animate-pulse">Redigindo texto técnico...</p>
+                          <p className="text-xs font-medium text-[#A39D8C] animate-pulse">Redigindo texto técnico...</p>
                       </div>
                   ) : (
                       <div className="space-y-5">
@@ -478,14 +505,14 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                               sempre visível, e não escondida atrás de uma
                               falha: às vezes o fiscal já sabe o inciso antes
                               mesmo de tentar. */}
-                          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-zinc-50/70 px-4 py-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#E4DFD1] bg-[#FAF8F3]/70 px-4 py-3">
                             <div className="min-w-0">
-                              <p className="text-xs font-semibold text-slate-700">
+                              <p className="text-xs font-semibold text-[#262420]">
                                 {enquadramentoManual.length > 0
                                   ? `Enquadramento definido por você (${enquadramentoManual.length})`
                                   : "O enquadramento sugerido não está correto?"}
                               </p>
-                              <p className="text-[11px] text-zinc-500 leading-snug mt-0.5">
+                              <p className="text-[11px] text-[#6B6659] leading-snug mt-0.5">
                                 {enquadramentoManual.length > 0
                                   ? "O texto será redigido a partir dos incisos que você escolheu."
                                   : "Escolha o inciso você mesmo — o assistente redige o texto a partir dele."}
@@ -497,7 +524,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => setEnquadramentoManual([])}
-                                  className="h-9 px-3 rounded-lg text-xs font-medium text-zinc-500 hover:text-rose-600 hover:bg-rose-50"
+                                  className="h-9 px-3 rounded-lg text-xs font-medium text-[#6B6659] hover:text-rose-600 hover:bg-rose-50"
                                 >
                                   Voltar ao automático
                                 </Button>
@@ -506,7 +533,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                                 variant="outline"
                                 size="sm"
                                 onClick={() => setIsEscolherAberto(true)}
-                                className="h-9 px-3 rounded-lg text-xs font-medium border-zinc-200 bg-white"
+                                className="h-9 px-3 rounded-lg text-xs font-medium border-[#E4DFD1] bg-white"
                               >
                                 <Scale className="h-3.5 w-3.5 mr-1.5" /> Escolher artigo
                               </Button>
@@ -514,9 +541,9 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                           </div>
 
                           {fundamentacao && (
-                              <div className="bg-slate-900 p-5 rounded-2xl text-white border-l-4 border-l-primary">
+                              <div className="bg-[#0E4A44] p-5 rounded-2xl text-white border-l-4 border-l-[#9C7A3C]">
                                   <div className="flex items-center justify-between mb-1.5">
-                                      <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">Enquadramento detectado</p>
+                                      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/60">Enquadramento detectado</p>
                                       <Badge className={cn("text-[9px] font-medium border-none", engine === 'local' ? "bg-emerald-500/20 text-emerald-400" : "bg-blue-500/20 text-blue-400")}>{engine === 'local' ? "Local" : "Nuvem"}</Badge>
                                   </div>
                                   <p className="text-sm font-medium leading-snug">{fundamentacao}</p>
@@ -526,29 +553,29 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                                               <BookOpen className="h-3.5 w-3.5" /> Conferir e ajustar base legal ({matchedArticles.length})
                                           </button>
                                       </PopoverTrigger>
-                                      <PopoverContent align="start" className="w-[min(28rem,90vw)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto p-0 bg-white border-zinc-200 rounded-xl shadow-xl">
+                                      <PopoverContent align="start" className="w-[min(28rem,90vw)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto p-0 bg-white border-[#E4DFD1] rounded-xl shadow-xl">
                                           <div className="p-4 space-y-3">
-                                              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Base usada na fundamentação</p>
+                                              <p className="text-[10px] font-semibold uppercase tracking-wide text-[#A39D8C]">Base usada na fundamentação</p>
                                               {matchedArticles.length === 0 && (
-                                                  <p className="text-xs text-zinc-400 italic">Nenhum artigo selecionado — busque abaixo pra adicionar.</p>
+                                                  <p className="text-xs text-[#A39D8C] italic">Nenhum artigo selecionado — busque abaixo pra adicionar.</p>
                                               )}
                                               {matchedArticles.map((art) => (
-                                                  <div key={art.id} className="border border-zinc-100 rounded-lg p-3 space-y-1 bg-zinc-50/60 relative">
+                                                  <div key={art.id} className="border border-[#F1EEE4] rounded-lg p-3 space-y-1 bg-[#FAF8F3]/60 relative">
                                                       <button
                                                           type="button"
                                                           onClick={() => removerArtigoFundamentacao(art.id)}
                                                           aria-label={`Remover ${art.label} da fundamentação`}
-                                                          className="absolute right-2 top-2 h-5 w-5 flex items-center justify-center text-zinc-300 hover:text-rose-500 transition-colors"
+                                                          className="absolute right-2 top-2 h-5 w-5 flex items-center justify-center text-[#C9C2AC] hover:text-rose-500 transition-colors"
                                                       >
                                                           <X className="h-3.5 w-3.5" />
                                                       </button>
                                                       <p className="text-[10px] font-semibold uppercase text-primary tracking-wide pr-6">{art.lawTitle}</p>
-                                                      <p className="text-xs font-semibold text-zinc-700">{art.label}</p>
-                                                      <p className="text-xs text-zinc-600 leading-relaxed">{art.texto}</p>
+                                                      <p className="text-xs font-semibold text-[#262420]">{art.label}</p>
+                                                      <p className="text-xs text-[#6B6659] leading-relaxed">{art.texto}</p>
                                                   </div>
                                               ))}
 
-                                              <div className="pt-2 border-t border-zinc-100 space-y-1.5">
+                                              <div className="pt-2 border-t border-[#F1EEE4] space-y-1.5">
                                                   <Input
                                                       value={addArticleQuery}
                                                       onChange={(e) => setAddArticleQuery(e.target.value)}
@@ -557,7 +584,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                                                   />
                                                   {addArticleQuery.trim().length >= 3 && (
                                                       addArticleResults.length === 0 ? (
-                                                          <p className="text-[11px] text-zinc-400 px-1">Nenhum artigo encontrado.</p>
+                                                          <p className="text-[11px] text-[#A39D8C] px-1">Nenhum artigo encontrado.</p>
                                                       ) : (
                                                           <div className="max-h-40 overflow-y-auto space-y-1">
                                                               {addArticleResults.map((a) => (
@@ -565,7 +592,7 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                                                                       key={a.id}
                                                                       type="button"
                                                                       onClick={() => adicionarArtigoFundamentacao(a)}
-                                                                      className="w-full text-left flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded-lg hover:bg-zinc-100 transition-colors"
+                                                                      className="w-full text-left flex items-center justify-between gap-2 text-xs px-2 py-1.5 rounded-lg hover:bg-[#F1EEE4] transition-colors"
                                                                   >
                                                                       <span className="truncate"><strong>{a.label}</strong> — {a.lawTitle}</span>
                                                                       <Plus className="h-3.5 w-3.5 shrink-0 text-primary" />
@@ -581,25 +608,25 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
                               </div>
                           )}
 
-                          <div className="bg-white p-6 sm:p-8 rounded-2xl border border-zinc-200 relative overflow-hidden">
-                              <div className="flex items-center justify-between mb-6 border-b border-zinc-50 pb-3">
-                                  <span className="text-xs font-semibold text-slate-700">Rascunho gerado</span>
+                          <div className="bg-white p-6 sm:p-8 rounded-2xl border border-[#E4DFD1] relative overflow-hidden">
+                              <div className="flex items-center justify-between mb-6 border-b border-[#FAF8F3] pb-3">
+                                  <span className="text-xs font-semibold text-[#262420]">Rascunho gerado</span>
                                   <div className="flex items-center gap-2">
-                                      <Button variant="ghost" size="sm" onClick={handleClearDraft} className="h-8 w-8 rounded-lg text-zinc-300 hover:text-rose-500 hover:bg-rose-50">
+                                      <Button variant="ghost" size="sm" onClick={handleClearDraft} className="h-8 w-8 rounded-lg text-[#C9C2AC] hover:text-rose-500 hover:bg-rose-50">
                                           <Eraser className="h-4 w-4" />
                                       </Button>
-                                      <Button variant="ghost" size="sm" onClick={handleCopyToClipboard} className="h-8 px-3 rounded-lg text-xs font-medium bg-zinc-50 text-zinc-500 hover:bg-zinc-100">
+                                      <Button variant="ghost" size="sm" onClick={handleCopyToClipboard} className="h-8 px-3 rounded-lg text-xs font-medium bg-[#FAF8F3] text-[#6B6659] hover:bg-[#F1EEE4]">
                                           {copied ? <Check className="h-3.5 w-3.5 text-emerald-500 mr-1.5" /> : <Copy className="h-3.5 w-3.5 mr-1.5" />}
                                           {copied ? "Copiado" : "Copiar"}
                                       </Button>
                                   </div>
                               </div>
 
-                              <div className="text-base leading-relaxed font-serif text-justify whitespace-pre-wrap text-slate-800 min-h-[120px]">
+                              <div className="text-base leading-relaxed font-serif text-justify whitespace-pre-wrap text-[#262420] min-h-[120px]">
                                   {isUppercase ? draft.toUpperCase() : draft}
                               </div>
 
-                              <div className="mt-8 pt-5 border-t border-zinc-50">
+                              <div className="mt-8 pt-5 border-t border-[#FAF8F3]">
                                   <Button onClick={handleExport} className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-3 transition-all">
                                       <FileCheck className="h-5 w-5" />
                                       Exportar para o formulário de autuação
@@ -612,22 +639,45 @@ export function GerarRascunho({ caseDescription, setCaseDescription }: GerarRasc
           )}
         </CardContent>
 
-        <CardFooter className="bg-zinc-50/50 p-5 flex flex-col sm:flex-row items-center gap-3 border-t border-zinc-100">
-          <Button onClick={handleResetAll} variant="ghost" className="w-full sm:w-auto text-rose-500 hover:text-rose-600 hover:bg-rose-50 font-medium gap-2 transition-all">
-              <RotateCcw className="h-4 w-4" /> Reiniciar
-          </Button>
+        {/* 3 ícones, nesta ordem: a ação principal primeiro (gerar), depois
+            "tentar de novo" (refazer só o rascunho, mantendo relato/tipo/base
+            legal), e por último a mais destrutiva (apagar tudo) — mesmo
+            padrão de barra de ações do resto do sistema (ícone em cima do
+            rótulo, ordem de risco crescente da esquerda pra direita). */}
+        <CardFooter className="bg-[#FAF8F3]/50 p-5 border-t border-[#F1EEE4]">
+          <div className="grid grid-cols-3 gap-2 w-full">
+            <Button
+                onClick={handleGenerate}
+                disabled={isLoading || !caseDescription.trim() || !reportType || lawPreferences.length === 0 || coolDown > 0}
+                className={cn(
+                    "relative h-16 flex-col gap-1 rounded-2xl font-bold text-[11px] uppercase tracking-wide transition-all",
+                    coolDown > 0 ? "bg-[#E4DFD1] text-[#A39D8C] cursor-not-allowed" : "bg-primary hover:bg-primary/90 text-white shadow-md"
+                )}
+             >
+                {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Wand2 className="h-5 w-5" />}
+                {isLoading ? "Processando..." : "Gerar Rascunho"}
+                {coolDown > 0 && <span className="absolute top-1.5 right-1.5 bg-black/10 px-1.5 py-0.5 rounded-md text-[9px]">{coolDown}s</span>}
+             </Button>
 
-          <Button
-              onClick={handleGenerate}
-              disabled={isLoading || !caseDescription.trim() || !reportType || lawPreferences.length === 0 || coolDown > 0}
-              className={cn(
-                  "flex-1 w-full sm:w-auto h-12 rounded-xl font-semibold gap-2.5 transition-all",
-                  coolDown > 0 ? "bg-zinc-200 text-zinc-400 cursor-not-allowed" : "bg-primary hover:bg-primary/90 text-white"
-              )}
-           >
-              {isLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Processando...</> : <><Wand2 className="h-4 w-4" /> Gerar rascunho</>}
-              {coolDown > 0 && <span className="ml-1 bg-black/10 px-2 py-0.5 rounded-md text-xs">{coolDown}s</span>}
-           </Button>
+            <Button
+                type="button"
+                onClick={handleClearDraft}
+                disabled={!draft}
+                className="h-16 flex-col gap-1 rounded-2xl bg-[#E4DFD1] hover:bg-[#D8D0BC] text-[#262420] font-bold text-[11px] uppercase tracking-wide"
+            >
+                <RotateCcw className="h-5 w-5" />
+                Refazer
+            </Button>
+
+            <Button
+                type="button"
+                onClick={handleResetAll}
+                className="h-16 flex-col gap-1 rounded-2xl bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-[11px] uppercase tracking-wide"
+            >
+                <Trash2 className="h-5 w-5" />
+                Deletar
+            </Button>
+          </div>
         </CardFooter>
       </Card>
 

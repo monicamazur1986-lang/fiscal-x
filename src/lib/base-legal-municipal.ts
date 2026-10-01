@@ -78,9 +78,14 @@ export function porExtensoComUnidade(dias: number, contagem: 'corridos' | 'uteis
 // PRUDENTÓPOLIS — Lei Municipal nº 2.276/2017
 // ---------------------------------------------------------------------------
 
+// Texto do link visível por extenso (não só "protocolo eletrônico") — o
+// documento também é impresso/exportado em PDF, onde um hyperlink só
+// funciona enquanto o endereço aparece escrito; sem isso, quem lê o papel
+// não tem como descobrir pra onde ele apontava.
+const LINK_PROTOCOLO_PRUDENTOPOLIS = "https://prudentopolisprscp.equiplano.com.br:5028/tramitacaoProcesso/#/abertura-processo/entidade/41dd0a3a-f16f-4e8f-9b2a-8832e9191835/28";
 const PROTOCOLO_PRUDENTOPOLIS =
   `protocolada eletronicamente pelo site da Prefeitura de Prudentópolis através do link: ` +
-  `<a href="https://prudentopolisprscp.equiplano.com.br:5028/tramitacaoProcesso/#/abertura-processo/entidade/41dd0a3a-f16f-4e8f-9b2a-8832e9191835/28" target="_blank" style="color: #0000EE; text-decoration: underline; font-weight: bold;">protocolo eletrônico</a> ` +
+  `<a href="${LINK_PROTOCOLO_PRUDENTOPOLIS}" target="_blank" style="color: #0000EE; text-decoration: underline; font-weight: bold;">${LINK_PROTOCOLO_PRUDENTOPOLIS}</a> ` +
   `ou entregue presencialmente no Departamento de Vigilância Sanitária Municipal (Rua São Josafat, nº 835 – Centro)`;
 
 /** Defesa ao auto de infração — Art. 38 (15 dias da ciência), dirigida à

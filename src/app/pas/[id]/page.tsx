@@ -47,6 +47,7 @@ import { renderPasIntoPdf } from "@/lib/generate-pas-pdf"
 import { gerarPdfBlobDeIntimacao } from "@/lib/generate-intimacao-pdf"
 import type { PasPeca, PasFase, PasPecaTipo } from "@/lib/types"
 import {
+  textoDocumentoOrigem,
   textoDespachoInicial,
   textoDespachoInstrucao,
   textoTermoJuntadaInstrucao,
@@ -648,6 +649,47 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       toast({ variant: "destructive", title: "Erro ao adicionar o documento" });
     } finally {
       setIsSalvandoDocComplementar(false);
+    }
+  };
+
+  // Documento de origem inserido À MÃO — cobre o caso de o Auto de Infração
+  // que deu origem a este PAS não ser encontrado (excluído, ou um processo
+  // "de teste" sem vínculo real) ou de ele ter sido lavrado em papel, fora
+  // do sistema. Sem isto, faltando o Auto de Infração digital, a tela só
+  // dizia "não encontrado" e travava ali — sem nenhum jeito de destravar a
+  // Instauração a não ser apagar o processo e recomeçar.
+  const [isOrigemManualOpen, setIsOrigemManualOpen] = useState(false);
+  const [origemManualNumero, setOrigemManualNumero] = useState("");
+  const origemManualArquivoRef = useRef<HTMLInputElement>(null);
+  const [origemManualArquivo, setOrigemManualArquivo] = useState<File | null>(null);
+  const [isSalvandoOrigemManual, setIsSalvandoOrigemManual] = useState(false);
+
+  const handleSalvarOrigemManual = async () => {
+    if (!pas || !origemManualArquivo) {
+      toast({ variant: "destructive", title: "Anexe o arquivo do Auto de Infração" });
+      return;
+    }
+    setIsSalvandoOrigemManual(true);
+    try {
+      const url = await uploadArquivoPas(pas, origemManualArquivo);
+      const numero = origemManualNumero.trim();
+      await adicionarPeca({
+        tipo: 'documento_origem',
+        titulo: `Auto de Infração${numero ? ` nº ${numero}` : ''} (inserido manualmente)`,
+        conteudoHtml: textoDocumentoOrigem(),
+        anexoUrl: url,
+        assinadoForaDoSistema: true,
+      });
+      await limparEncaminhamento();
+      setIsOrigemManualOpen(false);
+      setOrigemManualNumero("");
+      setOrigemManualArquivo(null);
+      toast({ title: "Documento de origem inserido" });
+    } catch (e) {
+      console.error('Erro ao inserir manualmente o documento de origem do PAS:', e);
+      toast({ variant: "destructive", title: "Erro ao inserir o documento" });
+    } finally {
+      setIsSalvandoOrigemManual(false);
     }
   };
 
@@ -1534,7 +1576,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
               type="button"
               onClick={() => { setNovoNumero(pas.numeroProcesso); setIsEditarNumeroOpen(true); }}
               title="Editar número do processo"
-              className="h-9 px-3 rounded-md flex items-center gap-1.5 border border-[#0E4A44]/30 bg-white text-[#0E4A44] hover:bg-[#0E4A44] hover:text-white hover:border-[#0E4A44] transition-colors text-xs font-semibold shrink-0"
+              className="h-9 px-3 rounded-xl flex items-center gap-1.5 border border-[#0E4A44]/30 bg-white text-[#0E4A44] hover:bg-[#0E4A44] hover:text-white hover:border-[#0E4A44] transition-colors text-xs font-semibold shrink-0"
             >
               <Pencil className="h-3.5 w-3.5" /> Editar nº
             </button>
@@ -1545,7 +1587,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                     type="button"
                     title="Excluir processo"
                     aria-label="Excluir processo"
-                    className="h-10 w-10 rounded-md flex items-center justify-center border border-[#E4DFD1] bg-white text-[#A39D8C] hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-colors shrink-0"
+                    className="h-10 w-10 rounded-xl flex items-center justify-center border border-[#E4DFD1] bg-white text-[#A39D8C] hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-colors shrink-0"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -1624,9 +1666,14 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
 
 
         {/* Ações da fase atual */}
-        <div className="rounded-lg border border-[#E4DFD1] bg-white p-5 space-y-4">
+        <div className="rounded-2xl border border-[#E4DFD1] bg-white p-5 space-y-4 shadow-sm">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Próxima ação</h2>
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#9C7A3C1A' }}>
+                <span className="text-[14px] leading-none" role="img" aria-hidden="true">🎯</span>
+              </div>
+              <h2 className="text-xs font-black uppercase tracking-wide text-[#9C7A3C]">Próxima ação</h2>
+            </div>
             <div className="flex items-center gap-3">
               {/* Escape hatch pra quando o processo ficou preso numa fase sem
                   as peças que a abriram (excluídas por engano) — muda só qual
@@ -1699,7 +1746,14 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                         </Button>
                       </div>
                     ) : (
-                      <p className="text-xs text-[#A39D8C] mt-1">Auto de Infração de origem não encontrado.</p>
+                      <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3 space-y-2">
+                        <p className="text-xs text-amber-900">
+                          Não foi possível localizar o Auto de Infração de origem deste processo — pode ter sido excluído, ou este PAS foi criado sem um vínculo digital válido. Se o Auto é em papel (fora do sistema), insira o arquivo escaneado manualmente para destravar a Instauração.
+                        </p>
+                        <Button size="sm" variant="outline" onClick={() => setIsOrigemManualOpen(true)} className="rounded-xl gap-1.5 border-amber-300 bg-white text-amber-900 hover:bg-amber-100">
+                          <Paperclip className="h-3.5 w-3.5" /> Inserir manualmente
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1778,11 +1832,11 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                           relatório já está pronto e só entra como anexo — não
                           precisa "preencher" nada pra anexar, nem que seja só
                           uma frase de fachada pra passar da validação. */}
-                      <div className="inline-flex items-center gap-1 bg-[#F5F2EA] rounded-lg p-1">
+                      <div className="inline-flex items-center gap-1 bg-[#F5F2EA] rounded-xl p-1">
                         <button
                           type="button"
                           onClick={() => setModoRelatorio('sistema')}
-                          className={cn("px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-colors", modoRelatorio === 'sistema' ? "bg-white text-[#0E4A44] shadow-sm" : "text-[#A39D8C] hover:text-[#6B6659]")}
+                          className={cn("px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wide transition-colors", modoRelatorio === 'sistema' ? "bg-white text-[#0E4A44] shadow-sm" : "text-[#A39D8C] hover:text-[#6B6659]")}
                         >
                           Redigir no sistema
                         </button>
@@ -1802,14 +1856,14 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                             setProvasSelecionadas([]);
                             setProvasRascunho([]);
                           }}
-                          className={cn("px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-colors", modoRelatorio === 'anexo' ? "bg-white text-[#0E4A44] shadow-sm" : "text-[#A39D8C] hover:text-[#6B6659]")}
+                          className={cn("px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wide transition-colors", modoRelatorio === 'anexo' ? "bg-white text-[#0E4A44] shadow-sm" : "text-[#A39D8C] hover:text-[#6B6659]")}
                         >
                           Já pronto (anexar PDF)
                         </button>
                       </div>
 
                       {modoRelatorio === 'anexo' ? (
-                        <p className="text-xs text-[#6B6659] bg-[#F5F2EA] rounded-md px-3 py-2.5">
+                        <p className="text-xs text-[#6B6659] bg-[#F5F2EA] rounded-xl px-3 py-2.5">
                           Nada pra escrever aqui. Clique no botão abaixo — o campo pra escolher o arquivo do relatório pronto abre na tela seguinte, junto com a assinatura.
                         </p>
                       ) : (
@@ -1820,7 +1874,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                               o que a IA usa e o que ela NÃO faz juntos, mesmo
                               formato do box equivalente do Julgamento — em vez de
                               duas caixas de texto competindo pela mesma leitura. */}
-                          <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3 flex items-start justify-between gap-3">
+                          <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3 flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <p className="text-xs font-bold text-violet-900">Redigir com IA</p>
                               <p className="text-[11px] text-violet-800/80 leading-snug mt-0.5">
@@ -1861,7 +1915,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                                 Storage na hora da inserção (handleImagemRelatorio),
                                 não em base64 — o mesmo cuidado já tomado nos outros
                                 anexos do PAS. */}
-                            <div className="rounded-md border border-[#E4DFD1] overflow-hidden">
+                            <div className="rounded-xl border border-[#E4DFD1] overflow-hidden">
                               <DocfacilEditor
                                 defaultValue={fatos}
                                 forceContent={fatos}
@@ -1920,7 +1974,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                                 <button type="button" onClick={() => setProvasSelecionadas(prev => prev.filter((_, idx) => idx !== i))} aria-label={`Remover ${p.nome}`} className="p-1 -m-0.5 rounded hover:bg-white/60"><X className="h-3 w-3 text-[#A39D8C] hover:text-rose-500" /></button>
                               </span>
                             ))}
-                            <Button type="button" variant="outline" size="sm" onClick={() => provasInputRef.current?.click()} className="h-7 rounded-md text-[11px] gap-1"><Paperclip className="h-3 w-3" /> Anexar arquivo</Button>
+                            <Button type="button" variant="outline" size="sm" onClick={() => provasInputRef.current?.click()} className="h-7 rounded-xl text-[11px] gap-1"><Paperclip className="h-3 w-3" /> Anexar arquivo</Button>
                           </div>
                         </div>
                       )}
@@ -1935,7 +1989,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                             tablet — guarda o texto e as provas já anexadas
                             sem virar peça de verdade ainda. */}
                         {modoRelatorio === 'sistema' && (
-                          <Button type="button" variant="outline" onClick={handleSalvarRascunhoRelatorio} disabled={isSalvandoRelatorio || isSalvandoRascunhoRelatorio} className="rounded-md gap-1.5 text-[#6B6659]">
+                          <Button type="button" variant="outline" onClick={handleSalvarRascunhoRelatorio} disabled={isSalvandoRelatorio || isSalvandoRascunhoRelatorio} className="rounded-xl gap-1.5 text-[#6B6659]">
                             {isSalvandoRascunhoRelatorio ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Salvar rascunho
                           </Button>
                         )}
@@ -1959,9 +2013,9 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                       <p className="text-xs text-[#A39D8C] mt-1">Só dá pra registrar depois do despacho de instrução (é ele que define o prazo).</p>
                     ) : (
                       <div className="flex flex-wrap items-center gap-2 mt-2">
-                        <Button onClick={() => setIsDefesaDialogOpen(true)} variant="outline" className="rounded-md gap-1.5"><Paperclip className="h-4 w-4" /> Registrar defesa recebida</Button>
+                        <Button onClick={() => setIsDefesaDialogOpen(true)} variant="outline" className="rounded-xl gap-1.5"><Paperclip className="h-4 w-4" /> Registrar defesa recebida</Button>
                         {prazoVencido && (
-                          <Button onClick={handleGerarTermoInformacao} variant="outline" className="rounded-md gap-1.5 text-amber-700 border-amber-200 bg-amber-50 hover:bg-amber-100">
+                          <Button onClick={handleGerarTermoInformacao} variant="outline" className="rounded-xl gap-1.5 text-amber-700 border-amber-200 bg-amber-50 hover:bg-amber-100">
                             <AlertTriangle className="h-4 w-4" /> Gerar Termo de Informação (sem defesa)
                           </Button>
                         )}
@@ -1997,9 +2051,12 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
             redigir a fundamentação pode começar a qualquer momento, do
             mesmo jeito que o Relatório Técnico já funciona. */}
         {pas.fase !== 'arquivamento' && (
-        <div className="rounded-lg border border-[#E4DFD1] bg-white p-5 space-y-4">
+        <div className="rounded-2xl border border-[#E4DFD1] bg-white p-5 space-y-4 shadow-sm">
           <div className="flex items-center gap-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Julgamento</h2>
+            <div className="h-7 w-7 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#9C7A3C1A' }}>
+              <span className="text-[14px] leading-none" role="img" aria-hidden="true">⚖️</span>
+            </div>
+            <h2 className="text-xs font-black uppercase tracking-wide text-[#9C7A3C]">Julgamento</h2>
             <PasDica chave="julgamento" />
           </div>
 
@@ -2019,30 +2076,30 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                       dentro, ou a decisão já foi proferida fora do sistema e
                       só entra como anexo — sem precisar digitar nada nos
                       campos abaixo só pra passar da validação. */}
-                  <div className="inline-flex items-center gap-1 bg-[#F5F2EA] rounded-lg p-1">
+                  <div className="inline-flex items-center gap-1 bg-[#F5F2EA] rounded-xl p-1">
                     <button
                       type="button"
                       onClick={() => setModoJulgamento('sistema')}
-                      className={cn("px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-colors", modoJulgamento === 'sistema' ? "bg-white text-[#0E4A44] shadow-sm" : "text-[#A39D8C] hover:text-[#6B6659]")}
+                      className={cn("px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wide transition-colors", modoJulgamento === 'sistema' ? "bg-white text-[#0E4A44] shadow-sm" : "text-[#A39D8C] hover:text-[#6B6659]")}
                     >
                       Redigir no sistema
                     </button>
                     <button
                       type="button"
                       onClick={() => setModoJulgamento('anexo')}
-                      className={cn("px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-colors", modoJulgamento === 'anexo' ? "bg-white text-[#0E4A44] shadow-sm" : "text-[#A39D8C] hover:text-[#6B6659]")}
+                      className={cn("px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wide transition-colors", modoJulgamento === 'anexo' ? "bg-white text-[#0E4A44] shadow-sm" : "text-[#A39D8C] hover:text-[#6B6659]")}
                     >
                       Já pronto (anexar PDF)
                     </button>
                   </div>
 
                   {modoJulgamento === 'anexo' ? (
-                    <p className="text-xs text-[#6B6659] bg-[#F5F2EA] rounded-md px-3 py-2.5">
+                    <p className="text-xs text-[#6B6659] bg-[#F5F2EA] rounded-xl px-3 py-2.5">
                       Nada pra escrever aqui. Clique no botão abaixo — o campo pra escolher o arquivo do julgamento pronto abre na tela seguinte, junto com a assinatura.
                     </p>
                   ) : (
                     <>
-                      <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3 flex items-start justify-between gap-3">
+                      <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3 flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-xs font-bold text-violet-900">Rascunho da decisão com IA</p>
                           <p className="text-[11px] text-violet-800/80 leading-snug mt-0.5">
@@ -2062,11 +2119,11 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs text-[#6B6659]">Fundamentação</Label>
-                        <Textarea value={julgamentoFundamentacao} onChange={(e) => setJulgamentoFundamentacao(e.target.value)} rows={5} placeholder="Análise dos fatos, das provas e do enquadramento legal..." className="rounded-md border-[#E4DFD1] resize-none" />
+                        <Textarea value={julgamentoFundamentacao} onChange={(e) => setJulgamentoFundamentacao(e.target.value)} rows={5} placeholder="Análise dos fatos, das provas e do enquadramento legal..." className="rounded-xl border-[#E4DFD1] resize-none" />
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs text-[#6B6659]">Decisão</Label>
-                        <Textarea value={julgamentoDecisao} onChange={(e) => setJulgamentoDecisao(e.target.value)} rows={3} placeholder="Procedência/improcedência e sanção aplicada..." className="rounded-md border-[#E4DFD1] resize-none" />
+                        <Textarea value={julgamentoDecisao} onChange={(e) => setJulgamentoDecisao(e.target.value)} rows={3} placeholder="Procedência/improcedência e sanção aplicada..." className="rounded-xl border-[#E4DFD1] resize-none" />
                       </div>
                     </>
                   )}
@@ -2093,16 +2150,16 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
               {!temTip && (
                 tipAutuacao ? (
                   isGestor && (
-                    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3 space-y-2">
+                    <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3 space-y-2">
                       <p className="text-xs text-amber-900">
                         TIP nº {tipAutuacao.numeroProcesso} criado em Autuações, ainda pendente de assinatura.
                         Complete e assine lá, depois volte aqui pra anexar aos autos.
                       </p>
                       <div className="flex flex-wrap gap-2">
-                        <Button size="sm" variant="outline" onClick={() => router.push(`/intimacoes/${tipAutuacao.id}`)} className="rounded-md gap-1.5 border-amber-300 bg-white text-amber-900 hover:bg-amber-100">
+                        <Button size="sm" variant="outline" onClick={() => router.push(`/intimacoes/${tipAutuacao.id}`)} className="rounded-xl gap-1.5 border-amber-300 bg-white text-amber-900 hover:bg-amber-100">
                           <ExternalLink className="h-3.5 w-3.5" /> Abrir para assinar
                         </Button>
-                        <Button size="sm" onClick={handleAnexarTip} disabled={isAnexandoTip} className="rounded-md gap-1.5 bg-[#0E4A44] hover:bg-[#0B3A35]">
+                        <Button size="sm" onClick={handleAnexarTip} disabled={isAnexandoTip} className="rounded-xl gap-1.5 bg-[#0E4A44] hover:bg-[#0B3A35]">
                           {isAnexandoTip ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />} Anexar aos autos
                         </Button>
                       </div>
@@ -2121,7 +2178,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
 
           {temTip && isGestor && (
             <div className="pt-4 border-t border-[#F1EEE4]">
-              <Button type="button" variant="outline" onClick={handleArquivarProcesso} disabled={isArquivando} className="rounded-md gap-1.5">
+              <Button type="button" variant="outline" onClick={handleArquivarProcesso} disabled={isArquivando} className="rounded-xl gap-1.5">
                 {isArquivando ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Arquivar Processo
               </Button>
             </div>
@@ -2139,7 +2196,12 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
         {/* Linha do tempo das peças */}
         <div className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Autos do processo</h2>
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#9C7A3C1A' }}>
+                <span className="text-[14px] leading-none" role="img" aria-hidden="true">📁</span>
+              </div>
+              <h2 className="text-xs font-black uppercase tracking-wide text-[#9C7A3C]">Autos do processo</h2>
+            </div>
             {/* UMA ação à vista, o resto atrás de um menu.
 
                 Eram até seis botões iguais em fileira — "Processo Completo"
@@ -2160,7 +2222,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                   um ofício recebido no Julgamento ou na fase Recursal) e os
                   autos precisam poder registrar isso sem esperar o processo
                   "voltar" pra Instrução. */}
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsDocComplementarOpen(true)} className="h-9 rounded-lg gap-1.5 text-xs">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsDocComplementarOpen(true)} className="h-9 rounded-xl gap-1.5 text-xs">
                 <Paperclip className="h-3.5 w-3.5" /> Adicionar documento
               </Button>
               {pecas.length > 0 && (
@@ -2169,7 +2231,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                   size="sm"
                   onClick={handleBaixarProcessoCompleto}
                   disabled={isBaixandoPdf}
-                  className="h-9 rounded-lg gap-2 text-xs font-bold bg-[#0E4A44] hover:bg-[#0B3A35]"
+                  className="h-9 rounded-xl gap-2 text-xs font-bold bg-[#0E4A44] hover:bg-[#0B3A35]"
                 >
                   {isBaixandoPdf && nomeArquivoBaixar === "Processo Completo" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
                   Baixar processo
@@ -2177,7 +2239,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
               )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button type="button" variant="outline" size="sm" className="h-9 w-9 rounded-lg p-0 shrink-0" title="Outros downloads">
+                  <Button type="button" variant="outline" size="sm" className="h-9 w-9 rounded-xl p-0 shrink-0" title="Outros downloads">
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -2211,10 +2273,31 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                 variant="outline"
                 onClick={handleAnexarDocumentosOrigem}
                 disabled={isAnexandoOrigem}
-                className="h-8 rounded-lg text-xs shrink-0 border-amber-300 bg-white text-amber-800 hover:bg-amber-100"
+                className="h-8 rounded-xl text-xs shrink-0 border-amber-300 bg-white text-amber-800 hover:bg-amber-100"
               >
                 {isAnexandoOrigem ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Paperclip className="h-3.5 w-3.5 mr-1.5" />}
                 Anexar documento de origem
+              </Button>
+            </div>
+          )}
+          {/* Mesmo aviso do passo 1 da Instauração (ver acima), repetido
+              aqui porque um processo pode chegar a fases mais adiante sem o
+              documento de origem (ex.: aberto antes deste passo existir) —
+              sem isso, faltando o Auto de Infração digital nesta fase, a
+              tela não dizia nada e não dava nenhum jeito de destravar. */}
+          {pas.fase !== 'instauracao' && !autoInfracao && !temDocumentoOrigem && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <p className="text-xs text-amber-800">
+                O Auto de Infração de origem não foi encontrado (excluído, ou processo sem vínculo digital). Se ele existe em papel, insira o arquivo escaneado manualmente.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setIsOrigemManualOpen(true)}
+                className="h-8 rounded-xl text-xs shrink-0 border-amber-300 bg-white text-amber-800 hover:bg-amber-100"
+              >
+                <Paperclip className="h-3.5 w-3.5 mr-1.5" /> Inserir manualmente
               </Button>
             </div>
           )}
@@ -2236,7 +2319,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
               {etapasParaDownload.map((etapa) => {
                 const cor = CORES_ETAPA[etapa.key] || CORES_ETAPA.posTip;
                 return (
-                <div key={etapa.key} className="rounded-lg border border-[#E4DFD1] bg-white overflow-hidden">
+                <div key={etapa.key} className="rounded-2xl border border-[#E4DFD1] bg-white overflow-hidden shadow-sm">
                   <div className={cn("flex items-center justify-between gap-2 px-4 py-2", cor.fundo)}>
                     <div className="flex items-center gap-2 min-w-0">
                       <span className={cn("h-3 w-1 rounded-full shrink-0", cor.barra)} />
@@ -2249,7 +2332,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                       onClick={() => iniciarDownload(etapa.pecas, etapa.label)}
                       title={`Baixar as peças de ${cor.rotulo}`}
                       aria-label={`Baixar as peças de ${cor.rotulo}`}
-                      className="shrink-0 h-10 w-10 rounded-lg flex items-center justify-center text-[#6B6659] hover:bg-white/70 transition-colors disabled:opacity-40"
+                      className="shrink-0 h-10 w-10 rounded-xl flex items-center justify-center text-[#6B6659] hover:bg-white/70 transition-colors disabled:opacity-40"
                     >
                       <FileDown className="h-4 w-4" />
                     </button>
@@ -2292,7 +2375,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
                         title="Abrir o documento anexado"
-                        className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC] hover:border-[#0E4A44]/40 transition-colors shrink-0"
+                        className="h-10 w-10 rounded-xl flex items-center justify-center border border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC] hover:border-[#0E4A44]/40 transition-colors shrink-0"
                       >
                         <Eye className="h-5 w-5" />
                       </a>
@@ -2303,7 +2386,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPecaEmLeitura(peca); }}
                           title="Visualizar esta peça como documento"
                           aria-label="Visualizar esta peça como documento"
-                          className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-[#6B6659] hover:bg-[#F5F2EA] hover:border-[#0E4A44]/30 transition-colors shrink-0"
+                          className="h-10 w-10 rounded-xl flex items-center justify-center border border-[#E4DFD1] bg-white text-[#6B6659] hover:bg-[#F5F2EA] hover:border-[#0E4A44]/30 transition-colors shrink-0"
                         >
                           <Eye className="h-5 w-5" />
                         </button>
@@ -2313,7 +2396,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                           disabled={isBaixandoPdf}
                           title="Baixar PDF desta peça"
                           aria-label="Baixar PDF desta peça"
-                          className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC] hover:border-[#0E4A44]/40 transition-colors shrink-0 disabled:opacity-50"
+                          className="h-10 w-10 rounded-xl flex items-center justify-center border border-[#E4DFD1] bg-white text-[#0E4A44] hover:bg-[#E4EEEC] hover:border-[#0E4A44]/40 transition-colors shrink-0 disabled:opacity-50"
                         >
                           {isBaixandoPdf && pecasParaBaixar?.length === 1 && pecasParaBaixar[0].id === peca.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <FileDown className="h-5 w-5" />}
                         </button>
@@ -2325,7 +2408,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPecaParaExcluir(peca); }}
                         title="Excluir esta peça dos autos"
                         aria-label="Excluir esta peça dos autos"
-                        className="h-10 w-10 rounded-lg flex items-center justify-center border border-[#E4DFD1] bg-white text-rose-500 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-colors shrink-0"
+                        className="h-10 w-10 rounded-xl flex items-center justify-center border border-[#E4DFD1] bg-white text-rose-500 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-colors shrink-0"
                       >
                         <Trash2 className="h-5 w-5" />
                       </button>
@@ -2380,23 +2463,23 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase text-[#6B6659]">Data de recebimento</Label>
-              <Input type="date" value={defesaData} onChange={(e) => setDefesaData(e.target.value)} className="h-10 rounded-md border-[#E4DFD1]" />
+              <Input type="date" value={defesaData} onChange={(e) => setDefesaData(e.target.value)} className="h-10 rounded-xl border-[#E4DFD1]" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase text-[#6B6659]">Nº de protocolo (opcional)</Label>
-              <Input value={defesaProtocolo} onChange={(e) => setDefesaProtocolo(e.target.value)} placeholder="Ex.: 123/2026" className="h-10 rounded-md border-[#E4DFD1]" />
+              <Input value={defesaProtocolo} onChange={(e) => setDefesaProtocolo(e.target.value)} placeholder="Ex.: 123/2026" className="h-10 rounded-xl border-[#E4DFD1]" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase text-[#6B6659]">Arquivo da defesa</Label>
               <input ref={defesaArquivoRef} type="file" className="hidden" onChange={(e) => setDefesaArquivo(e.target.files?.[0] || null)} />
-              <Button type="button" variant="outline" onClick={() => defesaArquivoRef.current?.click()} className="w-full h-10 rounded-md justify-start gap-2 text-[#6B6659]">
+              <Button type="button" variant="outline" onClick={() => defesaArquivoRef.current?.click()} className="w-full h-10 rounded-xl justify-start gap-2 text-[#6B6659]">
                 <Paperclip className="h-4 w-4" /> {defesaArquivo ? defesaArquivo.name : "Escolher arquivo"}
               </Button>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDefesaDialogOpen(false)} className="rounded-md">Cancelar</Button>
-            <Button onClick={handleRegistrarDefesa} disabled={isRegistrandoDefesa} className="rounded-md bg-[#0E4A44] hover:bg-[#0B3A35]">
+            <Button variant="outline" onClick={() => setIsDefesaDialogOpen(false)} className="rounded-xl">Cancelar</Button>
+            <Button onClick={handleRegistrarDefesa} disabled={isRegistrandoDefesa} className="rounded-xl bg-[#0E4A44] hover:bg-[#0B3A35]">
               {isRegistrandoDefesa ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Registrar
             </Button>
           </DialogFooter>
@@ -2443,16 +2526,16 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
           </DialogHeader>
           <div className="py-2 space-y-2">
             <Label className="text-xs font-semibold uppercase text-[#6B6659]">Número</Label>
-            <Input value={novoNumero} onChange={(e) => setNovoNumero(e.target.value)} className="h-10 rounded-md border-[#E4DFD1]" />
+            <Input value={novoNumero} onChange={(e) => setNovoNumero(e.target.value)} className="h-10 rounded-xl border-[#E4DFD1]" />
             {novoNumero.trim() && novoNumero.trim() !== pas.numeroProcesso && pecasComNumeroAtual > 0 && (
-              <p className="text-[11px] text-amber-700 bg-amber-50 rounded-md px-2.5 py-2 leading-snug">
+              <p className="text-[11px] text-amber-700 bg-amber-50 rounded-xl px-2.5 py-2 leading-snug">
                 O número atual ({pas.numeroProcesso}) aparece no texto de {pecasComNumeroAtual} {pecasComNumeroAtual === 1 ? 'peça já lavrada' : 'peças já lavradas'} — ao salvar, essas peças também são corrigidas.
               </p>
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditarNumeroOpen(false)} className="rounded-md">Cancelar</Button>
-            <Button onClick={handleSalvarNumero} disabled={isSalvandoNumero || !novoNumero.trim()} className="rounded-md bg-[#0E4A44] hover:bg-[#0B3A35]">
+            <Button variant="outline" onClick={() => setIsEditarNumeroOpen(false)} className="rounded-xl">Cancelar</Button>
+            <Button onClick={handleSalvarNumero} disabled={isSalvandoNumero || !novoNumero.trim()} className="rounded-xl bg-[#0E4A44] hover:bg-[#0B3A35]">
               {isSalvandoNumero ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Salvar
             </Button>
           </DialogFooter>
@@ -2478,7 +2561,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase text-[#6B6659]">O que é este documento?</Label>
-              <Textarea value={docComplementarDescricao} onChange={(e) => setDocComplementarDescricao(e.target.value)} rows={3} placeholder="Ex.: Decisão judicial concedendo liminar para levantamento da interdição" className="rounded-md border-[#E4DFD1] resize-none" />
+              <Textarea value={docComplementarDescricao} onChange={(e) => setDocComplementarDescricao(e.target.value)} rows={3} placeholder="Ex.: Decisão judicial concedendo liminar para levantamento da interdição" className="rounded-xl border-[#E4DFD1] resize-none" />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase text-[#6B6659]">Arquivo</Label>
@@ -2487,25 +2570,70 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                 // Nome + tamanho + um jeito de tirar sem precisar escolher
                 // outro arquivo por cima — antes, a única forma de "desistir"
                 // de um arquivo era substituí-lo por outro.
-                <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-[#E4DFD1] bg-white">
+                <div className="flex items-center gap-2 h-10 px-3 rounded-xl border border-[#E4DFD1] bg-white">
                   <Paperclip className="h-4 w-4 text-[#6B6659] shrink-0" />
                   <span className="flex-1 text-sm text-[#262420] truncate">{docComplementarArquivo.name}</span>
                   <span className="text-[11px] text-[#A39D8C] shrink-0 tabular-nums">{Math.round(docComplementarArquivo.size / 1024)} KB</span>
-                  <button type="button" onClick={() => setDocComplementarArquivo(null)} title="Remover arquivo" aria-label="Remover arquivo" className="shrink-0 h-9 w-9 -mr-1.5 flex items-center justify-center rounded-md hover:bg-[#F5F2EA]">
+                  <button type="button" onClick={() => setDocComplementarArquivo(null)} title="Remover arquivo" aria-label="Remover arquivo" className="shrink-0 h-9 w-9 -mr-1.5 flex items-center justify-center rounded-xl hover:bg-[#F5F2EA]">
                     <X className="h-4 w-4 text-[#A39D8C] hover:text-rose-500" />
                   </button>
                 </div>
               ) : (
-                <Button type="button" variant="outline" onClick={() => docComplementarArquivoRef.current?.click()} className="w-full h-10 rounded-md justify-start gap-2 text-[#6B6659]">
+                <Button type="button" variant="outline" onClick={() => docComplementarArquivoRef.current?.click()} className="w-full h-10 rounded-xl justify-start gap-2 text-[#6B6659]">
                   <Paperclip className="h-4 w-4" /> Escolher arquivo
                 </Button>
               )}
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDocComplementarOpen(false)} className="rounded-md">Cancelar</Button>
-            <Button onClick={handleSalvarDocComplementar} disabled={isSalvandoDocComplementar} className="rounded-md bg-[#0E4A44] hover:bg-[#0B3A35]">
+            <Button variant="outline" onClick={() => setIsDocComplementarOpen(false)} className="rounded-xl">Cancelar</Button>
+            <Button onClick={handleSalvarDocComplementar} disabled={isSalvandoDocComplementar} className="rounded-xl bg-[#0E4A44] hover:bg-[#0B3A35]">
               {isSalvandoDocComplementar ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Adicionar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isOrigemManualOpen}
+        onOpenChange={(open) => {
+          setIsOrigemManualOpen(open);
+          if (!open) { setOrigemManualNumero(""); setOrigemManualArquivo(null); }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-serif">Inserir Auto de Infração manualmente</DialogTitle>
+            <DialogDescription>Use quando o Auto de Infração que deu origem a este PAS não existe no sistema (foi excluído) ou foi lavrado em papel. Anexe o arquivo escaneado — ele entra nos autos como o documento de origem, no lugar da busca automática.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase text-[#6B6659]">Número do Auto de Infração (opcional)</Label>
+              <Input value={origemManualNumero} onChange={(e) => setOrigemManualNumero(e.target.value)} placeholder="Ex.: 0012/2026" className="rounded-xl border-[#E4DFD1]" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase text-[#6B6659]">Arquivo (foto ou PDF do documento)</Label>
+              <input ref={origemManualArquivoRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => setOrigemManualArquivo(e.target.files?.[0] || null)} />
+              {origemManualArquivo ? (
+                <div className="flex items-center gap-2 h-10 px-3 rounded-xl border border-[#E4DFD1] bg-white">
+                  <Paperclip className="h-4 w-4 text-[#6B6659] shrink-0" />
+                  <span className="flex-1 text-sm text-[#262420] truncate">{origemManualArquivo.name}</span>
+                  <span className="text-[11px] text-[#A39D8C] shrink-0 tabular-nums">{Math.round(origemManualArquivo.size / 1024)} KB</span>
+                  <button type="button" onClick={() => setOrigemManualArquivo(null)} title="Remover arquivo" aria-label="Remover arquivo" className="shrink-0 h-9 w-9 -mr-1.5 flex items-center justify-center rounded-xl hover:bg-[#F5F2EA]">
+                    <X className="h-4 w-4 text-[#A39D8C] hover:text-rose-500" />
+                  </button>
+                </div>
+              ) : (
+                <Button type="button" variant="outline" onClick={() => origemManualArquivoRef.current?.click()} className="w-full h-10 rounded-xl justify-start gap-2 text-[#6B6659]">
+                  <Paperclip className="h-4 w-4" /> Escolher arquivo
+                </Button>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsOrigemManualOpen(false)} className="rounded-xl">Cancelar</Button>
+            <Button onClick={handleSalvarOrigemManual} disabled={isSalvandoOrigemManual} className="rounded-xl bg-[#0E4A44] hover:bg-[#0B3A35]">
+              {isSalvandoOrigemManual ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Inserir
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2526,11 +2654,11 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
               value={nomeProvaParaNomear}
               onChange={(e) => setNomeProvaParaNomear(e.target.value)}
               placeholder="Ex.: Nota fiscal do produto apreendido"
-              className="rounded-md border-[#E4DFD1] mt-1.5"
+              className="rounded-xl border-[#E4DFD1] mt-1.5"
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setProvaParaNomear(null); setNomeProvaParaNomear(""); }} className="rounded-md">Cancelar</Button>
+            <Button variant="outline" onClick={() => { setProvaParaNomear(null); setNomeProvaParaNomear(""); }} className="rounded-xl">Cancelar</Button>
             <Button
               disabled={!nomeProvaParaNomear.trim()}
               onClick={() => {
@@ -2539,7 +2667,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                 setProvaParaNomear(null);
                 setNomeProvaParaNomear("");
               }}
-              className="rounded-md bg-[#0E4A44] hover:bg-[#0B3A35]"
+              className="rounded-xl bg-[#0E4A44] hover:bg-[#0B3A35]"
             >
               Anexar
             </Button>

@@ -4,10 +4,6 @@
 import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import {
-  CalendarClock,
-  Inbox,
-  UserCheck,
-  Clock,
   HelpCircle,
   Camera,
 } from "lucide-react"
@@ -21,7 +17,6 @@ import { AvisoBoasVindas } from "@/components/aviso-boas-vindas"
 import { AlertCard } from "@/components/alert-card"
 import { DashboardMenuGrid } from "@/components/dashboard-menu-grid"
 import { DASHBOARD_MENU_ITEMS } from "@/lib/dashboard-menu-items"
-import { mensagemDoDia } from "@/lib/mensagens-do-dia"
 import { ProfileEditDialog } from "@/components/profile-edit-dialog"
 import { isSameDay, format } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -72,19 +67,6 @@ export default function Dashboard() {
   const temAlertas = agendaHoje.length > 0 || prazosVencendoHoje.length > 0 || pendingChamadosCount > 0 || pendingUsersCount > 0;
 
   const userName = profile?.displayName || "Fiscal";
-
-  // Resumo do dia — versão curta debaixo do nome (o detalhe de cada item já
-  // está na seção "Avisos", mais abaixo). Sem nada agendado, convida a
-  // começar algo em vez de só informar que está vazio.
-  const totalCompromissos = agendaHoje.length;
-  const totalPrazos = prazosVencendoHoje.length;
-  const resumoDoDia = (() => {
-    if (totalCompromissos === 0 && totalPrazos === 0) return null;
-    const partes: string[] = [];
-    if (totalCompromissos > 0) partes.push(`${totalCompromissos} ${totalCompromissos === 1 ? 'compromisso agendado' : 'compromissos agendados'}`);
-    if (totalPrazos > 0) partes.push(`${totalPrazos} ${totalPrazos === 1 ? 'prazo vencendo hoje' : 'prazos vencendo hoje'}`);
-    return `Hoje você tem ${partes.join(' e ')}.`;
-  })();
 
   const pendingNotificationTitle = pendingUserNames.length === 1
     ? `${pendingUserNames[0]} aguardando aprovação`
@@ -137,21 +119,7 @@ export default function Dashboard() {
               </p>
             </div>
           </div>
-
-          {/* Resumo do dia — versão curta; o detalhe de cada compromisso/prazo
-              já está na seção "Avisos", mais abaixo. */}
-          {resumoDoDia && (
-            <div className="relative z-10 mt-4 pt-4 border-t border-[#E4DFD1]">
-              <p className="text-sm text-[#262420]">{resumoDoDia}</p>
-            </div>
-          )}
         </section>
-
-        {/* Dica fixa do dia. */}
-        <div className="flex items-start gap-3 rounded-xl border border-[#E4DFD1] bg-white p-4">
-          <span className="text-[20px] leading-none shrink-0" role="img" aria-hidden="true">💡</span>
-          <p className="text-[12.5px] text-[#6B6659] leading-snug">{mensagemDoDia()}</p>
-        </div>
 
         {/* Orientação do período de teste — antes dos avisos operacionais,
             porque fala de como usar o sistema, não do que fazer hoje. */}
@@ -161,7 +129,7 @@ export default function Dashboard() {
           <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-[#9C7A3C]">Avisos</h2>
           {agendaHoje.length > 0 && (
             <AlertCard
-              icon={CalendarClock}
+              emoji="⏰"
               tone="urgent"
               title={`Você tem ${agendaHoje.length} ${agendaHoje.length === 1 ? 'compromisso' : 'compromissos'} hoje`}
               description={proximoCompromisso ? `Próximo às ${format(new Date(proximoCompromisso.data), "HH:mm")} — ${proximoCompromisso.titulo}` : undefined}
@@ -170,7 +138,7 @@ export default function Dashboard() {
           )}
           {prazosVencendoHoje.length > 0 && (
             <AlertCard
-              icon={Clock}
+              emoji="⏳"
               tone="urgent"
               title={prazosVencendoHoje.length === 1
                 ? `Prazo de ${prazosVencendoHoje[0].numeroProcesso || prazosVencendoHoje[0].autor || "1 autuação"} vence hoje`
@@ -184,7 +152,7 @@ export default function Dashboard() {
           )}
           {isGestor && pendingUsersCount > 0 && (
             <AlertCard
-              icon={UserCheck}
+              emoji="🧑‍💼"
               tone="warning"
               title={pendingNotificationTitle}
               description="Toque para revisar"
@@ -193,7 +161,7 @@ export default function Dashboard() {
           )}
           {isGestor && pendingChamadosCount > 0 && (
             <AlertCard
-              icon={Inbox}
+              emoji="📨"
               tone="warning"
               title={`${pendingChamadosCount} ${pendingChamadosCount === 1 ? 'chamado pendente' : 'chamados pendentes'} de suporte`}
               description="Aguardando resposta"

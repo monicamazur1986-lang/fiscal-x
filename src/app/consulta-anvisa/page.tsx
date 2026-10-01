@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, Loader2, Landmark, Info, RefreshCw, SearchX, AlertTriangle, CalendarClock } from "lucide-react"
+import { Search, Loader2, Info, SearchX, AlertTriangle, CalendarClock } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +11,21 @@ import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import { ANVISA_DATASETS, type AnvisaDataset } from "@/lib/anvisa-datasets"
 import { searchAnvisaIndex, getAnvisaSyncMeta, MAX_RESULTS, type AnvisaSyncMeta } from "@/lib/anvisa-firestore-search"
+
+// Emoji por tipo de objeto pesquisado — mesmo padrão de badge colorido usado
+// no resto do sistema (Biblioteca, Roteiros, menu principal etc.), em vez do
+// ícone de linha único repetido pra tudo.
+const DATASET_EMOJI: Record<string, string> = {
+  empresas: "🏢",
+  'produtos-saude': "🏥",
+  medicamentos: "💊",
+  saneantes: "🧴",
+  alimentos: "🍽️",
+  cosmeticos: "💅",
+  'ensaios-clinicos': "🧪",
+  cannabis: "🌿",
+  tabaco: "🚬",
+};
 
 function DatasetPanel({ dataset }: { dataset: AnvisaDataset }) {
   const { toast } = useToast()
@@ -54,7 +69,7 @@ function DatasetPanel({ dataset }: { dataset: AnvisaDataset }) {
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-zinc-500">{dataset.description}</p>
+      <p className="text-sm text-[#6B6659]">{dataset.description}</p>
 
       {/* A data dos dados é informação de trabalho, não rodapé: o fiscal
           precisa saber de quando é a base antes de concluir que um produto
@@ -88,9 +103,9 @@ function DatasetPanel({ dataset }: { dataset: AnvisaDataset }) {
             onChange={(e) => setQuery(e.target.value)}
             placeholder={dataset.searchPlaceholder}
             onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
-            className="h-12 rounded-xl bg-white border-slate-200"
+            className="h-12 rounded-xl border-2 border-primary/30 bg-primary/5 text-[#262420] font-medium placeholder:text-[#6B6659] focus:border-primary/60 focus:bg-white transition-colors"
           />
-          <Button onClick={handleSearch} disabled={!query.trim() || isSearching} className="h-12 px-6 rounded-xl font-black uppercase text-[10px] gap-2">
+          <Button onClick={handleSearch} disabled={!query.trim() || isSearching} className="h-12 px-6 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold uppercase text-[11px] gap-2 shadow-md shrink-0">
             {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Buscar
           </Button>
         </div>
@@ -132,7 +147,7 @@ function DatasetPanel({ dataset }: { dataset: AnvisaDataset }) {
               <Info className="h-3.5 w-3.5" /> Mostrando os {MAX_RESULTS} primeiros resultados. Refine a busca para ver menos linhas.
             </div>
           )}
-          <div className="border border-slate-200 rounded-2xl overflow-hidden">
+          <div className="border border-[#E4DFD1] rounded-2xl overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -168,13 +183,13 @@ export default function ConsultaAnvisaPage() {
 
   return (
     <div className="max-w-7xl mx-auto w-full p-4 md:p-8 space-y-6 pb-40">
-      <header className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 md:p-6 rounded-[2rem] border border-slate-200 shadow-xl">
-        <div className="flex items-center gap-4">
-          <div className="p-4 rounded-2xl bg-sky-500/10 text-sky-600"><Landmark className="h-6 w-6" /></div>
-          <div>
-            <h1 className="text-xl md:text-2xl font-black text-slate-900 uppercase italic tracking-tighter leading-none">Consulta ANVISA</h1>
-            <p className="text-[8px] md:text-[9px] text-zinc-400 font-black uppercase tracking-[0.2em] mt-1">Empresas (AFE) e produtos regularizados</p>
-          </div>
+      <header className="flex flex-wrap items-center gap-4 bg-white p-4 md:p-6 rounded-[2rem] border border-[#E4DFD1] shadow-sm">
+        <div className="h-14 w-14 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#2F66681A' }}>
+          <span className="text-[28px] leading-none" role="img" aria-hidden="true">🏛️</span>
+        </div>
+        <div>
+          <h1 className="font-serif text-xl md:text-2xl font-bold text-[#262420] leading-tight">Consulta ANVISA</h1>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#A39D8C] mt-0.5">Empresas (AFE) e produtos regularizados</p>
         </div>
       </header>
 
@@ -185,17 +200,17 @@ export default function ConsultaAnvisaPage() {
         </p>
       </div>
 
-      <div className="bg-white p-4 md:p-6 rounded-[2.5rem] border border-slate-200 shadow-sm">
-        <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-2">
+      <div className="bg-white p-4 md:p-6 rounded-[2.5rem] border border-[#E4DFD1] shadow-sm">
+        <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+          <aside className="rounded-[1.5rem] border border-[#E4DFD1] bg-[#FAF8F3] p-2">
             <div className="mb-2 flex items-center justify-between gap-2 px-2 pt-1">
-              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Objeto da pesquisa</p>
-              <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-sky-700">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#A39D8C]">Objeto da pesquisa</p>
+              <span className="rounded-full bg-[#E4EEEC] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[#0E4A44]">
                 {activeDataset.label}
               </span>
             </div>
 
-            <div className="max-h-[60vh] space-y-1 overflow-y-auto pr-1 custom-scrollbar">
+            <div className="max-h-[60vh] space-y-1.5 overflow-y-auto pr-1 custom-scrollbar">
               {ANVISA_DATASETS.map(ds => {
                 const selected = activeTab === ds.key;
 
@@ -205,30 +220,30 @@ export default function ConsultaAnvisaPage() {
                     type="button"
                     onClick={() => setActiveTab(ds.key)}
                     className={cn(
-                      "w-full rounded-2xl border px-3 py-3 text-left transition-all",
+                      "w-full flex items-start gap-3 rounded-2xl border px-3 py-3 text-left transition-all",
                       selected
-                        ? "border-sky-500 bg-white shadow-sm"
-                        : "border-transparent bg-transparent hover:border-slate-200 hover:bg-white/60"
+                        ? "border-[#0E4A44]/40 bg-white shadow-sm"
+                        : "border-transparent bg-transparent hover:border-[#E4DFD1] hover:bg-white/60"
                     )}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-[10px] md:text-[11px] font-black uppercase tracking-[0.14em] text-slate-700">
+                    <span className="h-9 w-9 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: selected ? '#0E4A441A' : '#A39D8C1A' }}>
+                      <span className="text-[18px] leading-none" role="img" aria-hidden="true">{DATASET_EMOJI[ds.key] || "📄"}</span>
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[11px] font-black uppercase tracking-[0.1em] text-[#262420]">
                         {ds.label}
                       </span>
-                      {selected && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-100 text-sky-700">
-                        <span className="h-2 w-2 rounded-full bg-sky-600" />
-                      </span>}
+                      <p className="mt-1 text-[10px] leading-relaxed text-[#6B6659]">
+                        {ds.description}
+                      </p>
                     </div>
-                    <p className="mt-2 text-[9px] leading-relaxed text-slate-500">
-                      {ds.description}
-                    </p>
                   </button>
                 );
               })}
             </div>
           </aside>
 
-          <div className="min-w-0 rounded-[1.5rem] border border-slate-200 bg-slate-50/60 p-3 md:p-5">
+          <div className="min-w-0 rounded-[1.5rem] border border-[#E4DFD1] bg-[#FAF8F3]/60 p-3 md:p-5">
             <DatasetPanel dataset={activeDataset} />
           </div>
         </div>

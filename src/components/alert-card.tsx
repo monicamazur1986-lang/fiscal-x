@@ -1,39 +1,36 @@
 "use client"
 
 import Link from "next/link"
-import { ChevronRight, type LucideIcon } from "lucide-react"
+import { ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface AlertCardProps {
-  icon: LucideIcon;
+  /** Emoji em badge com fundo suave — mesmo padrão adotado em todo o
+   *  sistema (Biblioteca, Roteiros, menu principal etc.) em vez do ícone de
+   *  linha com uma barra colorida na lateral. */
+  emoji: string;
   tone: "urgent" | "warning";
   title: string;
   description?: string;
   href: string;
 }
 
-const TONE_STYLES: Record<AlertCardProps["tone"], { bar: string; icon: string }> = {
-  urgent: {
-    bar: "bg-rose-500",
-    icon: "bg-rose-50 text-rose-600",
-  },
-  warning: {
-    bar: "bg-amber-500",
-    icon: "bg-amber-50 text-amber-600",
-  },
+const TONE_BADGE_BG: Record<AlertCardProps["tone"], string> = {
+  urgent: "#FCE7E9",
+  warning: "#FBF0DD",
 };
 
-export function AlertCard({ icon: Icon, tone, title, description, href }: AlertCardProps) {
-  const styles = TONE_STYLES[tone];
-
+export function AlertCard({ emoji, tone, title, description, href }: AlertCardProps) {
   return (
     <Link
       href={href}
-      className="group relative flex items-center gap-4 overflow-hidden rounded-lg border border-[#E4DFD1] bg-white pl-5 pr-4 py-3.5 shadow-[0_1px_2px_rgba(38,36,32,0.04)] transition-colors hover:bg-[#FAF8F3]"
+      className="group flex items-center gap-4 rounded-2xl border border-[#E4DFD1] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(38,36,32,0.04)] transition-colors hover:bg-[#FAF8F3]"
     >
-      <span className={cn("absolute left-0 top-0 bottom-0 w-[3px]", styles.bar)} />
-      <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full", styles.icon)}>
-        <Icon className="h-5 w-5" />
+      <div
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+        style={{ backgroundColor: TONE_BADGE_BG[tone] }}
+      >
+        <span className="text-[20px] leading-none" role="img" aria-hidden="true">{emoji}</span>
       </div>
       <div className="min-w-0 flex-1">
         <p className="font-serif text-sm text-[#262420] truncate">{title}</p>

@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Send, Loader2, ThumbsUp, ThumbsDown, BookOpen, MessageCircleQuestion, Mic, MicOff } from "lucide-react"
+import { Send, Loader2, ThumbsUp, ThumbsDown, BookOpen, RotateCcw, Trash2 } from "lucide-react"
 import { useDitadoPorVoz } from "@/hooks/use-ditado-por-voz"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { useAuth } from "@/hooks/use-auth"
 import { useToast } from "@/hooks/use-toast"
@@ -102,14 +103,33 @@ export function FiscalXChat() {
     }
   };
 
+  // "Refazer" — pergunta a MESMA última dúvida de novo (útil quando a
+  // resposta não ficou boa), removendo a resposta anterior em vez de
+  // empilhar outra igual na conversa.
+  const ultimaPergunta = [...mensagens].reverse().find((m) => m.role === 'user')?.texto;
+  const refazerUltima = () => {
+    if (!ultimaPergunta || loading) return;
+    setMensagens((prev) => {
+      const idx = prev.map((m) => m.role).lastIndexOf('user');
+      return idx === -1 ? prev : prev.slice(0, idx);
+    });
+    enviar(ultimaPergunta);
+  };
+
+  const limparConversa = () => {
+    setMensagens([]);
+    setInput("");
+  };
+
   return (
-    <div className="flex flex-col">
-      <div className="space-y-4 pb-4 max-h-[65vh] overflow-y-auto">
+    <Card className="border border-[#F1EEE4] bg-white shadow-sm rounded-[2rem] overflow-hidden">
+      <CardContent className="p-5 sm:p-8 space-y-4">
+      <div className="space-y-4 pb-2 max-h-[55vh] overflow-y-auto">
         {mensagens.length === 0 && (
           <div className="bg-white border border-[#E4DFD1] rounded-lg p-6 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-[#E4EEEC] text-[#0E4A44] flex items-center justify-center shrink-0">
-                <MessageCircleQuestion className="h-5 w-5" />
+              <div className="h-11 w-11 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#0E4A441A' }}>
+                <span className="text-[22px] leading-none" role="img" aria-hidden="true">❓</span>
               </div>
               <div>
                 <p className="font-serif text-[15px] text-[#262420]">Descreva a situação ou faça uma pergunta</p>
@@ -154,14 +174,14 @@ export function FiscalXChat() {
                           <BookOpen className="h-3.5 w-3.5" /> Base legal ({m.citacoes.length})
                         </button>
                       </PopoverTrigger>
-                      <PopoverContent align="start" className="w-[min(26rem,90vw)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto p-0 bg-white border-zinc-200 rounded-xl shadow-xl">
+                      <PopoverContent align="start" className="w-[min(26rem,90vw)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto p-0 bg-white border-[#E4DFD1] rounded-xl shadow-xl">
                         <div className="p-4 space-y-3">
-                          <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Trechos usados na resposta</p>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#A39D8C]">Trechos usados na resposta</p>
                           {m.citacoes.map((c) => (
-                            <div key={c.id} className="border border-zinc-100 rounded-lg p-3 space-y-1 bg-zinc-50/60">
+                            <div key={c.id} className="border border-[#F1EEE4] rounded-lg p-3 space-y-1 bg-[#FAF8F3]/60">
                               <p className="text-[10px] font-semibold uppercase text-primary tracking-wide">{c.lawTitle}</p>
-                              <p className="text-xs font-semibold text-zinc-700">{c.label}</p>
-                              <p className="text-xs text-zinc-600 leading-relaxed">{c.texto}</p>
+                              <p className="text-xs font-semibold text-[#262420]">{c.label}</p>
+                              <p className="text-xs text-[#6B6659] leading-relaxed">{c.texto}</p>
                             </div>
                           ))}
                         </div>
@@ -205,13 +225,20 @@ export function FiscalXChat() {
         <div ref={bottomRef} />
       </div>
 
-      <div className="shrink-0 flex items-end gap-2 pt-2 border-t border-[#E4DFD1]">
+      <div className="shrink-0 pt-3 border-t border-[#E4DFD1] space-y-2">
+        <label className="flex items-center gap-2 text-xs font-bold text-[#262420]">
+          <span className="h-6 w-6 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: '#0E4A441A' }}>
+            <span className="text-[13px] leading-none" role="img" aria-hidden="true">💬</span>
+          </span>
+          Sua pergunta
+        </label>
+        <div className="flex items-end gap-2">
         <Textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={gravando ? "Ouvindo... pode falar com calma, a gravação não para nas pausas." : "Descreva a situação ou digite sua dúvida..."}
-          className="min-h-[44px] max-h-32 resize-none rounded-xl border-[#E4DFD1] bg-white text-sm"
+          className="min-h-[56px] max-h-32 resize-none rounded-xl border-2 border-primary/30 bg-primary/5 text-[#262420] text-sm font-medium placeholder:text-[#6B6659] focus:border-primary/60 focus:bg-white transition-colors"
           disabled={loading}
         />
         {temMicrofone && (
@@ -222,23 +249,55 @@ export function FiscalXChat() {
             size="icon"
             title={gravando ? "Parar de gravar" : "Ditar a dúvida por voz"}
             aria-label={gravando ? "Parar de gravar" : "Ditar a dúvida por voz"}
-            className={gravando
-              ? "h-11 w-11 shrink-0 rounded-xl bg-red-500 text-white hover:bg-red-600 animate-pulse"
-              : "h-11 w-11 shrink-0 rounded-xl bg-[#F1EEE4] text-[#6B6659] hover:bg-[#E4DFD1]"}
+            className={cn(
+              "relative h-12 w-12 shrink-0 rounded-full border-2 transition-all",
+              gravando
+                ? "bg-rose-500 border-rose-500 text-white shadow-[0_4px_12px_rgba(225,29,72,0.4)]"
+                : "bg-[#E4EEEC] border-[#1F7A5C]/30 text-[#0E4A44] hover:bg-[#D9E9E4]"
+            )}
           >
-            {gravando ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+            {gravando && <span className="absolute inset-0 rounded-full bg-white/50 animate-ping" />}
+            <span className="relative text-[20px] leading-none" role="img" aria-hidden="true">{gravando ? "⏹️" : "🎙️"}</span>
           </Button>
         )}
-        <Button
-          type="button"
-          onClick={() => enviar()}
-          disabled={loading || !input.trim()}
-          size="icon"
-          className="h-11 w-11 shrink-0 rounded-xl bg-[#0E4A44] hover:bg-[#0B3A35]"
-        >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        </Button>
+        </div>
       </div>
-    </div>
+      </CardContent>
+
+      {/* Mesmo padrão de rodapé do Gerar Rascunho: ícone em cima do rótulo,
+          3 ações, a principal preenchida e as outras com cor cheia também
+          (não só contorno claro — ficava apagado demais pra ver de longe). */}
+      <CardFooter className="bg-[#FAF8F3]/50 p-5 border-t border-[#F1EEE4]">
+        <div className="grid grid-cols-3 gap-2 w-full">
+          <Button
+            type="button"
+            onClick={() => enviar()}
+            disabled={loading || !input.trim()}
+            className="h-16 flex-col gap-1 rounded-2xl bg-primary hover:bg-primary/90 text-white font-bold text-[11px] uppercase tracking-wide shadow-md"
+          >
+            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+            Enviar
+          </Button>
+          <Button
+            type="button"
+            onClick={refazerUltima}
+            disabled={loading || !ultimaPergunta}
+            className="h-16 flex-col gap-1 rounded-2xl bg-[#E4DFD1] hover:bg-[#D8D0BC] text-[#262420] font-bold text-[11px] uppercase tracking-wide"
+          >
+            <RotateCcw className="h-5 w-5" />
+            Refazer
+          </Button>
+          <Button
+            type="button"
+            onClick={limparConversa}
+            disabled={loading || mensagens.length === 0}
+            className="h-16 flex-col gap-1 rounded-2xl bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-[11px] uppercase tracking-wide"
+          >
+            <Trash2 className="h-5 w-5" />
+            Apagar
+          </Button>
+        </div>
+      </CardFooter>
+    </Card>
   );
 }
