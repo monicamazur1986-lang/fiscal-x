@@ -926,7 +926,19 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   const temDespachoInstrucao = pecas.some(p => p.tipo === 'despacho_instrucao');
   const temRelatorioInstrucao = pecas.some(p => p.tipo === 'relatorio_instrucao');
   const temDefesaOuInformacao = !!pas.defesa || pecas.some(p => p.tipo === 'termo_informacao');
-  const deadline = pas.prazoDefesaData ? calculateDeadline({ status: 'finalizado', dataIntimacao: pas.dataCienciaAI, prazoDias: baseLegalDoMunicipio(pas.municipioId).defesa.dias, municipioId: pas.municipioId }) : null;
+  // O prazo de defesa sempre dá pra calcular a partir da ciência do auto (a
+  // mesma conta que o despacho de instrução formal faz ao ser emitido, ver
+  // handleEmitirDespachoInstrucao) — não precisa esperar esse despacho
+  // (exclusivo do gestor) pra saber quando a defesa vence. Antes o campo de
+  // "Registrar defesa" só abria depois de pas.prazoDefesaData existir, e
+  // como só o gestor emite esse despacho, qualquer outro perfil ficava
+  // travado ali mesmo já com o relatório técnico pronto — exatamente a cara
+  // de "sistema sem a opção de anexar defesa" que isso causava. A lista de
+  // processos (lista-pas.tsx) já calcula o prazo assim, direto da ciência;
+  // aqui passa a fazer o mesmo, pros dois nunca mais divergirem.
+  const baseLegalPas = baseLegalDoMunicipio(pas.municipioId);
+  const prazoDefesaDate = pas.dataCienciaAI ? addPrazo(new Date(pas.dataCienciaAI), baseLegalPas.defesa.dias, baseLegalPas.contagemPrazo) : null;
+  const deadline = pas.dataCienciaAI ? calculateDeadline({ status: 'finalizado', dataIntimacao: pas.dataCienciaAI, prazoDias: baseLegalPas.defesa.dias, municipioId: pas.municipioId }) : null;
   const prazoVencido = deadline ? deadline.remaining < 0 : false;
   // Não existe um cadastro de "coordenador(a)" no sistema — o modelo de
   // referência sempre endereça os despachos/termos a uma pessoa específica,
@@ -1452,7 +1464,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
       // UTC vira 05/09 à noite no horário do Brasil, o que podia classificar
       // errado uma defesa recebida bem na borda do prazo.
       const recebidaEm = new Date(`${defesaData}T12:00:00`);
-      const tempestividade = pas.prazoDefesaData && recebidaEm.getTime() <= new Date(pas.prazoDefesaData).getTime() ? 'tempestiva' as const : 'intempestiva' as const;
+      const tempestividade = prazoDefesaDate && recebidaEm.getTime() <= prazoDefesaDate.getTime() ? 'tempestiva' as const : 'intempestiva' as const;
       const dataFormatada = format(recebidaEm, "dd/MM/yyyy");
       setIsDefesaDialogOpen(false);
       setDefesaArquivo(null);
@@ -1498,7 +1510,7 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
   };
 
   const handleGerarTermoInformacao = () => {
-    const prazoFormatada = pas.prazoDefesaData ? format(new Date(pas.prazoDefesaData), "dd/MM/yyyy") : '';
+    const prazoFormatada = prazoDefesaDate ? format(prazoDefesaDate, "dd/MM/yyyy") : '';
     const chaveRascunho = 'termo_informacao';
     setRevisao({
       titulo: PAS_PECA_TITULOS.termo_informacao,
@@ -2009,15 +2021,26 @@ export default function PasDetalhePage({ params }: { params: Promise<{ id: strin
                     <PasDica chave="defesa" municipioId={profile?.municipioId} />
                   </div>
                   {!temDefesaOuInformacao && (
-                    !pas.prazoDefesaData ? (
-                      <p className="text-xs text-[#A39D8C] mt-1">Só dá pra registrar depois do despacho de instrução (é ele que define o prazo).</p>
+                    !prazoDefesaDate ? (
+                      <p className="text-xs text-[#A39D8C] mt-1">Falta a data de ciência do Auto de Infração pra calcular o prazo.</p>
                     ) : (
-                      <div className="flex flex-wrap items-center gap-2 mt-2">
-                        <Button onClick={() => setIsDefesaDialogOpen(true)} variant="outline" className="rounded-xl gap-1.5"><Paperclip className="h-4 w-4" /> Registrar defesa recebida</Button>
-                        {prazoVencido && (
-                          <Button onClick={handleGerarTermoInformacao} variant="outline" className="rounded-xl gap-1.5 text-amber-700 border-amber-200 bg-amber-50 hover:bg-amber-100">
-                            <AlertTriangle className="h-4 w-4" /> Gerar Termo de Informação (sem defesa)
-                          </Button>
+                      <div className="mt-2 space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button onClick={() => setIsDefesaDialogOpen(true)} variant="outline" className="rounded-xl gap-1.5"><Paperclip className="h-4 w-4" /> Registrar defesa recebida</Button>
+                          {prazoVencido && (
+                            <Button onClick={handleGerarTermoInformacao} variant="outline" className="rounded-xl gap-1.5 text-amber-700 border-amber-200 bg-amber-50 hover:bg-amber-100">
+                              <AlertTriangle className="h-4 w-4" /> Gerar Termo de Informação (sem defesa)
+                            </Button>
+                          )}
+                        </div>
+                        {/* O despacho de instrução (passo 1, exclusivo do
+                            gestor) é o ato formal que notifica esse prazo —
+                            mas qualquer perfil já pode registrar a defesa
+                            assim que ela chegar, sem esperar por ele; o
+                            prazo aqui já está calculado a partir da ciência
+                            do auto. */}
+                        {!pas.prazoDefesaData && (
+                          <p className="text-[11px] text-[#A39D8C]">Prazo calculado a partir da ciência do Auto de Infração — o despacho de instrução formal (passo 1) ainda não foi emitido.</p>
                         )}
                       </div>
                     )
